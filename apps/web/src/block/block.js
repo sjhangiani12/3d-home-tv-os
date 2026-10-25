@@ -847,9 +847,9 @@ function sign(html, at, cls) { const el = document.createElement("div"); el.clas
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
 const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
-// What the speakers play. The card is pinned to the left margin under the clock rather than floating over
-// the roofs: it is the widest sign on screen and it changes with every track, so hanging it over the middle
-// of the block covered the block. The tie to the house is the notes rising off the roof instead.
+// What the speakers play. The card is pinned to the top-right corner rather than floating over the roofs:
+// it is the widest sign on screen and it changes with every track, so hanging it over the middle of the
+// block covered the block. The tie to the house is the notes rising off the roof instead.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
 musicSign.pinned = true;
 musicSign.el.classList.add("pinned");
@@ -890,13 +890,22 @@ function projectSigns() {
 
 // ---------- camera poses and the fly-in
 const dirOf = (az, el) => new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-const OVERVIEW = { pos: target.clone().add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone(), fov: 12 };
+// The overview is panned, not re-aimed: camera and target move together along the ground so the block slides
+// left in frame and the station's sign sits near the edge rather than a third of the way in. `+x, +z` reads as
+// screen-right in this isometric, so this is one sideways step, no change of angle.
+const PAN = new THREE.Vector3(20.5, 0, 15.9);
+const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 12 };
 const HIGH = { pos: new THREE.Vector3(46.5, 70, -62), target: new THREE.Vector3(46.5, 6, 12.5), fov: 32 };
 const STREET = { pos: new THREE.Vector3(46.5, 1.8, -5), target: new THREE.Vector3(46.5, 5.2, 12.5), fov: 58 };
 const DOOR = { pos: new THREE.Vector3(46.5, 1.9, 9.4), target: new THREE.Vector3(46.5, 1.9, 14), fov: 72 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
 const INSIDE = { pos: HOUSE.clone().add(IN_C).add(IN_OFF), target: HOUSE.clone().add(IN_C), fov: 41 };
-const INSIDE_IN = { pos: HOUSE.clone().add(new THREE.Vector3(6.5, 3, -6)), target: HOUSE.clone().add(new THREE.Vector3(6.5, 1, 8)), fov: 70 };
+// Where the apartment is revealed from, coming out of the black. It used to be an eye-level pose just inside
+// the door, which continued the walk in — but the apartment is a cutaway with no ceiling, so from down there
+// it read as an edge-on slab hanging in an empty sky, and the room labels piled up on one line. So: the same
+// angle as the settled view, just closer and wider. The reveal is a step back, and the first frame is already
+// the apartment rather than something that looks broken.
+const INSIDE_IN = { pos: HOUSE.clone().add(IN_C).add(IN_OFF.clone().multiplyScalar(0.52)), target: HOUSE.clone().add(IN_C), fov: 58 };
 const cam = { pos: OVERVIEW.pos.clone(), target: OVERVIEW.target.clone(), fov: OVERVIEW.fov };
 function applyCam() {
   camera.position.copy(cam.pos); camera.lookAt(cam.target); camera.fov = cam.fov;
@@ -939,8 +948,13 @@ async function openHome() {
   await fade(1);
   house.visible = true; houseAmb.intensity = 0.55 * PI; mode = "home";
   setPose(INSIDE_IN);
+  // Compile the apartment's materials while the screen is still black: the first frame that draws it would
+  // otherwise cost a few hundred milliseconds on the TV, and that hitch would land in plain sight.
+  renderer.compile(scene, camera);
+  // The step back starts under the black and the black lifts into it, so nothing is ever shown standing still.
+  const settle = tween(INSIDE, 1100);
   await fade(0);
-  await tween(INSIDE, 1100);
+  await settle;
   flying = false;
   focusDrawer(0);
   if (wantClose) { wantClose = false; closeHome(); }
@@ -1271,6 +1285,8 @@ function artImg(url, n, cls) {
 function renderMusic() {
   const np = nowPlaying();
   musicSign.off = !np; notesSign.off = !np || np.state.media.state !== "playing";
+  // The card takes the top-right corner, so the Lights chip has to move over for it; CSS does the sliding.
+  document.body.classList.toggle("playing", !!np);
   if (!np) return;
   const m = np.state.media, rooms = m.group || [np.name];
   const html = `<div class="row">${artImg(m.artworkUrl, 16)}<div><div class="t">${esc(m.title || "Playing")}</div><div class="s">${esc(m.artist || m.app || "")}</div>

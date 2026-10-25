@@ -33,9 +33,10 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
 .sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
 .sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
-/* Pinned to the left margin under the clock instead of to a point on the map, so no tail and no transform —
-   the loop leaves `transform` alone for these, and `left/top` here are the whole of their placement. */
-.sign.pinned { left: 64px; top: 268px; transform: none; max-width: 420px; }
+/* Pinned to the top-right corner instead of to a point on the map, so no tail and no transform — the loop
+   leaves `transform` alone for these, and `left/top/right` here are the whole of their placement. The width
+   is fixed rather than fitted so the Lights chip beside it keeps its place whatever the track is called. */
+.sign.pinned { left: auto; right: 64px; top: 48px; transform: none; width: 430px; box-sizing: border-box; }
 .sign.pinned::after { display: none; }
 /* Track titles are arbitrary length; the card holds its width and cuts the text rather than growing. */
 .sign.pinned .t, .sign.pinned .s { overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
@@ -56,7 +57,9 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 #clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; }
 #clock .place { font-size: 20px; margin-top: 6px; opacity: 0.85; letter-spacing: 0.08em; }
 
-#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 14px 18px; cursor: pointer; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
+#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 14px 18px; cursor: pointer; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), right 320ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
+/* Lights steps aside when a track is playing and takes the corner back when the music stops. */
+body.playing #chip { right: 518px; }
 #chip svg { width: 30px; height: 30px; }
 #chip .dots { display: flex; gap: 6px; }
 #chip:focus-visible, #chip.focus { outline: none; background: var(--card-sel); transform: translateY(-4px) scale(1.04); box-shadow: 0 18px 34px rgba(48, 36, 22, 0.4); }
@@ -106,6 +109,9 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 
 /* Mock controls: outside the design, for trying weather and time. */
 #mock { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; font: 500 16px/1 var(--font-ui); color: var(--paper); background: rgba(14, 12, 24, 0.8); border: 2px dashed rgba(251, 246, 234, 0.5); padding: 12px 14px; transition: opacity 300ms ease; }
+/* `display: flex` on an id out-specifies the browser's `[hidden]` rule, so say it again here: without this
+   the panel JS hides with `hidden = true` stays on screen on every load. */
+#mock[hidden] { display: none; }
 #mock .grp { display: flex; align-items: center; gap: 6px; }
 #mock { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 18px; max-width: 1000px; }
 #mock .lbl { width: 70px; opacity: 0.75; }
