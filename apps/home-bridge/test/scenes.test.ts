@@ -1,6 +1,6 @@
 import type { Device } from "@appart3d/home";
 import { describe, expect, it } from "vitest";
-import { planScene, SCENE_COLORS } from "../src/scenes.ts";
+import { HUE_RECIPES, planScene, SCENE_COLORS } from "../src/scenes.ts";
 
 const light = (id: string, room: string, on: boolean | null, extra: Partial<Device> = {}): Device => ({
   id,
@@ -71,6 +71,20 @@ describe("planScene", () => {
   it("never sends an IR power toggle to a TV whose state is unknown", () => {
     const tv: Device = { ...devices[6]!, id: "robot:tv", source: "robot", state: { on: null, reachable: true } };
     expect(byId(planScene("away", [tv], opts))["robot:tv"]).toBeUndefined();
+  });
+
+  it("Relax / Read: Hue's recipes on the lamps already on", () => {
+    const p = byId(planScene("relax", devices, opts));
+    expect(Object.keys(p).sort()).toEqual(["hue:light:12", "hue:light:17"]);
+    expect(p["hue:light:17"]).toEqual([{ type: "power", on: true }, { type: "brightness", value: HUE_RECIPES.relax.brightness }, { type: "kelvin", value: HUE_RECIPES.relax.kelvin }]);
+    const r = byId(planScene("read", devices, opts));
+    expect(r["hue:light:12"]).toEqual([{ type: "power", on: true }, { type: "brightness", value: 100 }, { type: "kelvin", value: HUE_RECIPES.read.kelvin }]);
+  });
+
+  it("Relax with every lamp off: the living room lights up, nothing else", () => {
+    const allOff = devices.map((d) => (d.kind === "light" || d.kind === "plug" ? { ...d, state: { ...d.state, on: false } } : d));
+    const p = byId(planScene("relax", allOff, opts));
+    expect(Object.keys(p).sort()).toEqual(["hue:light:12", "hue:light:18", "hue:light:9"]);
   });
 
   it("finds the strip by name when the role id is missing", () => {

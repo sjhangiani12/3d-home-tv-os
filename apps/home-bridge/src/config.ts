@@ -24,6 +24,11 @@ export interface BridgeConfig {
   corsOrigins: string[];
   /** Scene opened by "/" when the URL has no ?scene= (phone PWA, menu bar app). null = app default. */
   defaultScene: string | null;
+  /**
+   * Query parameters forced on the embedded 3D view (`?view=3d`, i.e. the TV launcher and its
+   * screensaver), overriding the app's own, e.g. { maxDpr: "1", aa: "0" } for a weaker TV.
+   */
+  embedQuery: Record<string, string>;
   hue: { enabled: boolean; configFile: string; pollMs: number };
   homeAssistant: { enabled: boolean; url: string; tokenFile: string; tvEntity: string | null };
   /** StackChan robot base URL, e.g. "http://192.168.1.42:8080". null = robot disabled. */
@@ -48,10 +53,14 @@ export interface BridgeConfig {
   links: Record<string, string | null>;
   /** Tile order shared by every client (device ids; unlisted devices follow in the usual order). */
   deviceOrder: string[];
+  /** Devices left out of every client and scene (paired but not in the home, e.g. a strip in a box). */
+  hiddenDevices: string[];
   /** Devices with a special role in scenes. */
   roles: { ambientStrip: string | null };
   /** Home coordinates, for the sun position when Home Assistant's `sun.sun` is unavailable. */
   location: { latitude: number; longitude: number };
+  /** Citi Bike station ids shown by /citibike.html; empty = the two nearest to `location`. */
+  citibikeStations: string[];
   /**
    * HomePod mini over AirPlay, driven from the Mac with pyatv (Home Assistant in Docker can't reach it).
    * `host` (Bonjour) is re-resolved when `ip` stops answering; `id` = AirPlay identifier (last resort scan);
@@ -101,6 +110,7 @@ export function defaultConfig(): BridgeConfig {
     bonjour: true,
     corsOrigins: ["http://localhost:5173"],
     defaultScene: "/shared/demo-apartment.json",
+    embedQuery: {},
     hue: { enabled: true, configFile: join(homedir(), ".config", "appart3d", "hue.env"), pollMs: 1500 },
     homeAssistant: {
       enabled: true,
@@ -119,8 +129,10 @@ export function defaultConfig(): BridgeConfig {
     deviceNames: MOCK ? DEMO_NAMES : {},
     links: MOCK ? DEMO_LINKS : {},
     deviceOrder: [],
+    hiddenDevices: [],
     roles: { ambientStrip: MOCK ? "hue:light:12" : null },
     location: { latitude: 48.86, longitude: 2.35 },
+    citibikeStations: [],
     homepod: {
       enabled: false,
       host: "Living-Room.local",

@@ -1,9 +1,11 @@
 /** HTTP server: /api/home* + POST /api/pair (contract in @appart3d/home), /pair, /healthz, static web app. */
 import type { DeviceAction, PairResponse } from "@appart3d/home";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, renameSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { authCookie, isAuthorized, RateLimiter, safeEqual } from "./auth.ts";
+import { bikeStations } from "./citibike.ts";
+import { stationArrivals } from "./mta.ts";
 import { DEFAULT_SHARED_DIR, DEFAULT_WEB_DIST, loadConfig, updateConfig, type BridgeConfig } from "./config.ts";
 import type { Hub } from "./hub.ts";
 import { errMsg, logger } from "./log.ts";
@@ -238,7 +240,23 @@ export function createBridgeServer(hub: Hub, state: ServerState): Server {
     if (method === "GET" && path === "/api/home") return json(res, 200, hub.snapshot());
     if (method === "GET" && path === "/api/home/events") return handleEvents(req, res);
 
-    let m = /^\/api\/home\/devices\/([^/]+)\/action$/.exec(path);
+    // The web editor saves the home's scene here, so every screen loads the same edits.
+    let m = /^\/api\/scenes\/([a-z0-9][a-z0-9-]{0,60}\.json)$/.exec(path);
+    if (m && method === "PUT") {
+      const name = m[1]!;
+      if (name === "demo-apartment.json") throw new HttpError(403, "the demo scene is read-only");
+      const scene = (await readJson(req, 8 * 1024 * 1024)) as { version?: unknown; rooms?: unknown; walls?: unknown; items?: unknown };
+      if (scene.version !== 1 || !Array.isArray(scene.rooms) || !Array.isArray(scene.walls) || !Array.isArray(scene.items))
+        throw new HttpError(400, "not a scene");
+      const file = join(DEFAULT_SHARED_DIR, name);
+      if (existsSync(file)) copyFileSync(file, `${file}.bak`);
+      writeFileSync(`${file}.tmp`, JSON.stringify(scene, null, 2));
+      renameSync(`${file}.tmp`, file);
+      log.info(`scene saved: ${name} (${scene.items.length} items)`);
+      return json(res, 200, { ok: true });
+    }
+
+    m = /^\/api\/home\/devices\/([^/]+)\/action$/.exec(path);
     if (m && method === "POST") {
       const id = decodeURIComponent(m[1]!);
       const action = parseAction(await readJson(req));
@@ -280,6 +298,18 @@ export function createBridgeServer(hub: Hub, state: ServerState): Server {
     const path = url.pathname;
     try {
       if (path === "/healthz") return json(res, 200, { ok: true, uptime: Math.round(process.uptime()) });
+      // Public transit data (no home details): live counts for the Citi Bike dock page.
+      if (path === "/citibike.json") {
+        const cfg = state.config;
+        const stations = await bikeStations({ ids: cfg.citibikeStations, home: cfg.location });
+        return json(res, 200, { updatedAt: new Date().toISOString(), stations }, { "cache-control": "no-store" });
+      }
+      // Public transit data too: the next trains at one subway station (?stop=<GTFS parent stop id>) for the block page.
+      if (path === "/mta.json") {
+        const stop = url.searchParams.get("stop") ?? "";
+        if (!/^[A-Z0-9]{3,4}$/.test(stop)) throw new HttpError(400, "stop invalide");
+        return json(res, 200, await stationArrivals(stop), { "cache-control": "no-store" });
+      }
       if (path === "/pair") return handlePair(req, res, url);
       if (path === "/api" || path.startsWith("/api/")) {
         cors(req, res);
@@ -309,6 +339,7 @@ export function createBridgeServer(hub: Hub, state: ServerState): Server {
         if (!query.has("scene")) {
           query.set("scene", state.config.defaultScene);
           if (!query.has("home")) query.set("home", "1");
+          if (query.get("view") === "3d") for (const [k, v] of Object.entries(state.config.embedQuery)) query.set(k, v);
           res.writeHead(302, { location: `/?${query.toString()}` });
           return res.end();
         }

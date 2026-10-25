@@ -45,7 +45,7 @@ describe("server (mock devices)", () => {
   it("snapshot with links and French rooms", async () => {
     const snap = await (await fetch(`${base}/api/home`)).json();
     expect(snap.home).toBe("Home");
-    expect(snap.scenes).toHaveLength(5);
+    expect(snap.scenes).toHaveLength(7);
     const strip = snap.devices.find((d: { id: string }) => d.id === "hue:light:12");
     expect(strip).toMatchObject({ room: "Salon", itemId: "item_table_lamp", source: "mock" });
     expect(snap.devices.find((d: { kind: string }) => d.kind === "fan").itemId).toBe("item_fan");
