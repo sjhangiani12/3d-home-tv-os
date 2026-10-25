@@ -134,6 +134,7 @@ export const EXTRA_CATEGORIES = [
   "coffeeTable",
   "shower",
   "bicycle",
+  "bikeDock",
   "coatRack",
   "pendantLamp",
   "ceilingFan",

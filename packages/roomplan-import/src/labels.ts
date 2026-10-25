@@ -1,17 +1,17 @@
-/** French labels and name ↔ kind mappings. */
+/** UI labels and name ↔ kind mappings (room names are matched in French and English). */
 import type { FloorMaterial, ItemCategory, RoomKind } from "@appart3d/scene";
 
 export const ROOM_KIND_LABEL: Record<RoomKind, string> = {
-  living: "Séjour",
-  bedroom: "Chambre",
-  kitchen: "Cuisine",
-  bathroom: "Salle de bain",
-  toilet: "WC",
-  hallway: "Entrée",
-  office: "Bureau",
-  dining: "Salle à manger",
-  storage: "Rangement",
-  other: "Pièce",
+  living: "Living room",
+  bedroom: "Bedroom",
+  kitchen: "Kitchen",
+  bathroom: "Bathroom",
+  toilet: "Toilet",
+  hallway: "Hallway",
+  office: "Office",
+  dining: "Dining room",
+  storage: "Storage",
+  other: "Room",
 };
 
 /** RoomPlan `CapturedRoom.Section.Label` (iOS 17) → RoomKind. `unidentified` → null. */
@@ -52,13 +52,13 @@ const strip = (s: string) =>
 const NAME_RULES: [RegExp, RoomKind][] = [
   [/salle a manger|dining/, "dining"],
   [/salle de bains?|salle d eau|\bsdb\b|douche|bath/, "bathroom"],
-  [/\bwc\b|toilette|toilet/, "toilet"],
+  [/\bwc\b|toilette|toilet|restroom/, "toilet"],
   [/sejour|salon|living|piece de vie|\bpiece a vivre/, "living"],
   [/chambre|bedroom|\bch\.? ?\d/, "bedroom"],
   [/cuisine|kitchen|kitchenette/, "kitchen"],
-  [/entree|couloir|hall|degagement|corridor|palier/, "hallway"],
+  [/entree|entrance|entryway|couloir|hall|degagement|corridor|palier|landing/, "hallway"],
   [/bureau|office/, "office"],
-  [/cellier|rangement|dressing|placard|buanderie|storage/, "storage"],
+  [/cellier|rangement|dressing|placard|buanderie|storage|closet|pantry|laundry/, "storage"],
 ];
 
 /** User-provided room name (French or English) → RoomKind, or null when unknown. */
@@ -80,31 +80,31 @@ export const FLOOR_COLOR: Record<FloorMaterial, string> = {
 };
 
 export const ITEM_LABEL: Partial<Record<ItemCategory, string>> = {
-  storage: "Rangement",
-  refrigerator: "Réfrigérateur",
-  stove: "Plaque de cuisson",
-  bed: "Lit",
-  sink: "Évier",
-  washerDryer: "Lave-linge",
-  toilet: "WC",
-  bathtub: "Baignoire",
-  oven: "Four",
-  dishwasher: "Lave-vaisselle",
+  storage: "Storage",
+  refrigerator: "Fridge",
+  stove: "Cooktop",
+  bed: "Bed",
+  sink: "Sink",
+  washerDryer: "Washing machine",
+  toilet: "Toilet",
+  bathtub: "Bathtub",
+  oven: "Oven",
+  dishwasher: "Dishwasher",
   table: "Table",
-  sofa: "Canapé",
-  chair: "Chaise",
-  fireplace: "Cheminée",
-  television: "Télévision",
-  stairs: "Escalier",
-  wardrobe: "Armoire",
-  nightstand: "Table de chevet",
-  coffeeTable: "Table basse",
-  armchair: "Fauteuil",
-  shelf: "Étagère",
-  desk: "Bureau",
+  sofa: "Sofa",
+  chair: "Chair",
+  fireplace: "Fireplace",
+  television: "TV",
+  stairs: "Stairs",
+  wardrobe: "Wardrobe",
+  nightstand: "Nightstand",
+  coffeeTable: "Coffee table",
+  armchair: "Armchair",
+  shelf: "Shelf",
+  desk: "Desk",
 };
 
-/** "3 objets", "1 objet" — French pluralization of a simple noun phrase. */
+/** "3 objects", "1 object" — pluralization of a simple noun phrase. */
 export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
   return `${n} ${n > 1 ? pluralForm : singular}`;
 }

@@ -59,7 +59,7 @@ export function launcherPalette(elevation: number | null | undefined): LauncherP
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-/** The TV shows the Maison home screen (app label read over ADB). */
+/** The TV shows the Appart3D launcher home screen (app label read over ADB; the launcher is labeled "Maison"). */
 export function isLauncherApp(app: string | undefined): boolean {
   if (!app) return false;
   const n = norm(app);

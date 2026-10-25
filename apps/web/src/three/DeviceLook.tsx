@@ -7,7 +7,7 @@ import { useStore } from "../state/store";
 import { nightFx } from "../state/night";
 
 /**
- * Maison mode: 3D items show the real state of their linked devices — lamp shades lit or not
+ * Home mode: 3D items show the real state of their linked devices — lamp shades lit or not
  * (tinted by the light color and dimmed by its brightness), TV screen on / off, light strip glow
  * behind the TV, fan blades spinning. Works on per-item copies of the catalog's shared materials
  * (found by name `appart3d:<hex>|<role>|<highlight>`), so the catalog stays untouched.
@@ -169,7 +169,7 @@ export function LookDriver({
     if (moving) invalidate();
   });
 
-  // Leaving Maison mode: screen image visible again, fan still.
+  // Leaving Home mode: screen image visible again, fan still.
   useEffect(
     () => () => {
       groupRef.current?.traverse((o) => {

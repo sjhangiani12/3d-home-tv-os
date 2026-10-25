@@ -46,7 +46,7 @@ export function SlideshowUI() {
       if (h.valid) handOffView(h.target, h.az, h.polar, h.zoom);
       const st = useStore.getState();
       st.stopSlideshow({ explore: true });
-      st.toast("Navigation libre — touche P ou bouton « Diaporama » pour relancer.");
+      st.toast("Free navigation — press P or the Slideshow button to restart.");
     };
     window.addEventListener("pointerdown", grab, true);
     window.addEventListener("wheel", grab, { capture: true, passive: true });
@@ -91,27 +91,27 @@ export function SlideshowUI() {
           </div>
         </div>
       )}
-      {!slideshowFx.hideChrome && <div className="ss-bar" role="toolbar" aria-label="Diaporama">
-        <button className="ss-btn" onClick={() => s().setSlidePaused(!paused)} title={paused ? "Lecture (Espace)" : "Pause (Espace)"} aria-label={paused ? "Lecture" : "Pause"}>
+      {!slideshowFx.hideChrome && <div className="ss-bar" role="toolbar" aria-label="Slideshow">
+        <button className="ss-btn" onClick={() => s().setSlidePaused(!paused)} title={paused ? "Play (Space)" : "Pause (Space)"} aria-label={paused ? "Play" : "Pause"}>
           {paused ? <IconPlay /> : <IconPause />}
         </button>
-        <button className="ss-btn" onClick={() => slideshowBus.emit("next")} title="Plan suivant (→)" aria-label="Plan suivant">
+        <button className="ss-btn" onClick={() => slideshowBus.emit("next")} title="Next shot (→)" aria-label="Next shot">
           <IconNext />
         </button>
         <span className="ss-sep" />
         <button
           className="ss-btn ss-wide"
           onClick={() => s().toggleNight()}
-          title={night ? "Passer en version jour (N)" : "Passer en version nuit (N)"}
+          title={night ? "Switch to day (N)" : "Switch to night (N)"}
           aria-pressed={night}
         >
           {night ? <IconSun /> : <IconMoon />}
-          <span>{night ? "Jour" : "Nuit"}</span>
+          <span>{night ? "Day" : "Night"}</span>
         </button>
         <span className="ss-sep" />
-        <button className="ss-btn ss-wide" onClick={() => s().stopSlideshow()} title="Quitter le diaporama (Échap)">
+        <button className="ss-btn ss-wide" onClick={() => s().stopSlideshow()} title="Exit slideshow (Esc)">
           <IconClose />
-          <span>Quitter</span>
+          <span>Exit</span>
         </button>
       </div>}
     </div>

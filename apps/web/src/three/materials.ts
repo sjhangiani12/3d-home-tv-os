@@ -137,10 +137,10 @@ export function floorTexture(kind: FloorMaterial): THREE.Texture | null {
 }
 
 export const FLOOR_LABELS: Record<FloorMaterial, string> = {
-  wood: "Parquet",
-  tile: "Carrelage",
-  carpet: "Moquette",
-  concrete: "Béton ciré",
+  wood: "Wood",
+  tile: "Tile",
+  carpet: "Carpet",
+  concrete: "Polished concrete",
 };
 
 /** Opening palette (doors, frames, glass). */

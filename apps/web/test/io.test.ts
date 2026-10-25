@@ -9,9 +9,9 @@ describe("io", () => {
     expect(r.fromScan).toBe(false);
     expect(r.scene.items.length).toBe(demoScene.items.length);
   });
-  it("rejects garbage with French messages", () => {
+  it("rejects garbage with clear messages", () => {
     expect(() => parseSceneJson("{oops")).toThrow(/JSON/);
-    expect(() => parseSceneJson(JSON.stringify({ version: 1 }))).toThrow(/Scène invalide/);
+    expect(() => parseSceneJson(JSON.stringify({ version: 1 }))).toThrow(/Invalid scene/);
   });
   it("slugifies names", () => {
     expect(slugify("Appartement démo")).toBe("appartement-demo");

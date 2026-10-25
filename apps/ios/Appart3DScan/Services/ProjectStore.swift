@@ -29,7 +29,7 @@ final class ProjectStore {
             }
             .sorted { $0.createdAt > $1.createdAt }
         } catch {
-            lastError = "Impossible de lire les projets : \(error.localizedDescription)"
+            lastError = "Could not read projects: \(error.localizedDescription)"
         }
     }
 
@@ -65,7 +65,7 @@ final class ProjectStore {
         do {
             try fileManager.removeItem(at: folder(for: project.id))
         } catch {
-            lastError = "Suppression impossible : \(error.localizedDescription)"
+            lastError = "Could not delete: \(error.localizedDescription)"
         }
         projects.removeAll { $0.id == project.id }
     }

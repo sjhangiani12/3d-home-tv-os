@@ -11,7 +11,7 @@ interface Entry {
   run: () => void;
 }
 
-/** "Fichier" dropdown: import / example / export, help, reset. */
+/** "File" dropdown: import / example / export, help, reset. */
 export function FileMenu() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -20,16 +20,16 @@ export function FileMenu() {
 
   const groups: Entry[][] = [
     [
-      { icon: <IconUpload />, label: "Importer un scan…", hint: ".appart3d.json ou scène — ou glissez le fichier", run: pickFile },
-      { icon: <IconScan />, label: "Charger le scan exemple", run: () => void loadExample() },
-      { icon: <IconDownload />, label: "Exporter la scène", hint: "Fichier .json réimportable", run: exportScene },
+      { icon: <IconUpload />, label: "Import scan…", hint: ".appart3d.json or scene — or drag the file in", run: pickFile },
+      { icon: <IconScan />, label: "Load sample scan", run: () => void loadExample() },
+      { icon: <IconDownload />, label: "Export scene", hint: "Re-importable .json file", run: exportScene },
     ],
-    [{ icon: <IconFilm />, label: "Diaporama", hint: "Visite automatique plein écran — touche P", run: () => useStore.getState().startSlideshow() }],
+    [{ icon: <IconFilm />, label: "Slideshow", hint: "Full-screen automatic tour — P key", run: () => useStore.getState().startSlideshow() }],
     [
-      { icon: <IconHelp />, label: "Guide de démarrage", run: () => setOverlay("welcome") },
-      { icon: <IconKeyboard />, label: "Raccourcis clavier", hint: "?", run: () => setOverlay("help") },
+      { icon: <IconHelp />, label: "Getting started", run: () => setOverlay("welcome") },
+      { icon: <IconKeyboard />, label: "Keyboard shortcuts", hint: "?", run: () => setOverlay("help") },
     ],
-    [{ icon: <IconReset />, label: "Réinitialiser (démo)", danger: true, run: () => resetToDemo() }],
+    [{ icon: <IconReset />, label: "Reset (demo)", danger: true, run: () => resetToDemo() }],
   ];
 
   useEffect(() => {
@@ -61,13 +61,13 @@ export function FileMenu() {
   let idx = 0;
   return (
     <div className="menu-root" ref={root} onKeyDown={onKeyDown}>
-      <button className={`menu-trigger${open ? " is-open" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title="Importer, exporter, aide">
+      <button className={`menu-trigger${open ? " is-open" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title="Import, export, help">
         <IconFolder />
-        <span className="hide-sm">Fichier</span>
+        <span className="hide-sm">File</span>
         <IconChevronDown className="chev" width={14} height={14} />
       </button>
       {open && (
-        <div className="menu panel" role="menu" aria-label="Fichier">
+        <div className="menu panel" role="menu" aria-label="File">
           {groups.map((g, gi) => (
             <div key={gi} className="menu-group" role="group">
               {g.map((it) => {

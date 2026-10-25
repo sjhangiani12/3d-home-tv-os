@@ -43,7 +43,11 @@ object WeatherSource {
     }
 
     private fun url(lat: Double, lon: Double) =
-        "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day&timezone=auto"
+        "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day&timezone=auto" +
+            if (fahrenheit()) "&temperature_unit=fahrenheit" else ""
+
+    /** °F where people expect it (the TV's region), °C everywhere else. */
+    private fun fahrenheit() = java.util.Locale.getDefault().country in setOf("US", "LR", "MM")
 
     /** WMO weather interpretation code → sky. */
     fun skyOf(code: Int): Sky = when (code) {

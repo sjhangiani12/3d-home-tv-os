@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { parseSceneJson } from "./lib/io";
-import { useStore } from "./state/store";
+import { setBridgeSceneFile, useStore } from "./state/store";
 import { shouldShowWelcome } from "./ui/Overlays";
 import { slideshowFx } from "./state/slideshow";
 import { startHome, useHome } from "./state/home";
@@ -19,11 +19,14 @@ const embed = startEmbed(params);
 const sceneUrl = params.get("scene");
 const sceneLoaded: Promise<void> = sceneUrl
   ? fetch(sceneUrl)
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`Chargement impossible (${r.status}).`))))
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`Could not load (${r.status}).`))))
       .then((text) => {
         const { scene, warnings } = parseSceneJson(text, sceneUrl.split("/").pop());
         const s = useStore.getState();
         s.loadScene(scene);
+        // Editing the home's own scene (served by the bridge from /shared/): save edits back to it.
+        const shared = /^\/shared\/([a-z0-9][a-z0-9-]{0,60}\.json)$/.exec(sceneUrl);
+        if (shared && !embed && shared[1] !== "demo-apartment.json") setBridgeSceneFile(shared[1]!);
         for (const w of warnings.slice(0, 4)) s.toast(w, "warn");
       })
       .catch((err: unknown) => {
@@ -54,12 +57,12 @@ else
   });
 const demo = !embed && params.get("demo") === "1";
 
-// Maison mode: home bridge (same origin / ?bridge=…) or the mock (?home=mock); ?widget=1 popover layout.
+// Home mode: home bridge (same origin / ?bridge=…) or the mock (?home=mock); ?widget=1 popover layout.
 startHome({ params, embed });
 if (embed) void sceneLoaded.then(() => useEmbed.setState({ sceneLoaded: true }));
 const homeLaunch = embed || params.has("home") || params.get("widget") === "1";
 
-// First visit: short welcome sheet (not when a scene is given in the URL, nor for the demo loop / Maison).
+// First visit: short welcome sheet (not when a scene is given in the URL, nor for the demo loop / Home mode).
 if (!sceneUrl && !demo && !homeLaunch && shouldShowWelcome() && !(import.meta.env.DEV && params.get("welcome") === "0")) useStore.getState().setOverlay("welcome");
 
 if (demo) {

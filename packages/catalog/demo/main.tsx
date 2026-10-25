@@ -38,21 +38,21 @@ function peopleRows(): { title: string; items: { item: Item; title: string; sub:
   const p = (variant: string, dims: Vec3, id: string, attributes?: Record<string, string>, extra: Partial<Item> = {}) =>
     makeItem("person", variant, dims, id, attributes ? { attributes, ...extra } : extra);
   const presets = [
-    { item: p("person/standing", STAND, "pp-man-stand", MAN), title: "Jeune homme (debout)", sub: "preset tallYoungMan" },
-    { item: p("person/standing", STAND, "pp-woman-stand", WOMAN), title: "Jeune femme (debout)", sub: "preset youngWoman" },
-    { item: p("person/sitting", SIT, "pp-man-sit", MAN), title: "Jeune homme (assis)", sub: fmt(SIT) },
-    { item: p("person/sitting", SIT, "pp-woman-sit", WOMAN), title: "Jeune femme (assise)", sub: fmt(SIT) },
-    { item: p("person/sitting-relaxed", [0.8, 1.3, 0.8], "pp-man-relax", MAN), title: "Détendu", sub: "bras sur le dossier" },
-    { item: p("person/standing", STAND, "pp-default"), title: "Défaut", sub: "sans attributs" },
-    { item: p("person/standing", STAND, "pp-bun", { hairStyle: "bun", hair: "#b5651d", top: "#5b7fa6", bottomStyle: "pants", bottom: "#e8dcc6", skin: "#a8704a" }), title: "Chignon", sub: "pantalon" },
+    { item: p("person/standing", STAND, "pp-man-stand", MAN), title: "Young man (standing)", sub: "preset tallYoungMan" },
+    { item: p("person/standing", STAND, "pp-woman-stand", WOMAN), title: "Young woman (standing)", sub: "preset youngWoman" },
+    { item: p("person/sitting", SIT, "pp-man-sit", MAN), title: "Young man (sitting)", sub: fmt(SIT) },
+    { item: p("person/sitting", SIT, "pp-woman-sit", WOMAN), title: "Young woman (sitting)", sub: fmt(SIT) },
+    { item: p("person/sitting-relaxed", [0.8, 1.3, 0.8], "pp-man-relax", MAN), title: "Relaxed", sub: "arm on the backrest" },
+    { item: p("person/standing", STAND, "pp-default"), title: "Default", sub: "no attributes" },
+    { item: p("person/standing", STAND, "pp-bun", { hairStyle: "bun", hair: "#b5651d", top: "#5b7fa6", bottomStyle: "pants", bottom: "#e8dcc6", skin: "#a8704a" }), title: "Bun", sub: "pants" },
   ];
   // sofa/modern 2.2 × 0.85 × 0.95: back cushion front at z ≈ -0.23 → person center z = -0.23 + d/2
   const sofaZ = -0.23 + SIT[2] / 2;
   const scene = [
     {
       item: makeItem("sofa", "sofa/modern", [2.2, 0.85, 0.95], "pp-sofa", { color: "#c9b8a0" }),
-      title: "Canapé + 2 personnes",
-      sub: "assis, y = 0",
+      title: "Sofa + 2 people",
+      sub: "sitting, y = 0",
       children: [
         p("person/sitting", SIT, "pp-sofa-man", MAN, { position: [-0.45, 0, sofaZ] }),
         p("person/sitting", SIT, "pp-sofa-woman", WOMAN, { position: [0.45, 0, sofaZ] }),
@@ -60,21 +60,21 @@ function peopleRows(): { title: string; items: { item: Item; title: string; sub:
     },
     {
       item: makeItem("armchair", "armchair/swivel", [0.8, 0.74, 0.78], "pp-swivel", { color: "#2f7d4f" }),
-      title: "Fauteuil pivotant + personne",
-      sub: "assise",
+      title: "Swivel armchair + person",
+      sub: "sitting",
       children: [p("person/sitting", SIT, "pp-swivel-woman", WOMAN, { position: [0, 0, -0.24 + SIT[2] / 2] })],
     },
-    { item: makeItem("armchair", "armchair/swivel", [0.8, 0.74, 0.78], "pp-swivel-alone", { color: "#2f7d4f" }), title: "Fauteuil pivotant", sub: "#2f7d4f" },
+    { item: makeItem("armchair", "armchair/swivel", [0.8, 0.74, 0.78], "pp-swivel-alone", { color: "#2f7d4f" }), title: "Swivel armchair", sub: "#2f7d4f" },
     {
       item: makeItem("sofa", "sofa/rounded", [2.2, 0.85, 0.95], "pp-sofa2"),
-      title: "Canapé + détendu",
-      sub: "bras sur le dossier",
+      title: "Sofa + relaxed",
+      sub: "arm on the backrest",
       children: [p("person/sitting-relaxed", [0.8, 1.3, 0.8], "pp-sofa2-man", MAN, { position: [0.1, 0, -0.25 + 0.4] })],
     },
   ];
   return [
-    { title: "Personnes", items: presets },
-    { title: "Scène personnes", items: scene },
+    { title: "People", items: presets },
+    { title: "People scene", items: scene },
   ];
 }
 
@@ -120,10 +120,10 @@ function buildLayout(): Row[] {
     list.forEach((dims, i) => sItems.push({ item: makeItem(cat, variant, dims, `stress-${variant}-${i}`), title: variant, sub: fmt(dims) })),
   );
   // split stress into two rows
-  rows.push({ title: "Test de dimensions", items: sItems.slice(0, 9) });
-  rows.push({ title: "Test de dimensions (suite)", items: sItems.slice(9, 20) });
-  rows.push({ title: "Test de dimensions (fin)", items: sItems.slice(20, 30) });
-  rows.push({ title: "Test de dimensions (extra)", items: sItems.slice(30) });
+  rows.push({ title: "Size test", items: sItems.slice(0, 9) });
+  rows.push({ title: "Size test (cont.)", items: sItems.slice(9, 20) });
+  rows.push({ title: "Size test (end)", items: sItems.slice(20, 30) });
+  rows.push({ title: "Size test (extra)", items: sItems.slice(30) });
 
   let z = 0;
   return rows.filter((r) => !ONLY || r.title.startsWith(ONLY)).map((r) => {
@@ -204,7 +204,7 @@ const num3 = (k: string, d: [number, number, number]): [number, number, number] 
   const v = params.get(k)?.split(",").map(Number);
   return v && v.length === 3 && v.every(Number.isFinite) ? (v as [number, number, number]) : d;
 };
-/** URL options (handy for screenshots): ?only=Salon&cam=x,y,z&target=x,y,z&boxes=1&labels=0 */
+/** URL options (handy for screenshots): ?only=Kitchen&cam=x,y,z&target=x,y,z&boxes=1&labels=0 */
 const ONLY = params.get("only");
 const CAM = num3("cam", [10, 14, 18]);
 /** ?view=vignettes shows only the thumbnails grid; ?thumbs=1 opens the side panel. */
@@ -223,7 +223,7 @@ function Thumb({ category, variant, label }: { category: ItemCategory; variant: 
 function Vignettes({ full }: { full: boolean }) {
   return (
     <div className={full ? "vignettes full" : "vignettes"}>
-      <h2>Vignettes</h2>
+      <h2>Thumbnails</h2>
       {[...new Set(CATALOG.map((e) => e.group))].map((g) => (
         <section key={g}>
           <h3>{g}</h3>
@@ -248,17 +248,17 @@ function App() {
     <>
       {showThumbs && <Vignettes full={false} />}
       <div className="panel">
-        <h1>Appart3D · Catalogue</h1>
+        <h1>Appart3D · Catalog</h1>
         <label>
-          <input type="checkbox" checked={showBoxes} onChange={(e) => setShowBoxes(e.target.checked)} /> Boîtes englobantes
+          <input type="checkbox" checked={showBoxes} onChange={(e) => setShowBoxes(e.target.checked)} /> Bounding boxes
         </label>
         <label>
-          <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Étiquettes
+          <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
         </label>
         <label>
-          <input type="checkbox" checked={showThumbs} onChange={(e) => setShowThumbs(e.target.checked)} /> Vignettes
+          <input type="checkbox" checked={showThumbs} onChange={(e) => setShowThumbs(e.target.checked)} /> Thumbnails
         </label>
-        <small>Clic : sélectionner · survol : surbrillance · glisser : orbiter</small>
+        <small>Click: select · hover: highlight · drag: orbit</small>
       </div>
       <Canvas shadows camera={{ position: CAM, fov: 35, near: 0.1, far: 200 }} dpr={[1, 2]}>
         <color attach="background" args={[theme.background]} />

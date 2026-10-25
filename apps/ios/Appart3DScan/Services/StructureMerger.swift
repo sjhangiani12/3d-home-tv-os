@@ -10,7 +10,7 @@ enum StructureMerger {
     }
 
     static func merge(_ rooms: [CapturedRoom]) async -> Outcome {
-        guard !rooms.isEmpty else { return Outcome(structure: nil, warning: "Aucune pièce à fusionner.") }
+        guard !rooms.isEmpty else { return Outcome(structure: nil, warning: "No rooms to merge.") }
         do {
             let builder = StructureBuilder(options: [.beautifyObjects])
             let structure = try await builder.capturedStructure(from: rooms)
@@ -18,8 +18,8 @@ enum StructureMerger {
         } catch {
             return Outcome(
                 structure: nil,
-                warning: "La fusion des pièces a échoué (\(error.localizedDescription)). "
-                    + "Les pièces sont exportées séparément ; leur alignement peut être approximatif."
+                warning: "Room merge failed (\(error.localizedDescription)). "
+                    + "The rooms are exported separately, and their alignment can be approximate."
             )
         }
     }

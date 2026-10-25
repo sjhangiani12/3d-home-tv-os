@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>fr</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Appart3D Scan</string>
 	<key>CFBundleExecutable</key>
@@ -25,7 +25,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Appart3D Scan utilise la caméra et le capteur LiDAR pour mesurer vos pièces et créer la maquette 3D de votre appartement.</string>
+	<string>Appart3D Scan uses the camera and the LiDAR sensor to measure your rooms and build a 3D model of your home.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchScreen</key>

@@ -24,14 +24,21 @@ class AppCatalog(private val context: Context) {
     }
 
     fun load(): List<TvApp> {
+        val installed = all()
+        return dock().mapNotNull { names -> installed.firstOrNull { app -> names.any { it.equals(app.label.trim(), ignoreCase = true) } } }
+    }
+
+    /** Every TV app installed (the app drawer), by name. */
+    fun all(): List<TvApp> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
-        val installed = pm.queryIntentActivities(intent, 0)
+        return pm.queryIntentActivities(intent, 0)
             .filter { it.activityInfo.packageName != context.packageName }
+            .distinctBy { it.activityInfo.packageName }
             .map { ri ->
                 val ai = ri.activityInfo
                 TvApp(ai.packageName, ri.loadLabel(pm).toString(), ai.loadBanner(pm) ?: ai.applicationInfo.loadBanner(pm), ri.loadIcon(pm))
             }
-        return dock().mapNotNull { names -> installed.firstOrNull { app -> names.any { it.equals(app.label.trim(), ignoreCase = true) } } }
+            .sortedBy { it.label.lowercase() }
     }
 
     fun launchIntent(pkg: String): Intent? =

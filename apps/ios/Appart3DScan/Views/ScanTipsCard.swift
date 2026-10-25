@@ -5,11 +5,11 @@ struct ScanTipsCard: View {
     @State private var expanded = true
 
     private let tips: [(String, String, String)] = [
-        ("sun.max", "Bonne lumière", "Allumez les lampes et ouvrez les volets."),
-        ("figure.walk", "Marchez lentement", "Des mouvements lents donnent des murs plus nets."),
-        ("arrow.up.and.down.and.arrow.left.and.right", "Balayez tout", "Murs, sol et angles, jusqu'au plafond."),
-        ("door.left.hand.closed", "Fermez les portes", "Elles seront détectées et la pièce reste bien délimitée."),
-        ("square.split.2x2", "Pièce par pièce", "Scannez chaque pièce puis enchaînez sans quitter l'appli."),
+        ("sun.max", "Good light", "Turn on the lamps and open the shutters."),
+        ("figure.walk", "Walk slowly", "Slow movements give sharper walls."),
+        ("arrow.up.and.down.and.arrow.left.and.right", "Sweep everything", "Walls, floor, and corners, up to the ceiling."),
+        ("door.left.hand.closed", "Close the doors", "The app detects them, and the room keeps clear edges."),
+        ("square.split.2x2", "Room by room", "Scan each room, then go on to the next without leaving the app."),
     ]
 
     var body: some View {
@@ -18,7 +18,7 @@ struct ScanTipsCard: View {
                 withAnimation(.snappy) { expanded.toggle() }
             } label: {
                 HStack {
-                    Label("Comment ça marche", systemImage: "lightbulb.max")
+                    Label("How it works", systemImage: "lightbulb.max")
                         .font(.headline)
                         .foregroundStyle(Theme.ink)
                     Spacer()
@@ -30,7 +30,7 @@ struct ScanTipsCard: View {
             .buttonStyle(.plain)
 
             if expanded {
-                Text("L'iPhone mesure murs, portes, fenêtres et meubles grâce au LiDAR. Le fichier exporté se dépose ensuite dans l'application web Appart3D.")
+                Text("The iPhone uses LiDAR to measure walls, doors, windows, and furniture. Then you drop the exported file into the Appart3D web app.")
                     .font(.footnote)
                     .foregroundStyle(Theme.inkSoft)
                 ForEach(tips, id: \.1) { symbol, title, detail in

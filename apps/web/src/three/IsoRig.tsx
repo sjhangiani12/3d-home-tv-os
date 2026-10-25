@@ -58,11 +58,11 @@ export function IsoRig() {
   const set = useThree((s) => s.set);
   const get = useThree((s) => s.get);
   const invalidate = useThree((s) => s.invalidate);
-  // Compact layout (widget / phone Maison): no top bar or hint bar over the 3D.
+  // Compact layout (widget / phone Home mode): no top bar or hint bar over the 3D.
   const compact = useHome((s) => s.compact);
   // Embedded 3D view (native apps): whole canvas, auto-framed, gentle idle rotation.
   const embed = useEmbed((s) => s.active);
-  // Desktop Maison mode: the control panel covers the right side; center the apartment in what is left.
+  // Desktop Home mode: the control panel covers the right side; center the apartment in what is left.
   const side = useStore((s) => s.mode === "home") && !compact && !embed && size.width > 900 ? 400 : 0;
 
   const camera = useMemo(() => new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, RADIUS * 4), []);

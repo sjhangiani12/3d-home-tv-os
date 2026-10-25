@@ -8,7 +8,7 @@ import { Thumb } from "./Thumb";
 import { SearchField } from "./SearchField";
 import { IconAlert, IconCheck, IconPlus, IconShieldCheck, IconTrash } from "./icons";
 
-const fmt = (v: number) => (Math.round(v * 100) / 100).toString().replace(".", ",");
+const fmt = (v: number) => (Math.round(v * 100) / 100).toString();
 
 /** Objects tab of the left panel: every item grouped by room, with review / overlap filters. */
 export function ObjectsPanel() {
@@ -32,16 +32,16 @@ export function ObjectsPanel() {
   const shown = groups.reduce((n, g) => n + g.items.length, 0);
 
   const FILTERS: { key: ObjectFilter; label: string; count: number; tone?: string }[] = [
-    { key: "all", label: "Tous", count: scene.items.length },
-    { key: "review", label: "À vérifier", count: reviewCount, tone: "amber" },
-    { key: "conflicts", label: "Collisions", count: conflicts.size, tone: "red" },
+    { key: "all", label: "All", count: scene.items.length },
+    { key: "review", label: "To check", count: reviewCount, tone: "amber" },
+    { key: "conflicts", label: "Overlaps", count: conflicts.size, tone: "red" },
   ];
 
   return (
     <>
       <div className="panel-tools">
-        <SearchField value={query} onChange={setQuery} placeholder="Rechercher un objet…" label="Rechercher un objet" />
-        <div className="chips" role="tablist" aria-label="Filtrer les objets">
+        <SearchField value={query} onChange={setQuery} placeholder="Search objects…" label="Search objects" />
+        <div className="chips" role="tablist" aria-label="Filter objects">
           {FILTERS.map((f) => (
             <button
               key={f.key}
@@ -61,11 +61,11 @@ export function ObjectsPanel() {
         {filter === "review" && reviewCount > 0 && (
           <div className="callout callout-amber">
             <p>
-              <strong>{reviewCount} objet{reviewCount > 1 ? "s" : ""} détecté{reviewCount > 1 ? "s" : ""} avec peu de certitude.</strong> Vérifiez leur type et leur position,
-              puis marquez-les comme vérifiés.
+              <strong>{reviewCount} object{reviewCount > 1 ? "s" : ""} detected with low confidence.</strong> Check {reviewCount > 1 ? "their" : "its"} type and position,
+              then mark {reviewCount > 1 ? "them" : "it"} as verified.
             </p>
             <button className="btn btn-sm" onClick={() => verifyAll(scene.items)}>
-              <IconCheck /> Tout marquer comme vérifié
+              <IconCheck /> Mark all as verified
             </button>
           </div>
         )}
@@ -73,7 +73,7 @@ export function ObjectsPanel() {
           <button className="callout callout-red callout-btn" onClick={() => setFilter("conflicts")}>
             <IconAlert />
             <span>
-              {conflicts.size} objet{conflicts.size > 1 ? "s" : ""} se chevauche{conflicts.size > 1 ? "nt" : ""}. <u>Vérifier l'aménagement</u>
+              {conflicts.size} object{conflicts.size > 1 ? "s" : ""} overlap{conflicts.size > 1 ? "" : "s"}. <u>Check the layout</u>
             </span>
           </button>
         )}
@@ -107,7 +107,7 @@ function verifyAll(items: Item[]) {
   s.edit((d) => {
     for (const it of d.items) if (ids.has(it.id)) it.confidence = 1;
   });
-  s.toast(`${ids.size} objet${ids.size > 1 ? "s" : ""} marqué${ids.size > 1 ? "s" : ""} comme vérifié${ids.size > 1 ? "s" : ""}.`);
+  s.toast(`${ids.size} object${ids.size > 1 ? "s" : ""} marked as verified.`);
 }
 
 const ObjectRow = memo(function ObjectRow({ item, selected, conflict }: { item: Item; selected: boolean; conflict: boolean }) {
@@ -126,7 +126,7 @@ const ObjectRow = memo(function ObjectRow({ item, selected, conflict }: { item: 
       onMouseEnter={() => s().hoverItem(item.id)}
       onMouseLeave={() => s().hoverItem(null)}
     >
-      <button className="obj-main" onClick={() => s().focusItem(item.id)} aria-current={selected || undefined} title="Sélectionner et cadrer">
+      <button className="obj-main" onClick={() => s().focusItem(item.id)} aria-current={selected || undefined} title="Select and frame">
         <Thumb category={item.category} variant={item.variant} color={item.color ?? entry?.defaultColor} size="sm" />
         <span className="obj-text">
           <span className="obj-title">{title}</span>
@@ -136,23 +136,23 @@ const ObjectRow = memo(function ObjectRow({ item, selected, conflict }: { item: 
           </span>
         </span>
         {review && (
-          <span className="badge badge-amber" title={`Détecté par le scan (confiance ${Math.round((item.confidence ?? 0) * 100)} %)`}>
-            À vérifier
+          <span className="badge badge-amber" title={`Detected by the scan (confidence ${Math.round((item.confidence ?? 0) * 100)}%)`}>
+            To check
           </span>
         )}
         {conflict && (
-          <span className="badge-icon badge-red" title="Chevauche un mur ou un autre objet" aria-label="Chevauchement">
+          <span className="badge-icon badge-red" title="Overlaps a wall or another object" aria-label="Overlap">
             <IconAlert width={14} height={14} />
           </span>
         )}
       </button>
       <span className="obj-actions">
         {review && (
-          <button className="icon-btn ghost ok" onClick={() => s().markVerified(item.id)} aria-label={`Marquer « ${title} » comme vérifié`} title="Vérifié">
+          <button className="icon-btn ghost ok" onClick={() => s().markVerified(item.id)} aria-label={`Mark "${title}" as verified`} title="Verified">
             <IconCheck width={16} height={16} />
           </button>
         )}
-        <button className="icon-btn ghost danger" onClick={() => s().removeItem(item.id)} aria-label={`Supprimer « ${title} »`} title="Supprimer">
+        <button className="icon-btn ghost danger" onClick={() => s().removeItem(item.id)} aria-label={`Delete "${title}"`} title="Delete">
           <IconTrash width={16} height={16} />
         </button>
       </span>
@@ -162,14 +162,14 @@ const ObjectRow = memo(function ObjectRow({ item, selected, conflict }: { item: 
 
 function EmptyObjects({ filter, hasItems, searching }: { filter: ObjectFilter; hasItems: boolean; searching: boolean }) {
   const { openLeft, setObjectFilter } = useStore.getState();
-  if (searching) return <p className="empty empty-pad">Aucun objet ne correspond à cette recherche.</p>;
+  if (searching) return <p className="empty empty-pad">No objects match this search.</p>;
   if (!hasItems)
     return (
       <div className="empty-state">
-        <p className="empty-title">Aucun objet pour l'instant</p>
-        <p className="empty">Ajoutez vos premiers meubles depuis le catalogue.</p>
+        <p className="empty-title">No objects yet</p>
+        <p className="empty">Add your first furniture from the catalog.</p>
         <button className="btn btn-primary" onClick={() => openLeft("catalog")}>
-          <IconPlus /> Ouvrir le catalogue
+          <IconPlus /> Open the catalog
         </button>
       </div>
     );
@@ -178,12 +178,12 @@ function EmptyObjects({ filter, hasItems, searching }: { filter: ObjectFilter; h
       <span className="empty-icon">
         <IconShieldCheck width={26} height={26} />
       </span>
-      <p className="empty-title">{filter === "review" ? "Tout est vérifié" : "Aucun chevauchement"}</p>
+      <p className="empty-title">{filter === "review" ? "Everything is verified" : "No overlaps"}</p>
       <p className="empty">
-        {filter === "review" ? "Aucun objet du scan n'attend de vérification." : "Les meubles ne se chevauchent pas et ne traversent aucun mur."}
+        {filter === "review" ? "No scanned object needs checking." : "No furniture overlaps or goes through a wall."}
       </p>
       <button className="btn" onClick={() => setObjectFilter("all")}>
-        Voir tous les objets
+        Show all objects
       </button>
     </div>
   );

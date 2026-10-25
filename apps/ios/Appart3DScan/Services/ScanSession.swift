@@ -85,7 +85,7 @@ final class ScanSession {
     func acceptPendingRoom(named name: String) {
         guard let room = pendingRoom else { return }
         rooms.append(room)
-        roomNames.append(EnvelopeExporter.alignedNames([name], count: 1).first ?? "Pièce \(rooms.count)")
+        roomNames.append(EnvelopeExporter.alignedNames([name], count: 1).first ?? "\(EnvelopeExporter.placeholderRoomPrefix)\(rooms.count)")
         pendingRoom = nil
         phase = .ready
     }
@@ -121,7 +121,7 @@ final class ScanSession {
             phase = .finished
         } catch {
             store.discardFolder(for: projectID)
-            phase = .failed("L'export a échoué : \(error.localizedDescription)")
+            phase = .failed("Export failed: \(error.localizedDescription)")
         }
     }
 
@@ -139,7 +139,7 @@ final class ScanSession {
 
     func roomProcessed(_ room: CapturedRoom, errorMessage: String?) {
         guard phase == .processing || phase == .scanning else { return }
-        if let errorMessage { notice = "Résultat partiel : \(errorMessage)" }
+        if let errorMessage { notice = "Partial result: \(errorMessage)" }
         pendingRoom = room
         phase = .naming
     }
@@ -150,7 +150,7 @@ final class ScanSession {
     }
 
     func captureFailed(_ message: String) {
-        notice = "Scan interrompu : \(message)"
+        notice = "Scan interrupted: \(message)"
         if phase == .scanning || phase == .processing { phase = .ready }
     }
 }

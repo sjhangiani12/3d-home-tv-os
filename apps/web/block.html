@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c1022" />
+    <title>The Block</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="/src/block/block.css" />
+  </head>
+  <body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="gl" width="960" height="540"></canvas>
+    <div id="labels"></div>
+
+    <div id="clock" aria-live="off">
+      <div class="time"><span id="hhmm">11:16</span><small id="ampm">PM</small></div>
+      <div class="line" id="wxline">SAT OCT 24 · 45°F · CLEAR</div>
+      <div class="place">YOUR BLOCK</div>
+    </div>
+
+    <button id="chip" type="button" aria-label="Lights: open the home's light controls">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+      <span id="chiptxt">Lights · 2 on</span>
+      <span class="dots" id="chipdots"></span>
+    </button>
+
+    <div id="dock" role="toolbar" aria-label="Apps">
+      <button class="app" type="button">Netflix</button>
+      <button class="app" type="button">YouTube</button>
+      <button class="app" type="button">Prime Video</button>
+      <button class="app" type="button">Hulu</button>
+      <button class="app" type="button">Disney+</button>
+      <button class="app" type="button">Apple TV</button>
+      <button class="app" type="button">All apps</button>
+    </div>
+
+    <aside id="drawer" aria-label="Home lights" aria-hidden="true">
+      <div>
+        <h2>Home</h2>
+        <div class="addr">Home</div>
+      </div>
+      <div class="scenes" id="scenes">
+        <button class="pill" type="button" data-scene="relax">Relax</button>
+        <button class="pill" type="button" data-scene="read">Read</button>
+        <button class="pill" type="button" data-scene="off">All off</button>
+      </div>
+      <div id="rooms"></div>
+      <div class="hint">OK turns a lamp on or off · ← → dims it<br>Back returns to the block</div>
+    </aside>
+
+    <div id="mock" aria-label="Mock controls">
+      <div class="title">Mock controls</div>
+      <div class="grp"><span class="lbl">Weather</span>
+        <button type="button" data-wx="clear" aria-pressed="true">Clear</button>
+        <button type="button" data-wx="rain" aria-pressed="false">Rain</button>
+        <button type="button" data-wx="snow" aria-pressed="false">Snow</button>
+        <button type="button" data-wx="wind" aria-pressed="false">Wind</button>
+      </div>
+      <div class="grp"><span class="lbl">Time</span>
+        <button type="button" data-tod="auto" aria-pressed="true">NYC now</button>
+        <button type="button" data-tod="day" aria-pressed="false">Day</button>
+        <button type="button" data-tod="dusk" aria-pressed="false">Dusk</button>
+        <button type="button" data-tod="night" aria-pressed="false">Night</button>
+      </div>
+      <div class="grp"><span class="lbl">Train</span>
+        <button type="button" id="trainNow">Downtown 6 arrives now</button>
+      </div>
+    </div>
+
+    <div id="fade"></div>
+  </div>
+</div>
+
+    <script type="module" src="/src/block/block.js"></script>
+  </body>
+</html>

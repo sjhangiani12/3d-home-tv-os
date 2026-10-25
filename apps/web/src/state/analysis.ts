@@ -9,7 +9,7 @@ export function needsReview(item: Item): boolean {
   return item.source === "scan" && item.confidence !== undefined && item.confidence < REVIEW_THRESHOLD;
 }
 
-/** Lowercase, accent-free text for forgiving search ("etagere" finds "Étagère"). */
+/** Lowercase, accent-free text for forgiving search ("etagere" finds "Étagère", "cafe" finds "Café"). */
 export function normalizeText(s: string): string {
   return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
 }
@@ -64,7 +64,7 @@ export function groupItemsByRoom(scene: Scene, items: Item[] = scene.items): Roo
     if (list) groups.push({ roomId: r.id, name: r.name, items: list });
   }
   const orphans = buckets.get(null);
-  if (orphans) groups.push({ roomId: null, name: "Hors des pièces", items: orphans });
+  if (orphans) groups.push({ roomId: null, name: "Outside rooms", items: orphans });
   return groups;
 }
 

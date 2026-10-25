@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 /**
- * Wall face picked in "Pièces" mode (click on a wall) to paint just that face.
+ * Wall face picked in "Rooms" mode (click on a wall) to paint just that face.
  * Standalone mini-store (kept out of the main store); cleared when the room selection changes.
  */
 export interface WallFaceSelection {

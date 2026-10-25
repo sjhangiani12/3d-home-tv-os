@@ -14,12 +14,12 @@ const item = (i: Omit<Item, "id" | "source">): Item => ({ id: `item_demo_${++n}`
 export const demoScene: Scene = {
   version: SCENE_VERSION,
   id: "scene_demo",
-  name: "Appartement démo",
+  name: "Demo apartment",
   units: "m",
   rooms: [
-    { id: "room_living", name: "Séjour & cuisine", kind: "living", floor: [[0, 0], [6, 0], [6, 6], [0, 6]], floorMaterial: "wood", floorColor: "#d9b48a" },
-    { id: "room_bedroom", name: "Chambre", kind: "bedroom", floor: [[6, 0], [9.5, 0], [9.5, 3.8], [6, 3.8]], floorMaterial: "wood", floorColor: "#c99f74" },
-    { id: "room_bath", name: "Salle de bain", kind: "bathroom", floor: [[6, 3.8], [9.5, 3.8], [9.5, 6], [6, 6]], floorMaterial: "tile", floorColor: "#e6e9ec" },
+    { id: "room_living", name: "Living room & kitchen", kind: "living", floor: [[0, 0], [6, 0], [6, 6], [0, 6]], floorMaterial: "wood", floorColor: "#d9b48a" },
+    { id: "room_bedroom", name: "Bedroom", kind: "bedroom", floor: [[6, 0], [9.5, 0], [9.5, 3.8], [6, 3.8]], floorMaterial: "wood", floorColor: "#c99f74" },
+    { id: "room_bath", name: "Bathroom", kind: "bathroom", floor: [[6, 3.8], [9.5, 3.8], [9.5, 6], [6, 6]], floorMaterial: "tile", floorColor: "#e6e9ec" },
   ],
   walls: [
     { id: "wall_s", start: [0, 0], end: [9.5, 0], height: H, thickness: T },
@@ -39,7 +39,7 @@ export const demoScene: Scene = {
   ],
   items: [
     // Living
-    item({ category: "sofa", position: [2.2, 0, 5.4], rotationY: PI, dimensions: [2.2, 0.85, 0.95], color: "#5b7fa6", roomId: "room_living", label: "Canapé" }),
+    item({ category: "sofa", position: [2.2, 0, 5.4], rotationY: PI, dimensions: [2.2, 0.85, 0.95], color: "#5b7fa6", roomId: "room_living", label: "Sofa" }),
     item({ category: "rug", position: [2.2, 0, 3.9], rotationY: 0, dimensions: [2.4, 0.01, 1.7], color: "#e8d5b5", roomId: "room_living" }),
     item({ category: "coffeeTable", position: [2.2, 0, 4.1], rotationY: 0, dimensions: [1.1, 0.4, 0.6], color: "#a77b52", roomId: "room_living" }),
     item({ category: "armchair", position: [0.75, 0, 3.6], rotationY: PI / 2, dimensions: [0.85, 0.8, 0.85], color: "#d9824b", roomId: "room_living" }),
@@ -49,7 +49,7 @@ export const demoScene: Scene = {
     item({ category: "floorLamp", position: [3.6, 0, 5.6], rotationY: 0, dimensions: [0.4, 1.6, 0.4], roomId: "room_living" }),
     item({ category: "shelf", position: [0.2, 0, 1.0], rotationY: PI / 2, dimensions: [1.2, 1.8, 0.35], color: "#f0ebe3", roomId: "room_living" }),
     // Kitchen (south-east corner of the open space)
-    item({ category: "storage", variant: "storage/kitchen-counter", position: [4.4, 0, 0.3], rotationY: 0, dimensions: [1.2, 0.9, 0.6], color: "#f4f1ea", roomId: "room_living", label: "Plan de travail" }),
+    item({ category: "storage", variant: "storage/kitchen-counter", position: [4.4, 0, 0.3], rotationY: 0, dimensions: [1.2, 0.9, 0.6], color: "#f4f1ea", roomId: "room_living", label: "Kitchen counter" }),
     item({ category: "sink", position: [3.5, 0, 0.3], rotationY: 0, dimensions: [0.6, 0.9, 0.6], color: "#f4f1ea", roomId: "room_living" }),
     item({ category: "stove", position: [5.0, 0, 0.3], rotationY: 0, dimensions: [0.6, 0.9, 0.6], roomId: "room_living" }),
     item({ category: "refrigerator", position: [5.6, 0, 0.35], rotationY: 0, dimensions: [0.7, 1.8, 0.7], roomId: "room_living" }),

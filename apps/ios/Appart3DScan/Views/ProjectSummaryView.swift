@@ -18,11 +18,11 @@ struct ProjectSummaryView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if project.isDemo {
                     NoticeLine(symbol: "sparkles", color: Theme.slate,
-                               text: "Données de démonstration : exemple embarqué, pas un vrai scan.")
+                               text: "Demo data: a built-in sample, not a real scan.")
                 }
                 if !summary.fromMergedStructure && summary.roomCount > 1 {
                     NoticeLine(symbol: "exclamationmark.triangle", color: Theme.terracotta,
-                               text: "Fusion multi-pièces indisponible : les pièces sont exportées séparément.")
+                               text: "Multi-room merge unavailable: the rooms are exported separately.")
                 }
                 statsGrid
                 roomsCard
@@ -38,18 +38,18 @@ struct ProjectSummaryView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     ShareLink(item: store.envelopeURL(for: project)) {
-                        Label("Partager le fichier", systemImage: "square.and.arrow.up")
+                        Label("Share file", systemImage: "square.and.arrow.up")
                     }
                     Button(role: .destructive) { confirmDelete = true } label: {
-                        Label("Supprimer", systemImage: "trash")
+                        Label("Delete", systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
         }
-        .confirmationDialog("Supprimer cet appartement ?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Supprimer", role: .destructive) {
+        .confirmationDialog("Delete this home?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
                 store.delete(project)
                 dismiss()
             }
@@ -58,17 +58,17 @@ struct ProjectSummaryView: View {
 
     private var statsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatTile(symbol: "square.split.bottomrightquarter", value: summary.roomCount, label: "Pièces", color: Theme.terracotta)
-            StatTile(symbol: "rectangle.portrait", value: summary.walls, label: "Murs", color: Theme.slate)
+            StatTile(symbol: "square.split.bottomrightquarter", value: summary.roomCount, label: "Rooms", color: Theme.terracotta)
+            StatTile(symbol: "rectangle.portrait", value: summary.walls, label: "Walls", color: Theme.slate)
             StatTile(symbol: "door.left.hand.open", value: summary.doors + summary.openings,
-                     label: summary.openings > 0 ? "Portes et passages" : "Portes", color: Theme.sage)
-            StatTile(symbol: "window.casement", value: summary.windows, label: "Fenêtres", color: Theme.slate)
+                     label: summary.openings > 0 ? "Doors and openings" : "Doors", color: Theme.sage)
+            StatTile(symbol: "window.casement", value: summary.windows, label: "Windows", color: Theme.slate)
         }
     }
 
     private var roomsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Pièces").font(.headline).foregroundStyle(Theme.ink)
+            Text("Rooms").font(.headline).foregroundStyle(Theme.ink)
             ForEach(Array(project.roomNames.enumerated()), id: \.offset) { index, name in
                 HStack {
                     Text("\(index + 1)")
@@ -76,7 +76,7 @@ struct ProjectSummaryView: View {
                         .foregroundStyle(.white)
                         .frame(width: 24, height: 24)
                         .background(Theme.terracotta, in: Circle())
-                    Text(name).foregroundStyle(Theme.ink)
+                    Text(DisplayLabels.roomName(name)).foregroundStyle(Theme.ink)
                     Spacer()
                 }
             }
@@ -87,19 +87,19 @@ struct ProjectSummaryView: View {
     private var objectsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Objets détectés").font(.headline).foregroundStyle(Theme.ink)
+                Text("Detected objects").font(.headline).foregroundStyle(Theme.ink)
                 Spacer()
                 Text("\(summary.objectCount)").font(.headline).foregroundStyle(Theme.inkSoft)
             }
             if summary.objectsByCategory.isEmpty {
-                Text("Aucun meuble détecté.").font(.subheadline).foregroundStyle(Theme.inkSoft)
+                Text("No furniture detected.").font(.subheadline).foregroundStyle(Theme.inkSoft)
             }
             ForEach(sortedCategories, id: \.key) { key, count in
                 HStack(spacing: 12) {
-                    Image(systemName: FrenchLabels.objectSymbol(key))
+                    Image(systemName: DisplayLabels.objectSymbol(key))
                         .foregroundStyle(Theme.sage)
                         .frame(width: 28)
-                    Text(FrenchLabels.objectName(key)).foregroundStyle(Theme.ink)
+                    Text(DisplayLabels.objectName(key)).foregroundStyle(Theme.ink)
                     Spacer()
                     Text("× \(count)").monospacedDigit().foregroundStyle(Theme.inkSoft)
                 }
@@ -110,13 +110,13 @@ struct ProjectSummaryView: View {
 
     private var exportCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Exporter").font(.headline).foregroundStyle(Theme.ink)
-            Text("Envoyez le fichier par AirDrop sur votre Mac, puis glissez-le dans l'application web Appart3D.")
+            Text("Export").font(.headline).foregroundStyle(Theme.ink)
+            Text("AirDrop the file to your Mac, then drag it into the Appart3D web app.")
                 .font(.footnote)
                 .foregroundStyle(Theme.inkSoft)
 
             ShareLink(item: store.envelopeURL(for: project)) {
-                Label("Partager \(project.envelopeFileName)", systemImage: "square.and.arrow.up")
+                Label("Share \(project.envelopeFileName)", systemImage: "square.and.arrow.up")
                     .lineLimit(1)
             }
             .buttonStyle(PrimaryButtonStyle())
@@ -124,7 +124,7 @@ struct ProjectSummaryView: View {
             let usdz = store.usdzURLs(for: project)
             if !usdz.isEmpty {
                 ShareLink(items: usdz) {
-                    Label(usdz.count > 1 ? "Partager les modèles USDZ" : "Partager le modèle USDZ",
+                    Label(usdz.count > 1 ? "Share USDZ models" : "Share USDZ model",
                           systemImage: "cube")
                 }
                 .buttonStyle(SecondaryButtonStyle())
@@ -135,7 +135,7 @@ struct ProjectSummaryView: View {
             } label: {
                 HStack {
                     if uploading { ProgressView() }
-                    Label("Envoyer en ligne", systemImage: "icloud.and.arrow.up")
+                    Label("Upload online", systemImage: "icloud.and.arrow.up")
                 }
             }
             .buttonStyle(SecondaryButtonStyle(color: Theme.inkSoft))
@@ -159,7 +159,7 @@ struct ProjectSummaryView: View {
             let url = try await uploader.upload(envelopeURL: store.envelopeURL(for: project),
                                                 usdzURLs: store.usdzURLs(for: project),
                                                 projectName: project.name)
-            uploadMessage = url.map { "Envoyé : \($0.absoluteString)" } ?? "Envoyé."
+            uploadMessage = url.map { "Uploaded: \($0.absoluteString)" } ?? "Uploaded."
         } catch {
             uploadMessage = error.localizedDescription
         }

@@ -104,7 +104,7 @@ export function SlideshowRig() {
   const publish = (shot: Shot, index: number) => {
     published.current = index;
     const night = useStore.getState().night;
-    const caption = shot.kind === "dusk" ? { ...shot.caption, title: night ? "Au petit matin" : "À la nuit tombée" } : shot.caption;
+    const caption = shot.kind === "dusk" ? { ...shot.caption, title: night ? "Early morning" : "Nightfall" } : shot.caption;
     useSlides.getState().setShot(index, shots.length, shot.duration, caption);
     useStore.getState().setSlideCam(shot.camera.cam);
   };

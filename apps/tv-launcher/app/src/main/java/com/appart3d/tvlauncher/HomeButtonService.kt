@@ -27,7 +27,10 @@ class HomeButtonService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.packageName == STOCK_HOME && !CrashGuard.crashLooping(this)) openHome()
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.packageName !in STOCK_HOMES) return
+        // Fire OS shows its Settings inside the launcher's package (MainSettingsActivity…): leave those alone.
+        if (event.className?.contains("Settings") == true) return
+        if (!CrashGuard.crashLooping(this)) openHome()
     }
 
     override fun onInterrupt() {}
@@ -42,6 +45,7 @@ class HomeButtonService : AccessibilityService() {
     }
 
     companion object {
-        private const val STOCK_HOME = "com.google.android.apps.tv.launcherx"
+        // Google TV, Fire TV (Fire OS also re-asserts its launcher, the same way).
+        private val STOCK_HOMES = setOf("com.google.android.apps.tv.launcherx", "com.amazon.tv.launcher")
     }
 }

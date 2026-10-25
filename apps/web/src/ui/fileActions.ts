@@ -1,14 +1,14 @@
 import { useStore } from "../state/store";
 import { downloadText, loadExampleScan, parseSceneJson, sceneToJson, slugify, type LoadResult } from "../lib/io";
 
-/** File-level actions shared by the "Fichier" menu, the welcome sheet and window drag & drop. */
+/** File-level actions shared by the "File" menu, the welcome sheet and window drag & drop. */
 
 const s = () => useStore.getState();
 
 export function applyLoad({ scene, warnings, fromScan }: LoadResult) {
   s().loadScene(scene);
   const lowConfidence = scene.items.filter((i) => i.source === "scan" && i.confidence !== undefined && i.confidence < 0.5).length;
-  s().toast(fromScan ? `Scan importé : ${scene.rooms.length} pièce(s), ${scene.items.length} objet(s).` : `« ${scene.name} » chargé.`);
+  s().toast(fromScan ? `Scan imported: ${scene.rooms.length} room${scene.rooms.length === 1 ? "" : "s"}, ${scene.items.length} object${scene.items.length === 1 ? "" : "s"}.` : `"${scene.name}" loaded.`);
   for (const w of warnings.slice(0, 4)) s().toast(w, "warn");
   if (lowConfidence > 0) {
     // Point the user at the objects to check right away.
@@ -17,12 +17,12 @@ export function applyLoad({ scene, warnings, fromScan }: LoadResult) {
 }
 
 function fail(err: unknown) {
-  s().toast(err instanceof Error ? err.message : "Import impossible.", "error");
+  s().toast(err instanceof Error ? err.message : "Import failed.", "error");
 }
 
 export async function importFile(file: File) {
   if (!/\.json$/i.test(file.name) && file.type !== "application/json") {
-    s().toast("Choisissez un fichier .json (scan iPhone .appart3d.json ou scène exportée).", "error");
+    s().toast("Choose a .json file (iPhone scan .appart3d.json or exported scene).", "error");
     return;
   }
   try {
@@ -55,11 +55,11 @@ export async function loadExample() {
 export function exportScene() {
   const scene = s().scene;
   downloadText(sceneToJson(scene), `${slugify(scene.name)}.appart3d-scene.json`);
-  s().toast("Scène exportée.");
+  s().toast("Scene exported.");
 }
 
 export function resetToDemo(ask = true) {
-  if (ask && !window.confirm("Réinitialiser ? L'aménagement actuel sera remplacé par l'appartement démo (annulable avec Ctrl+Z).")) return;
+  if (ask && !window.confirm("Reset? The current layout will be replaced by the demo apartment (undo with Ctrl+Z).")) return;
   s().resetToDemo();
-  s().toast("Appartement démo restauré.");
+  s().toast("Demo apartment restored.");
 }

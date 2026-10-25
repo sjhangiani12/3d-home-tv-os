@@ -49,7 +49,7 @@ export function forcedSunElevation(env: Record<string, string | undefined> = pro
 
 /** Apply config (room labels, names, 3D links) to a raw adapter device. */
 export function decorate(d: Device, cfg: Pick<BridgeConfig, "rooms" | "deviceRooms" | "deviceNames" | "links">): Device {
-  const room = cfg.deviceRooms[d.id] ?? (d.room ? (cfg.rooms[d.room] ?? d.room) : d.kind === "tv" ? "Salon" : "Maison");
+  const room = cfg.deviceRooms[d.id] ?? (d.room ? (cfg.rooms[d.room] ?? d.room) : d.kind === "tv" ? "Living room" : "Home");
   const out: Device = { ...d, room, name: cfg.deviceNames[d.id] ?? d.name };
   // Explicit id first, then any device of that kind (the TV carries its Ambilight: no separate link).
   const link = d.id in cfg.links ? cfg.links[d.id] : cfg.links[`kind:${d.kind}`];
@@ -171,12 +171,13 @@ export class Hub {
     else for (const d of changed) this.emit({ type: "device", device: d });
   }
 
-  /** Devices in the shared tile order (config `deviceOrder`), then by room and name. */
+  /** Devices in the shared tile order (config `deviceOrder`), then by room and name; hidden ones left out. */
   devices(): Device[] {
     const room = (r: string) => ["Salon", "Cuisine", "Chambre"].indexOf(r) >>> 0;
     const rank = new Map((this.cfg.deviceOrder ?? []).map((id, i) => [id, i]));
     const pos = (id: string) => rank.get(id) ?? Number.MAX_SAFE_INTEGER;
-    return [...this.current.values()].sort(
+    const hidden = new Set(this.cfg.hiddenDevices ?? []);
+    return [...this.current.values()].filter((d) => !hidden.has(d.id)).sort(
       (a, b) => pos(a.id) - pos(b.id) || room(a.room) - room(b.room) || a.room.localeCompare(b.room) || a.name.localeCompare(b.name),
     );
   }

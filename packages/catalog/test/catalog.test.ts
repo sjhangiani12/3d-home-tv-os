@@ -37,7 +37,7 @@ describe("catalog", () => {
       expect(e!.variants!.length).toBeGreaterThan(0);
     }
     expect(CATALOG.length).toBe(ITEM_CATEGORIES.length);
-    expect(ITEM_CATEGORIES.length).toBe(43);
+    expect(ITEM_CATEGORIES.length).toBe(44);
     expect(new Set(CATALOG.map((e) => e.category)).size).toBe(CATALOG.length);
   });
 
@@ -66,19 +66,19 @@ describe("catalog", () => {
     expect(getCatalogEntry("curtain")!.defaultDimensions[1]).toBeGreaterThan(2.2);
   });
 
-  it("French labels and groups for the new categories", () => {
+  it("English labels and groups for the new categories", () => {
     const labels: Partial<Record<ItemCategory, string>> = {
-      bicycle: "Vélo",
-      coatRack: "Portemanteau",
-      pendantLamp: "Suspension",
-      ceilingFan: "Ventilateur de plafond",
-      radiator: "Radiateur",
-      curtain: "Rideaux",
+      bicycle: "Bicycle",
+      coatRack: "Coat rack",
+      pendantLamp: "Pendant lamp",
+      ceilingFan: "Ceiling fan",
+      radiator: "Radiator",
+      curtain: "Curtains",
     };
     for (const [c, l] of Object.entries(labels)) expect(getCatalogEntry(c as ItemCategory)!.label).toBe(l);
-    expect(getCatalogEntry("bicycle")!.group).toBe("Divers");
-    expect(getCatalogEntry("coatRack")!.group).toBe("Divers");
-    expect(getCatalogEntry("pendantLamp")!.group).toBe("Déco");
+    expect(getCatalogEntry("bicycle")!.group).toBe("Misc");
+    expect(getCatalogEntry("coatRack")!.group).toBe("Misc");
+    expect(getCatalogEntry("pendantLamp")!.group).toBe("Decor");
   });
 
   it("main categories expose several variants", () => {

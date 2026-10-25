@@ -12,10 +12,12 @@ describe("merged structure floor", () => {
     expect(scene.rooms).toHaveLength(3);
   });
 
-  it("treats the iOS placeholder name « Pièce N » as unnamed", () => {
-    const env = structuredClone(generateFixtureEnvelope("multi")) as { roomNames: string[] };
-    env.roomNames = env.roomNames.map((_, i) => `Pièce ${i + 1}`);
-    const { scene } = importRoomPlan(env);
-    expect(scene.rooms.some((r) => /^Pièce \d/.test(r.name))).toBe(false);
+  it("treats the iOS placeholder names \"Pièce N\" and \"Room N\" as unnamed", () => {
+    for (const prefix of ["Pièce", "Room", "room"]) {
+      const env = structuredClone(generateFixtureEnvelope("multi")) as { roomNames: string[] };
+      env.roomNames = env.roomNames.map((_, i) => `${prefix} ${i + 1}`);
+      const { scene } = importRoomPlan(env);
+      expect(scene.rooms.map((r) => r.name)).toEqual(["Living room", "Bedroom", "Bathroom"]);
+    }
   });
 });

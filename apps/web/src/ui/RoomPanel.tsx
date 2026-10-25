@@ -12,22 +12,22 @@ import { ColorField, FLOOR_SWATCHES, WALL_SWATCHES } from "./ColorField";
 import { IconClose, IconTarget } from "./icons";
 
 const KIND_LABELS: Record<RoomKind, string> = {
-  living: "Séjour",
-  bedroom: "Chambre",
-  kitchen: "Cuisine",
-  bathroom: "Salle de bain",
-  toilet: "WC",
-  hallway: "Entrée / couloir",
-  office: "Bureau",
-  dining: "Salle à manger",
-  storage: "Rangement",
-  other: "Autre",
+  living: "Living room",
+  bedroom: "Bedroom",
+  kitchen: "Kitchen",
+  bathroom: "Bathroom",
+  toilet: "Toilet",
+  hallway: "Hallway",
+  office: "Office",
+  dining: "Dining room",
+  storage: "Storage",
+  other: "Other",
 };
 
-const area = (r: Room) => Math.abs(polygonArea(r.floor)).toFixed(1).replace(".", ",");
+const area = (r: Room) => Math.abs(polygonArea(r.floor)).toFixed(1);
 const focus = (r: Room) => cameraBus.emit({ type: "focus", center: centroid(r.floor), size: roomFocusSize(r) });
 
-/** Left panel in "Pièces" mode: list of rooms. */
+/** Left panel in "Rooms" mode: list of rooms. */
 export function RoomList() {
   const rooms = useStore((s) => s.scene.rooms);
   const selectedId = useStore((s) => s.selectedRoomId);
@@ -35,13 +35,13 @@ export function RoomList() {
   const hoverRoom = useStore((s) => s.hoverRoom);
   const total = rooms.reduce((s, r) => s + Math.abs(polygonArea(r.floor)), 0);
   return (
-    <aside className="catalog room-panel panel" aria-label="Pièces">
+    <aside className="catalog room-panel panel" aria-label="Rooms">
       <div className="panel-head">
-        <h2>Pièces</h2>
+        <h2>Rooms</h2>
         <span className="muted">{total.toFixed(0)} m²</span>
       </div>
       <div className="catalog-scroll">
-        {rooms.length === 0 && <p className="empty">Aucune pièce dans ce plan.</p>}
+        {rooms.length === 0 && <p className="empty">No rooms in this plan.</p>}
         <ul className="room-list">
           {rooms.map((r) => (
             <li key={r.id}>
@@ -61,13 +61,13 @@ export function RoomList() {
             </li>
           ))}
         </ul>
-        <p className="hint-text">Cliquez sur un sol pour choisir une pièce, double-cliquez pour la cadrer.</p>
+        <p className="hint-text">Click a floor to pick a room. Double-click to frame it.</p>
       </div>
     </aside>
   );
 }
 
-/** Right panel in "Pièces" mode: style of the selected room. */
+/** Right panel in "Rooms" mode: style of the selected room. */
 export function RoomInspector() {
   const room = useStore((s) => s.scene.rooms.find((r) => r.id === s.selectedRoomId));
   const walls = useStore((s) => s.scene.walls);
@@ -101,7 +101,7 @@ export function RoomInspector() {
   const faceWall = face && walls.find((w) => w.id === face.wallId);
 
   return (
-    <aside className="inspector panel" aria-label="Style de la pièce">
+    <aside className="inspector panel" aria-label="Room style">
       <div className="panel-head">
         <div>
           <p className="eyebrow">
@@ -109,13 +109,13 @@ export function RoomInspector() {
           </p>
           <h2>{room.name}</h2>
         </div>
-        <button className="icon-btn ghost" onClick={() => selectRoom(null)} aria-label="Désélectionner">
+        <button className="icon-btn ghost" onClick={() => selectRoom(null)} aria-label="Deselect">
           <IconClose />
         </button>
       </div>
       <div className="inspector-scroll">
         <label className="field">
-          <span>Nom</span>
+          <span>Name</span>
           <input type="text" value={room.name} onChange={(e) => update((r) => void (r.name = e.target.value), `room-name:${room.id}`)} />
         </label>
         <label className="field">
@@ -129,7 +129,7 @@ export function RoomInspector() {
           </select>
         </label>
         <div className="field">
-          <span>Revêtement de sol</span>
+          <span>Flooring</span>
           <div className="seg">
             {(Object.keys(FLOOR_LABELS) as FloorMaterial[]).map((m) => (
               <button
@@ -148,7 +148,7 @@ export function RoomInspector() {
           </div>
         </div>
         <div className="field">
-          <span>Couleur du sol</span>
+          <span>Floor color</span>
           <ColorField
             value={room.floorColor ?? theme.floor[room.floorMaterial]}
             swatches={FLOOR_SWATCHES}
@@ -157,10 +157,10 @@ export function RoomInspector() {
         </div>
         <div className="field">
           <span>
-            Couleur des murs <em className="muted">({faces.length} mur{faces.length > 1 ? "s" : ""})</em>
+            Wall color <em className="muted">({faces.length} wall{faces.length > 1 ? "s" : ""})</em>
           </span>
           {faces.length === 0 ? (
-            <p className="muted small">Aucun mur détecté le long de cette pièce.</p>
+            <p className="muted small">No walls detected along this room.</p>
           ) : (
             <ColorField
               value={wallColor}
@@ -168,18 +168,18 @@ export function RoomInspector() {
               onChange={(c, live) => paintFaces(faces, c, live ? `wall-color:${room.id}` : undefined)}
             />
           )}
-          <p className="muted small">Cliquez sur un mur pour ne peindre que cette face.</p>
+          <p className="muted small">Click a wall to paint only that side.</p>
         </div>
         {face && faceWall && (
           <div className="field">
             <span>
-              Face sélectionnée{" "}
+              Selected side{" "}
               <button
                 type="button"
                 onClick={() => setPicked(null)}
                 style={{ background: "none", border: 0, padding: 0, font: "inherit", color: "inherit", opacity: 0.7, textDecoration: "underline", cursor: "pointer" }}
               >
-                (désélectionner)
+                (deselect)
               </button>
             </span>
             <ColorField
@@ -192,7 +192,7 @@ export function RoomInspector() {
       </div>
       <div className="inspector-foot">
         <button onClick={() => focus(room)}>
-          <IconTarget /> Cadrer la pièce
+          <IconTarget /> Frame the room
         </button>
       </div>
     </aside>

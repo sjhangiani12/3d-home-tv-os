@@ -13,6 +13,12 @@ export const SCENE_COLORS = {
   movie: "#4b1fd1",
 } as const;
 
+/** Philips Hue's own Relax and Read recipes (ct 447 / 346 mired, bri 144 / 254). */
+export const HUE_RECIPES = {
+  relax: { kelvin: 2237, brightness: 57 },
+  read: { kelvin: 2890, brightness: 100 },
+} as const;
+
 const isLight = (d: Device) => d.kind === "light" || d.kind === "plug";
 
 function lightOn(d: Device, brightness: number, look: { kelvin?: number; hex?: string }): DeviceAction[] {
@@ -77,6 +83,15 @@ export function planScene(
         plan.push({ deviceId: d.id, actions: lightOn(d, 45, look) });
       }
       break;
+    case "relax":
+    case "read": {
+      // The lamps already on take the look; with everything off, the living room lights up.
+      const recipe = HUE_RECIPES[sceneId];
+      const lit = lights.filter((d) => d.state.on === true);
+      const targets = lit.length ? lit : lights.filter((d) => d.room === living || /living|salon/i.test(d.room));
+      for (const d of targets) plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
+      break;
+    }
     case "movie":
       for (const d of lights) {
         if (d.id === strip?.id) plan.push({ deviceId: d.id, actions: lightOn(d, 25, { hex: SCENE_COLORS.movie }) });

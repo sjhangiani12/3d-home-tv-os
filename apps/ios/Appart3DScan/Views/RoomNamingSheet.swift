@@ -18,15 +18,15 @@ struct RoomNamingSheet: View {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.title2)
                         .foregroundStyle(Theme.sage)
-                    Text("Pièce \(roomNumber) capturée")
+                    Text("Room \(roomNumber) captured")
                         .font(.system(.title2, design: .rounded, weight: .bold))
                         .foregroundStyle(Theme.ink)
                 }
-                Text("Comment s'appelle cette pièce ?")
+                Text("What is this room called?")
                     .font(.subheadline)
                     .foregroundStyle(Theme.inkSoft)
 
-                TextField("Nom de la pièce", text: $name)
+                TextField("Room name", text: $name)
                     .textInputAutocapitalization(.sentences)
                     .focused($focused)
                     .padding(14)
@@ -35,7 +35,7 @@ struct RoomNamingSheet: View {
                         .stroke(Theme.creamDeep, lineWidth: 1))
 
                 FlowLayout(spacing: 8) {
-                    ForEach(FrenchLabels.roomSuggestions, id: \.self) { suggestion in
+                    ForEach(DisplayLabels.roomSuggestions, id: \.self) { suggestion in
                         Button { name = suggestedName(suggestion) } label: {
                             Text(suggestion)
                                 .font(.subheadline.weight(.medium))
@@ -51,17 +51,17 @@ struct RoomNamingSheet: View {
 
                 VStack(spacing: 10) {
                     Button { onAction(.scanAnother, name) } label: {
-                        Label("Scanner une autre pièce", systemImage: "plus.viewfinder")
+                        Label("Scan another room", systemImage: "plus.viewfinder")
                     }
                     .buttonStyle(PrimaryButtonStyle())
 
                     Button { onAction(.finish, name) } label: {
-                        Label("Terminer l'appartement", systemImage: "checkmark")
+                        Label("Finish home", systemImage: "checkmark")
                     }
                     .buttonStyle(PrimaryButtonStyle(color: Theme.sage))
 
                     Button(role: .destructive) { onAction(.redo, name) } label: {
-                        Label("Refaire cette pièce", systemImage: "arrow.counterclockwise")
+                        Label("Redo this room", systemImage: "arrow.counterclockwise")
                     }
                     .buttonStyle(SecondaryButtonStyle(color: Theme.terracotta))
                 }
@@ -74,7 +74,7 @@ struct RoomNamingSheet: View {
         .interactiveDismissDisabled()
     }
 
-    /// « Chambre » déjà utilisée → « Chambre 2 ».
+    /// "Bedroom" already used → "Bedroom 2".
     private func suggestedName(_ base: String) -> String {
         guard alreadyUsed.contains(base) else { return base }
         var index = 2
@@ -84,5 +84,5 @@ struct RoomNamingSheet: View {
 }
 
 #Preview {
-    RoomNamingSheet(roomNumber: 2, alreadyUsed: ["Séjour"]) { _, _ in }
+    RoomNamingSheet(roomNumber: 2, alreadyUsed: ["Living room"]) { _, _ in }
 }

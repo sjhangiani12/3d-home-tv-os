@@ -41,8 +41,8 @@ export function ColorField({ value, swatches, onChange }: Props) {
           title={c}
         />
       ))}
-      <label className={`swatch custom${swatches.includes(v) ? "" : " is-active"}`} title="Couleur personnalisée" style={{ ["--c" as string]: value }}>
-        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#cccccc"} onChange={(e) => onChange(e.target.value, true)} aria-label="Couleur personnalisée" />
+      <label className={`swatch custom${swatches.includes(v) ? "" : " is-active"}`} title="Custom color" style={{ ["--c" as string]: value }}>
+        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#cccccc"} onChange={(e) => onChange(e.target.value, true)} aria-label="Custom color" />
       </label>
     </div>
   );

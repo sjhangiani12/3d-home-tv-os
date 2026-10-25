@@ -11,11 +11,11 @@ describe("now playing", () => {
   it("speaker playing counts as on, with a readable state", () => {
     const d = homepod();
     expect(isOn(d)).toBe(true);
-    expect(stateWord(d)).toBe("Lecture · Lumière d'octobre");
+    expect(stateWord(d)).toBe("Playing · October Light");
     const paused = predict(d, { type: "media", command: "pause" });
     expect(isOn(paused)).toBe(false);
-    expect(stateWord(paused)).toMatch(/^En pause/);
-    expect(stateWord({ ...d, state: { on: false, reachable: true, media: { state: "idle" } } })).toBe("En veille");
+    expect(stateWord(paused)).toMatch(/^Paused/);
+    expect(stateWord({ ...d, state: { on: false, reachable: true, media: { state: "idle" } } })).toBe("Idle");
   });
 
   it("nowPlaying prefers a playing speaker over a paused one, ignores idle / unreachable", () => {
@@ -107,8 +107,8 @@ describe("TV card", () => {
 });
 
 describe("TV with no info", () => {
-  it("shows an « on » card instead of a stale image, and nothing when off", () => {
-    expect(tvCardModel({})).toMatchObject({ brand: { name: "TV allumée" } });
+  it("shows an 'on' card instead of a stale image, and nothing when off", () => {
+    expect(tvCardModel({})).toMatchObject({ brand: { name: "TV on" } });
     expect(tvCardModel(undefined)).toBeNull();
   });
 });

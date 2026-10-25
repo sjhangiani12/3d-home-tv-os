@@ -40,7 +40,7 @@ export interface ImportOptions {
 
 export interface ImportResult {
   scene: Scene;
-  /** Non-fatal issues to show the user (e.g. "2 objets non reconnus"). */
+  /** Non-fatal issues to show the user (e.g. "2 unrecognized objects ignored."). */
   warnings: string[];
 }
 
@@ -155,7 +155,7 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
   const openingsIn = sameStory(g.openings);
   const objectsIn = dedupeObjects(sameStory(g.objects));
   const sectionsIn = g.sections.filter((s) => s.story === story);
-  if (otherStory > 0) warnings.push(`${plural(otherStory, "élément")} d'un autre étage ignoré${otherStory > 1 ? "s" : ""} (seul l'étage le plus bas est importé).`);
+  if (otherStory > 0) warnings.push(`${plural(otherStory, "element")} from another floor ignored (only the lowest floor is imported).`);
 
   // --- walls -------------------------------------------------------------------------------------
   let curved = 0;
@@ -166,8 +166,8 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
     if (w.curved) curved++;
     rawWalls.push(w);
   }
-  if (rawWalls.length === 0) throw new RoomPlanImportError("Aucun mur exploitable dans le scan : impossible de reconstruire le plan.");
-  if (curved > 0) warnings.push(`${plural(curved, "mur courbe")} approximé${curved > 1 ? "s" : ""} par un segment droit.`);
+  if (rawWalls.length === 0) throw new RoomPlanImportError("No usable walls in the scan: cannot rebuild the floor plan.");
+  if (curved > 0) warnings.push(`${plural(curved, "curved wall")} approximated by a straight segment.`);
 
   const floorOutlines = floorsIn.map((f) => ({ pts: floorOutlineWorld(f.x), cap: f.cap }));
   const floorY = floorOutlines.length
@@ -180,9 +180,9 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
     uniqueWalls.map((w) => toPlanWall(w, phi, floorY)),
     { squareToleranceDeg, snapDistance },
   );
-  if (planWalls.length === 0) throw new RoomPlanImportError("Aucun mur exploitable dans le scan : impossible de reconstruire le plan.");
+  if (planWalls.length === 0) throw new RoomPlanImportError("No usable walls in the scan: cannot rebuild the floor plan.");
   const skew = planWalls.filter((w) => !w.square).length;
-  if (skew > 0) warnings.push(`${plural(skew, "mur")} en biais conservé${skew > 1 ? "s" : ""} tel${skew > 1 ? "s" : ""} quel${skew > 1 ? "s" : ""} (non orthogonal${skew > 1 ? "aux" : ""}).`);
+  if (skew > 0) warnings.push(`${plural(skew, "angled wall")} kept as is (not square to the axes).`);
 
   // --- frame: translate so that the min corner sits at (margin, margin) ---------------------------
   // Walls define the footprint (floor outlines get snapped onto them later).
@@ -221,8 +221,8 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
     ...openingsIn.map(({ x }) => ({ surface: x, kind: "opening" as OpeningKind })),
   ];
   const op = buildOpenings(openingInputs, walls, wallIdByRoomPlanId, frame, id("opening"));
-  if (op.orphans > 0) warnings.push(`${plural(op.orphans, "ouverture")} sans mur parent ignorée${op.orphans > 1 ? "s" : ""}.`);
-  if (op.clamped > 0) warnings.push(`${plural(op.clamped, "ouverture")} redimensionnée${op.clamped > 1 ? "s" : ""} pour tenir dans son mur.`);
+  if (op.orphans > 0) warnings.push(`${plural(op.orphans, "opening")} without a parent wall ignored.`);
+  if (op.clamped > 0) warnings.push(`${plural(op.clamped, "opening")} resized to fit ${op.clamped > 1 ? "their walls" : "its wall"}.`);
 
   // --- rooms -----------------------------------------------------------------------------------------
   let candidates: RoomCandidate[] = floorOutlines.map((f) => ({
@@ -247,33 +247,33 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
     const hull = convexHull(walls.flatMap((w) => [w.start, w.end]));
     if (hull.length >= 3) {
       rooms = buildRooms({ candidates: [{ polygon: hull, capture: roomNames.length === 1 ? 0 : null }], sections: sectionsIn, roomNames, walls, frame, nextId: id("room") });
-      warnings.push("Aucune pièce délimitée dans le scan : un sol unique a été créé à partir des murs.");
+      warnings.push("No room outlines in the scan: created a single floor from the walls.");
     }
   }
 
   // --- items -------------------------------------------------------------------------------------------
   const it = buildItems(objectsIn.map((o) => o.x), rooms, frame, id("item"));
-  if (it.unknown > 0) warnings.push(`${plural(it.unknown, "objet")} non reconnu${it.unknown > 1 ? "s" : ""} ignoré${it.unknown > 1 ? "s" : ""}.`);
-  if (it.lowConfidence > 0) warnings.push(`${plural(it.lowConfidence, "objet")} à faible confiance (à vérifier).`);
+  if (it.unknown > 0) warnings.push(`${plural(it.unknown, "unrecognized object")} ignored.`);
+  if (it.lowConfidence > 0) warnings.push(`${plural(it.lowConfidence, "low-confidence object")} (check ${it.lowConfidence > 1 ? "them" : "it"}).`);
   settleItems(it.items, walls);
   const outside = it.items.filter((i) => !i.roomId).length;
-  if (outside > 0 && rooms.length > 0) warnings.push(`${plural(outside, "objet")} hors de toute pièce.`);
+  if (outside > 0 && rooms.length > 0) warnings.push(`${plural(outside, "object")} outside every room.`);
 
   // --- scene ---------------------------------------------------------------------------------------------
   const now = new Date().toISOString();
   const notes = [
     "Scan RoomPlan",
-    env.device && `appareil ${env.device}`,
+    env.device && `device ${env.device}`,
     env.appVersion && `app ${env.appVersion}`,
-    env.capturedAt && `capturé le ${env.capturedAt}`,
-    g.merged && g.captures.length > 1 ? `${g.captures.length} pièces fusionnées` : null,
+    env.capturedAt && `captured ${env.capturedAt}`,
+    g.merged && g.captures.length > 1 ? `${g.captures.length} rooms merged` : null,
   ]
     .filter(Boolean)
     .join(" · ");
   const scene: Scene = {
     version: SCENE_VERSION,
     id: createId("scene"),
-    name: options.name ?? "Appartement scanné",
+    name: options.name ?? "Scanned home",
     units: "m",
     rooms,
     walls,
@@ -282,6 +282,6 @@ export function importRoomPlan(input: unknown, options: ImportOptions = {}): Imp
     meta: { createdAt: env.capturedAt ?? now, updatedAt: now, source: "roomplan", notes },
   };
   const errors = validateScene(scene);
-  if (errors.length) throw new RoomPlanImportError(`Le scan a été converti mais la maquette obtenue est invalide :\n- ${errors.join("\n- ")}`);
+  if (errors.length) throw new RoomPlanImportError(`The scan was converted but the resulting model is invalid:\n- ${errors.join("\n- ")}`);
   return { scene, warnings };
 }

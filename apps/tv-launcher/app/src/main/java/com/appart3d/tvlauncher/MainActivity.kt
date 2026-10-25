@@ -10,6 +10,8 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.view.animation.DecelerateInterpolator
 import android.graphics.drawable.TransitionDrawable
 import android.os.Build
 import android.os.Bundle
@@ -42,16 +44,18 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
- * Home screen of the TV: the live 3D apartment on top (embedded web view served by the home bridge,
- * `?view=3d&lite=1&orbit=full&tilt=64`: a slow full turn around the living room, seen low), the lamps in a glass panel on its left, and an
- * Apple TV–like dock of a few chosen apps below. No ads, no recommendations.
+ * Home screen of the TV: the block, live (the bridge's `/block.html?tv=1`, a pixel-art diorama of the street
+ * with the 6 train, the Citi Bike docks, the weather and the home's lit windows), full screen and display only.
+ * ↑ from the dock hands the remote to the page: it hops between its signs (Lights, Home, the station, the two
+ * docks); OK zooms into a station or dock, or asks this app to open the apartment (with the Lights drawer or
+ * without). Back steps out. The dock of a few chosen apps stays native, at the bottom.
+ * "All apps" at the end of the dock opens every installed app.
  *
  * Provisioning over ADB (optional, the TV also finds the bridge with Bonjour and asks for the code):
  *   am start -n com.appart3d.tvlauncher/.MainActivity --es bridge http://<mac>:8787 --es pairCode <6 digits>
@@ -66,6 +70,19 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var heroMessage: TextView
     private lateinit var lights: LightsPanel
+    private lateinit var homePanel: FrameLayout
+    /**
+     * The real apartment (the original 3D view, `/?view=3d`), shown when Lights opens and the block has flown to
+     * the door. Preloaded after the block is up and kept paused while hidden, so it opens at once.
+     */
+    private var homeWeb: WebView? = null
+    private var homeReady = false
+    private var homeShowing = false
+    private var atDoor = false
+    private val preloadHome = Runnable { ensureHomeWeb() }
+    private val pixel: Typeface by lazy { runCatching { resources.getFont(R.font.pixelify_sans) }.getOrDefault(Typeface.DEFAULT_BOLD) }
+    private lateinit var drawer: FrameLayout
+    private lateinit var drawerGrid: LinearLayout
     private var feed: HomeFeed? = null
     private lateinit var dockScroll: HorizontalScrollView
     private lateinit var dock: LinearLayout
@@ -92,6 +109,9 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashGuard.install(this)
+        // The block is the screensaver: while the home screen shows, the TV stays awake (no Fire TV
+        // screensaver, no sleep). Other apps keep the system's own timers.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         store = BridgeStore(this)
         catalog = AppCatalog(this)
         discovery = BridgeDiscovery(this, ::onBridgeFound)
@@ -118,6 +138,7 @@ class MainActivity : Activity() {
         HomeButtonGuard.ensure(this)
         web.onResume()
         web.resumeTimers()
+        if (homeShowing) homeWeb?.onResume()
         feed?.start()
         discovery.start()
         if (appsDirty) showApps()
@@ -128,6 +149,7 @@ class MainActivity : Activity() {
         super.onPause()
         // An app is in front: stop the 3D rendering so it gets the whole (modest) GPU.
         web.onPause()
+        homeWeb?.onPause()
         web.pauseTimers()
         feed?.stop()
         discovery.stop()
@@ -138,6 +160,7 @@ class MainActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         feed?.stop()
         web.destroy()
+        homeWeb?.destroy()
         io.shutdown()
         super.onDestroy()
     }
@@ -145,7 +168,13 @@ class MainActivity : Activity() {
     @Deprecated("Home screen: Back only returns to the top.")
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (pairPanel.visibility == View.VISIBLE && store.token != null) hidePairing() else goTop()
+        when {
+            pairPanel.visibility == View.VISIBLE && store.token != null -> hidePairing()
+            homeShowing -> hideHome()
+            web.hasFocus() -> postToBlock("back")
+            drawer.visibility == View.VISIBLE -> hideDrawer()
+            else -> goTop()
+        }
     }
 
     // region Bridge
@@ -214,9 +243,10 @@ class MainActivity : Activity() {
             return
         }
         val token = store.token ?: return showPairing()
-        // maxDpr=1.5: ~57 fps on this TV vs ~48 at 2x, hardly less sharp from the sofa (see ?stats=1).
-        val url = "$base/?view=3d&lite=1&orbit=full&tilt=64&maxDpr=1.5$heroExtra"
+        // The block; `--es heroExtra "&pix=3&shadows=0"` trades crispness for frame rate (fps in logcat, tag Maison).
+        val url = "$base/block.html?tv=1$heroExtra"
         if (url == loadedUrl && !heroFailed) return
+        dropHomeWeb()
         startFeed(base, token)
         val cookies = CookieManager.getInstance()
         cookies.setAcceptCookie(true)
@@ -329,7 +359,7 @@ class MainActivity : Activity() {
         if (id == sentSpotlight) return@Runnable
         sentSpotlight = id
         val cmd = JSONObject().put("type", "spotlightDevice").put("deviceId", id ?: JSONObject.NULL)
-        web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post($cmd)", null)
+        homeWeb?.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post($cmd)", null)
     }
 
     private fun runScene(scene: Scene) {
@@ -374,17 +404,35 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Messages from the web page (`window.appart3dAndroid.postMessage`), on a WebView thread. */
-    private inner class EmbedBridge {
+    /** Messages from a web page (`window.appart3dAndroid.postMessage`), on a WebView thread; `home`: the apartment view. */
+    private inner class EmbedBridge(private val home: Boolean) {
         @JavascriptInterface
         fun postMessage(json: String) {
             val msg = runCatching { JSONObject(json) }.getOrNull() ?: return
             main.post {
+                if (home) {
+                    if (msg.optString("type") == "ready") {
+                        homeReady = true
+                        if (homeShowing) revealHome() else homeWeb?.onPause()
+                    }
+                    return@post
+                }
                 when (msg.optString("type")) {
                     "ready" -> {
                         heroMessage.animate().alpha(0f).setDuration(400).start()
                         web.animate().alpha(1f).setDuration(900).start()
+                        main.removeCallbacks(preloadHome)
+                        main.postDelayed(preloadHome, 6000)
                     }
+                    "atDoor" -> {
+                        atDoor = true
+                        revealHome()
+                    }
+                    "focusDock" -> focusDock()
+                    "openLights" -> showHome(drawer = true)
+                    "viewHome" -> showHome(drawer = false)
+                    // Zoomed into a station or a dock: the dock steps aside.
+                    "poi" -> dockScroll.animate().alpha(if (msg.optBoolean("on")) 0f else 1f).setDuration(250).start()
                     "error" -> {
                         val text = msg.optString("message")
                         if (text.startsWith("Accès refusé")) unauthorized() else heroFailed(text.ifEmpty { getString(R.string.bridge_unreachable) })
@@ -400,36 +448,25 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun buildUi(): View {
-        val heroHeight = resources.displayMetrics.heightPixels - dp(DOCK_AREA)
         val root = FrameLayout(this).apply { background = Ambient.forSun(null) }
 
-        // Hero: the 3D apartment, not focusable (display only).
-        val hero = FrameLayout(this)
-        root.addView(hero, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heroHeight))
+        // The block, full screen. It takes the remote when ↑ is pressed on the dock (see EmbedBridge).
         heroMessage = TextView(this).apply {
             setTextColor(0x99FFFFFF.toInt())
             textSize = 20f
             gravity = Gravity.CENTER
         }
-        hero.addView(heroMessage, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(heroMessage, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         web = createWeb()
-        hero.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            leftMargin = dp(SIDE + PANEL_W)
-        })
-        lights = LightsPanel(this, ::toggle, ::dim, ::fanSpeed, ::spotlight, ::runScene, ::allOff)
-        hero.addView(lights, FrameLayout.LayoutParams(dp(PANEL_W), ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            leftMargin = dp(SIDE)
-            topMargin = dp(28)
-            bottomMargin = dp(28)
-        })
+        root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
-        // Dock: one row of apps at the bottom, over the end of the 3D.
+        // Dock: one row of apps at the bottom, then "All apps" and Settings.
         dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(SIDE), dp(28), dp(SIDE), dp(28))
+            setPadding(dp(SIDE), dp(20), dp(SIDE), dp(20))
         }
         dockScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -441,62 +478,145 @@ class MainActivity : Activity() {
             addView(dock, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         root.addView(dockScroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply {
-            bottomMargin = dp(18)
+            bottomMargin = dp(10)
         })
 
-        // Soft dark corner behind the time: the turning 3D passes under it.
-        root.addView(View(this).apply {
-            background = GradientDrawable().apply {
-                gradientType = GradientDrawable.RADIAL_GRADIENT
-                // Fades out well inside the view (a radius past its edges shows a hard border).
-                gradientRadius = dp(250).toFloat()
-                setGradientCenter(1f, 0f)
-                colors = intArrayOf(0x80000000.toInt(), 0x00000000)
-            }
-        }, FrameLayout.LayoutParams(dp(500), dp(300), Gravity.TOP or Gravity.END))
-        // Top right: the time (medium weight, as tvOS — the light one looked iOS 7), the weather under it (when a place is set).
-        root.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
-            addView(TextClock(context).apply {
-                format12Hour = "HH:mm"
-                format24Hour = "HH:mm"
-                setTextColor(0xF2FFFFFF.toInt())
-                textSize = 22f
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                // Short shadow + padding: a wide blur gets cut square at the view's edges.
-                setShadowLayer(5f, 0f, 1f, 0x99000000.toInt())
-                setPadding(dp(6), dp(4), dp(6), dp(4))
-            })
-            addView(WeatherView(context, 14f), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) })
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(22)
-            rightMargin = dp(SIDE - 6)
-        })
+        // Home drawer (right): the lamps, while the page shows the apartment beside it.
+        lights = LightsPanel(this, ::toggle, ::dim, ::fanSpeed, ::spotlight, ::runScene, ::allOff)
+        homePanel = buildHomePanel()
+        root.addView(homePanel, FrameLayout.LayoutParams(dp(HOME_W), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
 
+        drawer = buildDrawer()
+        root.addView(drawer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         pairPanel = buildPairPanel()
         root.addView(pairPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         return root
     }
 
+    private fun buildHomePanel(): FrameLayout {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(24), dp(12), dp(14))
+            addView(TextView(context).apply {
+                text = getString(R.string.home_title)
+                setTextColor(INK)
+                textSize = 22f
+                typeface = pixel
+            })
+            addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) })
+            addView(TextView(context).apply {
+                text = getString(R.string.home_hint)
+                setTextColor(0xFF6A6170.toInt())
+                textSize = 10f
+                typeface = pixel
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        }
+        return FrameLayout(this).apply {
+            setBackgroundColor(PAPER)
+            visibility = View.GONE
+            translationX = dp(HOME_W).toFloat()
+            isClickable = true
+            addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(View(context).apply { setBackgroundColor(INK) }, FrameLayout.LayoutParams(dp(2), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START))
+        }
+    }
+
+    /** Creates and loads the apartment view (hidden, under the native views) if it is not there yet. */
+    private fun ensureHomeWeb() {
+        if (homeWeb != null) return
+        val base = store.url ?: return
+        if (store.token == null) return
+        val root = web.parent as? ViewGroup ?: return
+        val h = createWeb(home = true)
+        homeWeb = h
+        homeReady = false
+        root.addView(h, root.indexOfChild(web) + 1, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // maxDpr=1.5: ~57 fps on this TV vs ~48 at 2x, hardly less sharp from the sofa (see ?stats=1).
+        h.loadUrl("$base/?view=3d&lite=1&orbit=full&tilt=64&maxDpr=1.5")
+    }
+
+    private fun dropHomeWeb() {
+        val h = homeWeb ?: return
+        homeWeb = null
+        homeReady = false
+        (h.parent as? ViewGroup)?.removeView(h)
+        h.destroy()
+        sentSpotlight = null
+    }
+
+    /** At the door and loaded: the apartment fades in over the block, which pauses underneath. */
+    private fun revealHome() {
+        if (!homeShowing || !atDoor) return
+        val h = homeWeb ?: return ensureHomeWeb()
+        if (!homeReady) return
+        h.onResume()
+        h.animate().alpha(1f).setDuration(600).withEndAction { if (homeShowing) web.onPause() }.start()
+    }
+
+    private fun postToBlock(type: String) {
+        web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post({type:'$type'})", null)
+    }
+
+    /**
+     * The apartment: the page flies to the door, then the real 3D home fades in. With `drawer` (Lights), the lamp
+     * drawer slides in and takes the remote; without (Home), it is just to look, and Back returns.
+     */
+    private fun showHome(drawer: Boolean) {
+        if (homeShowing) return
+        homeShowing = true
+        atDoor = false
+        ensureHomeWeb()
+        dockScroll.animate().alpha(0f).setDuration(220).withEndAction { if (homeShowing) dockScroll.visibility = View.INVISIBLE }.start()
+        postToBlock("openHome")
+        if (drawer) {
+            homePanel.visibility = View.VISIBLE
+            homePanel.animate().translationX(0f).setDuration(420).setInterpolator(DecelerateInterpolator()).start()
+            lights.requestFocus()
+        }
+    }
+
+    private fun hideHome(refocus: Boolean = true) {
+        if (!homeShowing) return
+        homeShowing = false
+        atDoor = false
+        web.onResume()
+        homeWeb?.let { h -> h.animate().alpha(0f).setDuration(400).withEndAction { if (!homeShowing) h.onPause() }.start() }
+        if (homePanel.visibility == View.VISIBLE) homePanel.animate().translationX(dp(HOME_W).toFloat()).setDuration(320).withEndAction { homePanel.visibility = View.GONE }.start()
+        dockScroll.visibility = View.VISIBLE
+        dockScroll.animate().alpha(1f).setDuration(300).start()
+        spotlight(null)
+        postToBlock("closeHome")
+        if (refocus) web.requestFocus()
+    }
+
+    /** Back to the dock (the page has nothing more above, or ↓ past its lowest sign). */
+    private fun focusDock() {
+        (dock.findFocus() ?: dock.getChildAt(0))?.requestFocus()
+    }
+
     /** The 3D view. Recreated from scratch when its renderer dies (see onRenderProcessGone). */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun createWeb(): WebView = WebView(this).apply {
+    private fun createWeb(home: Boolean = false): WebView = WebView(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
             alpha = 0f
             defaultFocusHighlightEnabled = false
-            isFocusable = false
+            // The block takes the remote (its signs); the apartment view is display only.
+            isFocusable = !home
             isFocusableInTouchMode = false
+            if (!home) {
+                id = WEB_ID
+                setOnFocusChangeListener { _, f -> postToBlock(if (f) "focusIn" else "focusOut") }
+            }
             overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            addJavascriptInterface(EmbedBridge(), "appart3dAndroid")
+            addJavascriptInterface(EmbedBridge(home), "appart3dAndroid")
             // `?stats=1` lines from the 3D (tuning): relayed to logcat, tag "Maison".
             webChromeClient = object : WebChromeClient() {
                 override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                    if (m.message().startsWith("[appart3d-stats]")) Log.i("Maison", m.message())
+                    if (m.message().startsWith("[appart3d-stats]") || m.message().startsWith("[block]")) Log.i("Maison", m.message())
                     return true
                 }
             }
@@ -511,16 +631,23 @@ class MainActivity : Activity() {
                     return true
                 }
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                    if (request.isForMainFrame) heroFailed(getString(R.string.bridge_unreachable))
+                    if (!request.isForMainFrame) return
+                    if (home) main.post { dropHomeWeb() } else heroFailed(getString(R.string.bridge_unreachable))
                 }
                 override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                     if (!request.isForMainFrame) return
+                    if (home) {
+                        main.post { dropHomeWeb() }
+                        return
+                    }
                     if (response.statusCode == 401) unauthorized() else heroFailed(getString(R.string.bridge_unreachable_status, response.statusCode))
                 }
             }
         }
 
     private fun replaceWeb(dead: WebView) {
+        // The apartment view: drop it, it comes back on the next Lights (the block stays up).
+        if (dead === homeWeb) return dropHomeWeb()
         if (dead !== web) return
         val parent = dead.parent as? ViewGroup ?: return
         val index = parent.indexOfChild(dead)
@@ -542,6 +669,8 @@ class MainActivity : Activity() {
         val tileW = dp(TILE_W)
         val tiles = catalog.load().map { app ->
             tile(app.pkg, app.label, app.banner, app.icon, tileW, tileW * 9 / 16) { launch(app.pkg) }
+        } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileW * 9 / 16, tileW * 9 / 16) {
+            showDrawer()
         } + tile(SETTINGS_TAG, getString(R.string.settings), null, getDrawable(android.R.drawable.ic_menu_preferences), tileW * 9 / 16, tileW * 9 / 16) {
             start(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
@@ -551,7 +680,78 @@ class MainActivity : Activity() {
             })
         }
         val refocus = tiles.firstOrNull { it.tag == focusedPkg } ?: tiles.firstOrNull()
-        if (pairPanel.visibility != View.VISIBLE) refocus?.requestFocus()
+        if (pairPanel.visibility != View.VISIBLE && drawer.visibility != View.VISIBLE) refocus?.requestFocus()
+    }
+
+    /** Every installed app, in rows, over the home screen. Back closes it. */
+    private fun buildDrawer(): FrameLayout {
+        drawerGrid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(SIDE) + dp(8), dp(16), dp(SIDE), dp(32))
+        }
+        return FrameLayout(this).apply {
+            setBackgroundColor(0xE6000000.toInt())
+            visibility = View.GONE
+            isClickable = true
+            addView(TextView(context).apply {
+                text = getString(R.string.all_apps)
+                setTextColor(Color.WHITE)
+                textSize = 24f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = dp(SIDE)
+                topMargin = dp(TOP + 8)
+            })
+            addView(android.widget.ScrollView(context).apply {
+                isVerticalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                clipChildren = false
+                clipToPadding = false
+                isFocusable = false
+                addView(drawerGrid)
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { topMargin = dp(TOP + 48) })
+        }
+    }
+
+    private fun showDrawer() {
+        drawerGrid.removeAllViews()
+        // As wide as fits DRAWER_COLS a row, with the zoom of the focused tile.
+        val tileW = (resources.displayMetrics.widthPixels - dp(SIDE) * 2 - dp(GAP) * (DRAWER_COLS - 1)) / DRAWER_COLS * 10 / 11
+        var row: LinearLayout? = null
+        catalog.all().forEachIndexed { i, app ->
+            if (i % DRAWER_COLS == 0) {
+                row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    clipChildren = false
+                }
+                drawerGrid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
+            }
+            val t = tile(app.pkg, app.label, app.banner, app.icon, tileW, tileW * 9 / 16) {
+                hideDrawer()
+                launch(app.pkg)
+            } as LinearLayout
+            t.addView(TextView(this).apply {
+                text = app.label
+                setTextColor(0xCCFFFFFF.toInt())
+                textSize = 13f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(tileW, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            row?.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                if (i % DRAWER_COLS > 0) leftMargin = dp(GAP)
+            })
+        }
+        drawer.visibility = View.VISIBLE
+        (drawerGrid.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.requestFocus()
+    }
+
+    private fun hideDrawer() {
+        drawer.visibility = View.GONE
+        drawerGrid.removeAllViews()
+        dock.findViewWithTag<View>(ALL_APPS_TAG)?.requestFocus()
     }
 
     private fun tile(tag: String, label: String, banner: android.graphics.drawable.Drawable?, icon: android.graphics.drawable.Drawable?, width: Int, height: Int, onClick: () -> Unit): View {
@@ -589,6 +789,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             clipChildren = false
             isFocusable = true
+            nextFocusUpId = WEB_ID
             contentDescription = label
             addView(card, LinearLayout.LayoutParams(width, height))
             setOnClickListener { onClick() }
@@ -601,6 +802,12 @@ class MainActivity : Activity() {
     }
 
     private fun goTop() {
+        hideHome(refocus = false)
+        postToBlock("reset")
+        if (drawer.visibility == View.VISIBLE) {
+            drawer.visibility = View.GONE
+            drawerGrid.removeAllViews()
+        }
         dockScroll.smoothScrollTo(0, 0)
         dock.getChildAt(0)?.requestFocus()
     }
@@ -710,14 +917,20 @@ class MainActivity : Activity() {
     companion object {
         private const val COOKIE_NAME = "appart3d_home"
         private const val SETTINGS_TAG = "__settings"
-        private const val SIDE = 48
+        private const val INK = 0xFF1C1A24.toInt()
+        private const val PAPER = 0xFFFBF6EA.toInt()
+        /** Home drawer width (dp): 500 px of the block page's 1920 px frame. */
+        private const val HOME_W = 250
+        /** The block's WebView id (stable across its re-creation), for the dock's ↑. */
+        private val WEB_ID = View.generateViewId()
+        private const val ALL_APPS_TAG = "__all_apps"
+        private const val SIDE = 40
         private const val GAP = 24
         /** Dock tile width (dp), 16:9 banners. */
         private const val TILE_W = 140
-        /** Bottom band kept for the dock (dp): the 3D fills the rest of the screen. */
-        private const val DOCK_AREA = 146
-        /** Lights panel width (dp). */
-        private const val PANEL_W = 290
+        /** Top margin of the All apps title (dp). */
+        private const val TOP = 22
+        private const val DRAWER_COLS = 6
     }
 }
 

@@ -14,6 +14,7 @@ import {
   devicesInRoom,
   fanStep,
   homeTitle,
+  roomLabel,
   isOn,
   isReachable,
   kelvinToHex,
@@ -64,10 +65,10 @@ const SCENE_ICONS: Record<HomeScene["icon"], IconT> = { sun: IconSun, sofa: Icon
 
 const COLORS = ["#ffb35c", "#ff6a4d", "#ff5fa2", "#b06bff", "#5a7dff", "#3fc9e8", "#4fd38a", "#ffe066"];
 const WHITES: { k: number; label: string }[] = [
-  { k: 2200, label: "Bougie" },
-  { k: 2700, label: "Chaud" },
-  { k: 4000, label: "Neutre" },
-  { k: 6500, label: "Froid" },
+  { k: 2200, label: "Candle" },
+  { k: 2700, label: "Warm" },
+  { k: 4000, label: "Neutral" },
+  { k: 6500, label: "Cool" },
 ];
 
 function useItemCategory(itemId: string | undefined) {
@@ -81,9 +82,9 @@ function DeviceIcon({ device, ...p }: { device: Device } & React.SVGProps<SVGSVG
   else if (device.kind === "tv") Icon = IconTv;
   else if (device.kind === "plug") Icon = IconPlug;
   else if (device.kind === "speaker") Icon = IconSpeaker;
-  else if (/strip|ruban|led/i.test(device.name) || category === "television") Icon = IconStrip;
+  else if (/strip|ruban|bandeau|led/i.test(device.name) || category === "television") Icon = IconStrip;
   else if (category === "floorLamp") Icon = IconFloorLamp;
-  else if (category === "pendantLamp" || /lustre|suspension/i.test(device.name)) Icon = IconPendant;
+  else if (category === "pendantLamp" || /lustre|suspension|chandelier|pendant/i.test(device.name)) Icon = IconPendant;
   return <Icon {...p} />;
 }
 
@@ -100,17 +101,17 @@ export function HomePanel() {
   const anyOn = devices.some(isOn);
 
   let body: ReactNode;
-  if (status === "connecting" && devices.length === 0) body = <HomeMessage title="Connexion à la maison…" spinner />;
+  if (status === "connecting" && devices.length === 0) body = <HomeMessage title="Connecting to your home…" spinner />;
   else if (status === "unauthorized")
     body = (
-      <HomeMessage title="Appareil non appairé">
-        Sur le Mac de la maison, ouvrez la barre de menus Appart3D → « Appairer un téléphone », puis ouvrez le lien affiché sur cet appareil.
+      <HomeMessage title="Device not paired">
+        On the home Mac, open the Appart3D menu bar → "Pair a phone", then open the link it shows on this device.
       </HomeMessage>
     );
   else if (status === "offline" && devices.length === 0)
     body = (
-      <HomeMessage title="Maison injoignable" spinner>
-        Le pont ne répond pas. Vérifiez que le Mac est allumé et sur le même réseau — nouvel essai automatique.
+      <HomeMessage title="Home unreachable" spinner>
+        The bridge is not responding. Check that the Mac is on and on the same network. Retrying automatically.
       </HomeMessage>
     );
   else if (view.kind === "device") body = <DeviceDetail id={view.id} />;
@@ -119,12 +120,12 @@ export function HomePanel() {
 
   return (
     <>
-      <aside className={`home-panel${anyOn ? " any-on" : ""}${compact ? " is-compact" : ""}`} aria-label="Maison">
+      <aside className={`home-panel${anyOn ? " any-on" : ""}${compact ? " is-compact" : ""}`} aria-label="Home">
         {body}
         <HomeFooter />
       </aside>
       {compact && !widget && (
-        <button className="hp-exit" onClick={() => useStore.getState().setMode("navigate")} aria-label="Quitter le mode Maison" title="Quitter le mode Maison">
+        <button className="hp-exit" onClick={() => useStore.getState().setMode("navigate")} aria-label="Exit Home mode" title="Exit Home mode">
           <IconClose width={16} height={16} />
         </button>
       )}
@@ -145,13 +146,13 @@ function HomeMessage({ title, spinner, children }: { title: string; spinner?: bo
 function HomeFooter() {
   const status = useHome((s) => s.status);
   const client = useHome((s) => s.client);
-  const label = client?.kind === "mock" ? "Démo (appareils simulés)" : client ? `Pont · ${client.label}` : "";
+  const label = client?.kind === "mock" ? "Demo (simulated devices)" : client ? `Bridge · ${client.label}` : "";
   if (!label) return null;
   const tone = status === "online" ? "ok" : status === "reconnecting" || status === "connecting" ? "wait" : "bad";
   return (
     <footer className="hp-foot">
       <span className={`hp-dot tone-${tone}`} aria-hidden />
-      <span>{status === "reconnecting" ? "Reconnexion…" : label}</span>
+      <span>{status === "reconnecting" ? "Reconnecting…" : label}</span>
     </footer>
   );
 }
@@ -181,24 +182,24 @@ function HomeList() {
         {compact && !organizing && <NightToggle className="hp-night" />}
         {organizing ? (
           <button className="hp-done" onClick={() => h.setOrganizing(false)}>
-            Terminé
+            Done
           </button>
         ) : (
-          <button className="hp-organize" onClick={() => h.setOrganizing(true)} aria-label="Organiser les appareils" title="Organiser (glisser les tuiles pour les réordonner)">
+          <button className="hp-organize" onClick={() => h.setOrganizing(true)} aria-label="Arrange devices" title="Arrange (drag tiles to reorder)">
             <IconReorder width={18} height={18} />
           </button>
         )}
         <button
           className={`hp-power${anyOn ? " is-on" : ""}`}
           onClick={() => h.masterPower()}
-          aria-label={anyOn ? "Tout éteindre" : "Allumer toutes les lumières"}
-          title={anyOn ? "Tout éteindre" : "Allumer toutes les lumières"}
+          aria-label={anyOn ? "Turn everything off" : "Turn on all lights"}
+          title={anyOn ? "Turn everything off" : "Turn on all lights"}
         >
           <IconPower width={20} height={20} />
         </button>
       </header>
 
-      <div className="hp-scenes" role="group" aria-label="Scènes">
+      <div className="hp-scenes" role="group" aria-label="Scenes">
         {scenes.map((sc) => {
           const Icon = SCENE_ICONS[sc.icon] ?? IconSun;
           return (
@@ -214,17 +215,17 @@ function HomeList() {
 
       <NowPlayingCard />
 
-      <div className="hp-rooms" role="tablist" aria-label="Pièces">
+      <div className="hp-rooms" role="tablist" aria-label="Rooms">
         {counts.map((c) => (
           <button key={c.room} role="tab" aria-selected={room === c.room} className={`hp-chip${room === c.room ? " is-active" : ""}`} onClick={() => h.setRoom(c.room)}>
-            {c.room === ALL_ROOMS ? "Tous" : c.room}
+            {c.room === ALL_ROOMS ? "All" : roomLabel(c.room)}
             <span className={`hp-chip-count${c.on ? " has-on" : ""}`}>{c.on}</span>
           </button>
         ))}
       </div>
 
       <div className="hp-scroll">
-        {organizing && <p className="hp-organize-hint">Faites glisser les tuiles pour les réordonner — l'ordre est partagé avec l'iPhone, l'iPad et le Mac.</p>}
+        {organizing && <p className="hp-organize-hint">Drag the tiles to reorder them. The order syncs to the iPhone, iPad and Mac.</p>}
         {organizing ? (
           <OrganizeGrid devices={shown} />
         ) : (
@@ -234,14 +235,14 @@ function HomeList() {
             ))}
           </div>
         )}
-        {shown.length === 0 && <p className="hp-empty">Aucun appareil dans cette pièce.</p>}
+        {shown.length === 0 && <p className="hp-empty">No devices in this room.</p>}
       </div>
     </>
   );
 }
 
 /**
- * « Organiser » mode: drag a tile (mouse, pen or finger) over another one to take its place; the
+ * "Arrange" mode: drag a tile (mouse, pen or finger) over another one to take its place; the
  * others slide out of the way (FLIP animation). The order is saved on the bridge for every client.
  */
 function OrganizeGrid({ devices }: { devices: Device[] }) {
@@ -278,7 +279,7 @@ function OrganizeGrid({ devices }: { devices: Device[] }) {
   };
 
   return (
-    <div className="hp-grid is-organizing" ref={grid} role="list" aria-label="Ordre des appareils">
+    <div className="hp-grid is-organizing" ref={grid} role="list" aria-label="Device order">
       {devices.map((d, i) => (
         <div
           key={d.id}
@@ -287,7 +288,7 @@ function OrganizeGrid({ devices }: { devices: Device[] }) {
           className={`hp-tile hp-org-tile kind-${d.kind}${isOn(d) ? " is-on" : ""}${isReachable(d) ? "" : " is-unreachable"}${dragId === d.id ? " is-dragging" : ""}`}
           style={tintStyle(d)}
           tabIndex={0}
-          aria-label={`${d.name}, position ${i + 1} sur ${devices.length} (flèches pour déplacer)`}
+          aria-label={`${d.name}, position ${i + 1} of ${devices.length} (arrow keys to move)`}
           onKeyDown={(e) => {
             const target = e.key === "ArrowLeft" || e.key === "ArrowUp" ? devices[i - 1] : e.key === "ArrowRight" || e.key === "ArrowDown" ? devices[i + 1] : undefined;
             if (!target) return;
@@ -375,7 +376,7 @@ function DeviceTile({ device: d }: { device: Device }) {
         onPointerEnter={() => d.itemId && useStore.getState().hoverItem(d.itemId)}
         onMouseLeave={() => d.itemId && useStore.getState().hoveredItemId === d.itemId && useStore.getState().hoverItem(null)}
         aria-pressed={on}
-        aria-label={`${d.name} : ${stateWord(d)}${reachable ? " — toucher pour " + (on ? "éteindre" : "allumer") : ""}`}
+        aria-label={`${d.name}: ${stateWord(d)}${reachable ? " — tap to turn " + (on ? "off" : "on") : ""}`}
       >
         <span className="hp-ic">
           <DeviceIcon device={d} width={20} height={20} />
@@ -385,7 +386,7 @@ function DeviceTile({ device: d }: { device: Device }) {
           <span className="hp-state">{tileLabel(d)}</span>
         </span>
       </button>
-      <button className="hp-chev" onClick={() => h.openDevice(d.id)} aria-label={`Réglages de ${d.name}`} title="Réglages">
+      <button className="hp-chev" onClick={() => h.openDevice(d.id)} aria-label={`${d.name} settings`} title="Settings">
         <IconChevronRight width={16} height={16} />
       </button>
     </div>
@@ -399,7 +400,7 @@ function ItemDevices({ itemId }: { itemId: string }) {
   const label = useStore((s) => s.scene.items.find((i) => i.id === itemId)?.label);
   return (
     <>
-      <DetailHeader title={label ?? "Appareils"} subtitle={`${devices.length} appareils liés`} />
+      <DetailHeader title={label ?? "Devices"} subtitle={`${devices.length} linked device${devices.length > 1 ? "s" : ""}`} />
       <div className="hp-scroll">
         <div className="hp-grid">
           {devices.map((d) => (
@@ -419,7 +420,7 @@ function DetailHeader({ title, subtitle, device }: { title: string; subtitle?: s
   const reachable = device ? isReachable(device) : true;
   return (
     <header className="hp-head hp-detail-head">
-      <button className="hp-back" onClick={() => h.back()} aria-label="Retour">
+      <button className="hp-back" onClick={() => h.back()} aria-label="Back">
         <IconChevronLeft width={20} height={20} />
       </button>
       {device && (
@@ -436,7 +437,7 @@ function DetailHeader({ title, subtitle, device }: { title: string; subtitle?: s
           className={`hp-switch${on ? " is-on" : ""}`}
           role="switch"
           aria-checked={on}
-          aria-label={on ? "Éteindre" : "Allumer"}
+          aria-label={on ? "Turn off" : "Turn on"}
           disabled={!reachable}
           style={tintStyle(device)}
           onClick={() => h.act(device.id, device.kind === "fan" ? (on ? { type: "power", on: false } : { type: "toggle" }) : { type: "power", on: !on })}
@@ -450,11 +451,11 @@ function DetailHeader({ title, subtitle, device }: { title: string; subtitle?: s
 
 function DeviceDetail({ id }: { id: string }) {
   const d = useHome((s) => s.devices.find((x) => x.id === id));
-  if (!d) return <HomeMessage title="Appareil introuvable" />;
+  if (!d) return <HomeMessage title="Device not found" />;
   const reachable = isReachable(d);
   return (
     <>
-      <DetailHeader title={d.name} subtitle={d.room} device={d} />
+      <DetailHeader title={d.name} subtitle={roomLabel(d.room)} device={d} />
       <div className={`hp-scroll hp-detail${reachable ? "" : " is-unreachable"}`} style={tintStyle(d)}>
         {!reachable && <p className="hp-warn">{UNREACHABLE_HINT}</p>}
         {(d.kind === "light" || d.kind === "plug") && <LightControls d={d} />}
@@ -504,7 +505,7 @@ function BigSlider({ value, onChange, disabled, label }: { value: number; onChan
       aria-valuemin={1}
       aria-valuemax={100}
       aria-valuenow={value}
-      aria-valuetext={`${value} %`}
+      aria-valuetext={`${value}%`}
       style={{ ["--v" as string]: `${value}%` }}
       onPointerDown={(e) => {
         if (disabled) return;
@@ -551,10 +552,10 @@ function LightControls({ d }: { d: Device }) {
           <div className="hp-big">
             <span className="hp-big-num">{on || drag !== null ? shown : 0}</span>
             <span className="hp-big-unit">%</span>
-            <span className="hp-big-label">{on || drag !== null ? "Luminosité" : "Éteint"}</span>
+            <span className="hp-big-label">{on || drag !== null ? "Brightness" : "Off"}</span>
           </div>
           <BigSlider
-            label="Luminosité"
+            label="Brightness"
             value={on || drag !== null ? shown : 1}
             disabled={!reachable}
             onChange={(v, final) => {
@@ -567,13 +568,13 @@ function LightControls({ d }: { d: Device }) {
         <section className="hp-section">
           <button className={`hp-bigpower${on ? " is-on" : ""}`} disabled={!reachable} onClick={() => h.act(d.id, { type: "power", on: !on })}>
             <IconPower width={34} height={34} />
-            <span>{on ? "Allumé" : "Éteint"}</span>
+            <span>{on ? "On" : "Off"}</span>
           </button>
         </section>
       )}
       {d.capabilities.color && (
         <section className="hp-section">
-          <h3>Couleur</h3>
+          <h3>Color</h3>
           <div className="hp-swatches">
             {COLORS.map((c) => (
               <button
@@ -582,7 +583,7 @@ function LightControls({ d }: { d: Device }) {
                 style={{ ["--c" as string]: c }}
                 disabled={!reachable}
                 onClick={() => h.act(d.id, { type: "color", hex: c })}
-                aria-label={`Couleur ${c}`}
+                aria-label={`Color ${c}`}
               />
             ))}
           </div>
@@ -590,7 +591,7 @@ function LightControls({ d }: { d: Device }) {
       )}
       {d.capabilities.kelvin && (
         <section className="hp-section">
-          <h3>Blanc</h3>
+          <h3>White</h3>
           <div className="hp-whites">
             {WHITES.map((w) => {
               const active = on && !!d.state.kelvin && Math.abs(d.state.kelvin - w.k) < 250;
@@ -607,7 +608,7 @@ function LightControls({ d }: { d: Device }) {
       )}
       {on && (d.capabilities.color || d.capabilities.kelvin) && (
         <p className="hp-now">
-          <i style={{ background: color }} aria-hidden /> Couleur actuelle
+          <i style={{ background: color }} aria-hidden /> Current color
         </p>
       )}
     </>
@@ -617,11 +618,11 @@ function LightControls({ d }: { d: Device }) {
 function Stepper({ value, min, max, onChange, disabled, label, format }: { value: number; min: number; max: number; onChange: (v: number) => void; disabled?: boolean; label: string; format?: (v: number) => string }) {
   return (
     <div className="hp-stepper" role="group" aria-label={label}>
-      <button className="hp-step-btn" onClick={() => onChange(Math.max(min, value - 1))} disabled={disabled || value <= min} aria-label={`${label} : moins`}>
+      <button className="hp-step-btn" onClick={() => onChange(Math.max(min, value - 1))} disabled={disabled || value <= min} aria-label={`${label}: less`}>
         <IconMinus width={20} height={20} />
       </button>
       <output className="hp-step-val">{format ? format(value) : value}</output>
-      <button className="hp-step-btn" onClick={() => onChange(Math.min(max, value + 1))} disabled={disabled || value >= max} aria-label={`${label} : plus`}>
+      <button className="hp-step-btn" onClick={() => onChange(Math.min(max, value + 1))} disabled={disabled || value >= max} aria-label={`${label}: more`}>
         <IconPlus width={20} height={20} />
       </button>
     </div>
@@ -642,20 +643,20 @@ function FanControls({ d }: { d: Device }) {
             <IconFan width={44} height={44} />
           </span>
           <span className="hp-big-num">{step}</span>
-          <span className="hp-big-label">{step === 0 ? "Arrêté" : `Vitesse sur ${steps}`}</span>
+          <span className="hp-big-label">{step === 0 ? "Stopped" : `Speed (of ${steps})`}</span>
         </div>
         <div className="hp-dots" aria-hidden>
           {Array.from({ length: steps }, (_, i) => (
             <span key={i} className={i < step ? "is-lit" : ""} />
           ))}
         </div>
-        <Stepper label="Vitesse" value={step} min={0} max={steps} onChange={set} disabled={!reachable} format={(v) => (v === 0 ? "Arrêt" : `Vitesse ${v}`)} />
+        <Stepper label="Speed" value={step} min={0} max={steps} onChange={set} disabled={!reachable} format={(v) => (v === 0 ? "Off" : `Speed ${v}`)} />
       </section>
       {(d.capabilities.fanLight || d.state.lightOn !== undefined) && (
         <section className="hp-section">
           <button className={`hp-row-toggle${d.state.lightOn ? " is-on" : ""}`} disabled={!reachable} onClick={() => h.act(d.id, { type: "fanLight", on: !d.state.lightOn })} role="switch" aria-checked={!!d.state.lightOn}>
             <IconBulb width={20} height={20} />
-            <span>Lumière du ventilateur</span>
+            <span>Fan light</span>
             <span className={`hp-switch sm${d.state.lightOn ? " is-on" : ""}`} aria-hidden>
               <span />
             </span>
@@ -689,7 +690,7 @@ function TvControls({ d }: { d: Device }) {
       <section className="hp-section">
         <button className={`hp-bigpower${on ? " is-on" : ""}`} disabled={!reachable} onClick={power}>
           <IconPower width={34} height={34} />
-          <span>{on ? "Allumée" : "Éteinte"}</span>
+          <span>{on ? "On" : "Off"}</span>
           {on && (d.state.media?.app || d.state.media?.channel || d.state.source) && (
             <small>{d.state.media?.app ?? d.state.media?.channel ?? sourceLabel(d.state.source!)}</small>
           )}
@@ -703,15 +704,15 @@ function TvControls({ d }: { d: Device }) {
             <IconVolume width={15} height={15} /> Volume
           </h3>
           <div className="hp-stepper" role="group" aria-label="Volume">
-            <button className="hp-step-btn" disabled={!reachable} onClick={() => volume(-1)} aria-label="Baisser le volume">
+            <button className="hp-step-btn" disabled={!reachable} onClick={() => volume(-1)} aria-label="Volume down">
               <IconMinus width={20} height={20} />
             </button>
             <output className="hp-step-val">{typeof d.state.volume === "number" ? d.state.volume : "—"}</output>
-            <button className="hp-step-btn" disabled={!reachable} onClick={() => volume(1)} aria-label="Monter le volume">
+            <button className="hp-step-btn" disabled={!reachable} onClick={() => volume(1)} aria-label="Volume up">
               <IconPlus width={20} height={20} />
             </button>
             {has("mute") && (
-              <button className="hp-step-btn hp-mute" disabled={!reachable} onClick={() => press("mute")} aria-label="Couper le son" title="Couper le son">
+              <button className="hp-step-btn hp-mute" disabled={!reachable} onClick={() => press("mute")} aria-label="Mute" title="Mute">
                 Muet
               </button>
             )}
@@ -720,7 +721,7 @@ function TvControls({ d }: { d: Device }) {
       )}
       {apps.length > 0 && (
         <section className="hp-section">
-          <h3>{d.capabilities.apps?.length ? "Sources" : "Applications et sources"}</h3>
+          <h3>{d.capabilities.apps?.length ? "Sources" : "Apps and sources"}</h3>
           <div className="hp-apps">
             {apps.map((b) => {
               const active = on && !!currentSource && sourceLabel(b).toLowerCase() === sourceLabel(currentSource).toLowerCase();
@@ -736,10 +737,10 @@ function TvControls({ d }: { d: Device }) {
       {d.capabilities.ambilight && <AmbilightControls d={d} />}
       {(nav || has("channel_up")) && (
         <section className="hp-section hp-remote">
-          <h3>Télécommande</h3>
+          <h3>Remote</h3>
           <div className="hp-remote-row">
             {nav && (
-              <div className="hp-dpad" role="group" aria-label="Flèches">
+              <div className="hp-dpad" role="group" aria-label="Arrows">
                 {(["up", "left", "ok", "right", "down"] as const).map((b) => (
                   <button key={b} className={`hp-dpad-${b}`} disabled={!reachable} onClick={() => press(b)} aria-label={DPAD_LABELS[b]}>
                     {b === "ok" ? "OK" : <IconChevronRight width={18} height={18} />}
@@ -749,12 +750,12 @@ function TvControls({ d }: { d: Device }) {
             )}
             <div className="hp-remote-side">
               {has("channel_up") && (
-                <div className="hp-channel" role="group" aria-label="Chaîne">
-                  <button disabled={!reachable} onClick={() => press("channel_up")} aria-label="Chaîne suivante">
+                <div className="hp-channel" role="group" aria-label="Channel">
+                  <button disabled={!reachable} onClick={() => press("channel_up")} aria-label="Next channel">
                     <IconPlus width={18} height={18} />
                   </button>
                   <span>CH</span>
-                  <button disabled={!reachable || !has("channel_down")} onClick={() => press("channel_down")} aria-label="Chaîne précédente">
+                  <button disabled={!reachable || !has("channel_down")} onClick={() => press("channel_down")} aria-label="Previous channel">
                     <IconMinus width={18} height={18} />
                   </button>
                 </div>
@@ -762,12 +763,12 @@ function TvControls({ d }: { d: Device }) {
               <div className="hp-remote-keys">
                 {has("back") && (
                   <button disabled={!reachable} onClick={() => press("back")}>
-                    Retour
+                    Back
                   </button>
                 )}
                 {has("home") && (
                   <button disabled={!reachable} onClick={() => press("home")}>
-                    Accueil
+                    Home
                   </button>
                 )}
               </div>
@@ -779,7 +780,7 @@ function TvControls({ d }: { d: Device }) {
   );
 }
 
-const DPAD_LABELS = { up: "Haut", down: "Bas", left: "Gauche", right: "Droite", ok: "OK" };
+const DPAD_LABELS = { up: "Up", down: "Down", left: "Left", right: "Right", ok: "OK" };
 
 /** Installed apps of the TV: branded tiles; the one in front is highlighted. Opening one switches the TV on. */
 function TvApps({ d, apps }: { d: Device; apps: TvApp[] }) {
@@ -788,7 +789,7 @@ function TvApps({ d, apps }: { d: Device; apps: TvApp[] }) {
   const front = on ? d.state.media?.app?.toLowerCase() : undefined;
   return (
     <section className="hp-section">
-      <h3>Applications</h3>
+      <h3>Apps</h3>
       <div className="hp-tvapps">
         {apps.map((a) => {
           const b = appBrand(a.label);
@@ -801,7 +802,7 @@ function TvApps({ d, apps }: { d: Device; apps: TvApp[] }) {
               disabled={!isReachable(d)}
               onClick={() => h.act(d.id, { type: "button", name: tvAppButton(a.id) })}
               aria-pressed={active}
-              title={on ? `Ouvrir ${a.label}` : `Allumer la TV et ouvrir ${a.label}`}
+              title={on ? `Open ${a.label}` : `Turn on the TV and open ${a.label}`}
             >
               <span className="hp-tvapp-dot" aria-hidden />
               <span className="hp-tvapp-name">{a.label}</span>
@@ -832,7 +833,7 @@ function AmbilightControls({ d }: { d: Device }) {
       if (!g) out.push((g = { group: group!, items: [] }));
       g.items.push({ id, name });
     }
-    const rank = (g: string) => ["Vidéo", "Son", "Couleur"].indexOf(g) >>> 0;
+    const rank = (g: string) => ["Video", "Audio", "Color"].indexOf(g) >>> 0;
     return out.sort((a, b) => rank(a.group) - rank(b.group));
   }, [caps.effects]);
   return (
@@ -850,15 +851,15 @@ function AmbilightControls({ d }: { d: Device }) {
           <span />
         </span>
       </button>
-      {!tvOn && <p className="hp-amb-hint">S'allume avec la TV.</p>}
+      {!tvOn && <p className="hp-amb-hint">Turns on with the TV.</p>}
       {lit && amb.effect && !amb.color && <p className="hp-amb-hint">{ambilightEffectLabel(amb.effect)}</p>}
       {caps.brightness && (
         <div className="hp-amb-row">
           <h3>
-            Intensité <span className="hp-vol-num">{lit && amb.brightness !== undefined ? `${level} %` : lit ? "auto" : "—"}</span>
+            Brightness <span className="hp-vol-num">{lit && amb.brightness !== undefined ? `${level}%` : lit ? "auto" : "—"}</span>
           </h3>
           <BigSlider
-            label="Intensité de l'Ambilight"
+            label="Ambilight brightness"
             value={lit ? Math.max(1, level) : 1}
             disabled={!enabled}
             onChange={(v, final) => {
@@ -870,7 +871,7 @@ function AmbilightControls({ d }: { d: Device }) {
       )}
       {caps.color && (
         <div className="hp-amb-row">
-          <h3>Couleur</h3>
+          <h3>Color</h3>
           <div className="hp-swatches">
             {COLORS.map((c) => (
               <button
@@ -879,7 +880,7 @@ function AmbilightControls({ d }: { d: Device }) {
                 style={{ ["--c" as string]: c }}
                 disabled={!enabled}
                 onClick={() => h.act(d.id, { type: "ambilight", hex: c })}
-                aria-label={`Ambilight couleur ${c}`}
+                aria-label={`Ambilight color ${c}`}
               />
             ))}
           </div>
@@ -887,7 +888,7 @@ function AmbilightControls({ d }: { d: Device }) {
       )}
       {groups.map((g) => (
         <div className="hp-amb-row" key={g.group}>
-          <h3>{g.group === "Vidéo" ? "Suit l'image" : g.group === "Son" ? "Suit le son" : g.group === "Couleur" ? "Ambiances" : g.group}</h3>
+          <h3>{g.group === "Video" ? "Follows the picture" : g.group === "Audio" ? "Follows the sound" : g.group === "Color" ? "Moods" : g.group}</h3>
           <div className="hp-chips">
             {g.items.map((e) => (
               <button key={e.id} className={`hp-chip-btn${lit && amb.effect === e.id ? " is-active" : ""}`} disabled={!enabled} onClick={() => h.act(d.id, { type: "ambilight", effect: e.id })}>
@@ -936,7 +937,7 @@ function Progress({ d, now, times }: { d: Device; now: number; times?: boolean }
   const dur = m?.duration;
   if (pos === undefined || !dur) return null;
   return (
-    <div className="hp-progress" aria-label={`${formatTime(pos)} sur ${formatTime(dur)}`}>
+    <div className="hp-progress" aria-label={`${formatTime(pos)} of ${formatTime(dur)}`}>
       <div className="hp-progress-track">
         <div className="hp-progress-fill" style={{ width: `${(pos / dur) * 100}%` }} />
       </div>
@@ -957,9 +958,9 @@ function Transport({ d, big }: { d: Device; big?: boolean }) {
   const sz = big ? 26 : 18;
   if (!can("previous") && !can("next") && !can("playPause")) return null;
   return (
-    <div className={`hp-transport${big ? " is-big" : ""}`} role="group" aria-label="Lecture">
+    <div className={`hp-transport${big ? " is-big" : ""}`} role="group" aria-label="Playback">
       {can("previous") && (
-        <button className="hp-tr-btn" onClick={() => h.act(d.id, { type: "media", command: "previous" })} aria-label="Piste précédente" title="Piste précédente">
+        <button className="hp-tr-btn" onClick={() => h.act(d.id, { type: "media", command: "previous" })} aria-label="Previous track" title="Previous track">
           <IconPrev width={sz} height={sz} />
         </button>
       )}
@@ -967,14 +968,14 @@ function Transport({ d, big }: { d: Device; big?: boolean }) {
         <button
           className="hp-tr-btn hp-tr-main"
           onClick={() => h.act(d.id, { type: "media", command: playing ? "pause" : "play" })}
-          aria-label={playing ? "Pause" : "Lecture"}
-          title={playing ? "Pause" : "Lecture"}
+          aria-label={playing ? "Pause" : "Play"}
+          title={playing ? "Pause" : "Play"}
         >
           {playing ? <IconPause width={sz + 4} height={sz + 4} /> : <IconPlay width={sz + 4} height={sz + 4} />}
         </button>
       )}
       {can("next") && (
-        <button className="hp-tr-btn" onClick={() => h.act(d.id, { type: "media", command: "next" })} aria-label="Piste suivante" title="Piste suivante">
+        <button className="hp-tr-btn" onClick={() => h.act(d.id, { type: "media", command: "next" })} aria-label="Next track" title="Next track">
           <IconNext width={sz} height={sz} />
         </button>
       )}
@@ -982,7 +983,7 @@ function Transport({ d, big }: { d: Device; big?: boolean }) {
   );
 }
 
-/** « Lecture en cours » card at the top of the Maison panel (speaker playing or paused). */
+/** "Now playing" card at the top of the Home panel (speaker playing or paused). */
 function NowPlayingCard() {
   const devices = useHome((s) => s.devices);
   const d = useMemo(() => nowPlaying(devices), [devices]);
@@ -998,16 +999,16 @@ function NowPlayingInner({ d }: { d: Device }) {
   const h = useHome.getState();
   const line2 = [m.artist, m.album].filter(Boolean).join(" — ");
   return (
-    <section className={`hp-np${playing ? " is-playing" : ""}`} style={tintStyle(d)} aria-label="Lecture en cours">
-      <button className="hp-np-open" onClick={() => h.openDevice(d.id)} aria-label={`Lecture en cours sur ${d.name}`}>
+    <section className={`hp-np${playing ? " is-playing" : ""}`} style={tintStyle(d)} aria-label="Now playing">
+      <button className="hp-np-open" onClick={() => h.openDevice(d.id)} aria-label={`Now playing on ${d.name}`}>
         <Artwork url={art} size="sm" playing={playing} />
         <span className="hp-np-text">
           <span className="hp-np-kicker">
             {playing && <Bars />}
-            {playing ? "Lecture en cours" : "En pause"} · {m.app ? `${m.app} · ` : ""}
+            {playing ? "Now playing" : "Paused"} · {m.app ? `${m.app} · ` : ""}
             {d.name}
           </span>
-          <span className="hp-np-title">{m.title ?? "Sans titre"}</span>
+          <span className="hp-np-title">{m.title ?? "Untitled"}</span>
           {line2 && <span className="hp-np-artist">{line2}</span>}
         </span>
       </button>
@@ -1043,24 +1044,24 @@ function SpeakerControls({ d }: { d: Device }) {
         <Artwork url={active ? art : undefined} size="lg" playing={playing} />
         {active ? (
           <div className="hp-speaker-meta">
-            <h3 className="hp-speaker-title">{m!.title ?? "Sans titre"}</h3>
+            <h3 className="hp-speaker-title">{m!.title ?? "Untitled"}</h3>
             {m!.artist && <p className="hp-speaker-artist">{m!.artist}</p>}
             {(m!.album || m!.app) && <p className="hp-speaker-album">{[m!.album, m!.app].filter(Boolean).join(" · ")}</p>}
           </div>
         ) : (
           <div className="hp-speaker-meta">
-            <h3 className="hp-speaker-title">Rien en lecture</h3>
-            <p className="hp-speaker-album">Lancez de la musique depuis l'iPhone (AirPlay) ou demandez à Siri.</p>
+            <h3 className="hp-speaker-title">Nothing playing</h3>
+            <p className="hp-speaker-album">Play music from the iPhone (AirPlay) or ask Siri.</p>
           </div>
         )}
         {active && <Progress d={d} now={now} times />}
         {active && <Transport d={d} big />}
-        {active && !d.capabilities.media?.length && <p className="hp-speaker-note">Commandes de lecture non proposées par le HomePod pour cette source.</p>}
+        {active && !d.capabilities.media?.length && <p className="hp-speaker-note">The HomePod offers no playback controls for this source.</p>}
       </section>
       {d.capabilities.volume && (
         <section className="hp-section">
           <h3>
-            <IconVolume width={15} height={15} /> Volume <span className="hp-vol-num">{volume} %</span>
+            <IconVolume width={15} height={15} /> Volume <span className="hp-vol-num">{volume}%</span>
           </h3>
           <BigSlider
             label="Volume"

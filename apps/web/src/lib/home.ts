@@ -3,7 +3,7 @@ import type { ItemCategory } from "@appart3d/scene";
 import { tvCardModel } from "./tvCard";
 
 /**
- * "Maison" mode — pure logic shared by the panel, the 3D view and the tests:
+ * "Home" mode — pure logic shared by the panel, the 3D view and the tests:
  * labels, room counts, optimistic updates with rollback, device ↔ 3D item lookup.
  */
 
@@ -18,7 +18,7 @@ export function isReachable(d: Device): boolean {
   return d.state.reachable && d.state.on !== null;
 }
 
-/** Counted in "N lumières sur M": lights and plugs (plugs drive lamps). */
+/** Counted in "N of M lights on": lights and plugs (plugs drive lamps). */
 export function isLightLike(d: Device): boolean {
   return d.kind === "light" || d.kind === "plug";
 }
@@ -78,58 +78,82 @@ export function deviceTint(d: Device): string {
   }
 }
 
-/** Main state word, without the room ("70 %", "Éteint", "Vitesse 3"…). */
+/** Main state word, without the room ("70%", "Off", "Speed 3"…). */
 export function stateWord(d: Device): string {
-  if (!isReachable(d)) return "Injoignable";
+  if (!isReachable(d)) return "Unreachable";
   switch (d.kind) {
     case "light":
     case "plug":
-      if (!isOn(d)) return "Éteint";
-      return d.capabilities.brightness && typeof d.state.brightness === "number" ? `${Math.round(d.state.brightness)} %` : "Allumé";
+      if (!isOn(d)) return "Off";
+      return d.capabilities.brightness && typeof d.state.brightness === "number" ? `${Math.round(d.state.brightness)}%` : "On";
     case "fan": {
       const step = fanStep(d);
-      if (step > 0) return d.state.lightOn ? `Vitesse ${step} · lumière` : `Vitesse ${step}`;
-      return d.state.lightOn ? "Lumière allumée" : "Éteint";
+      if (step > 0) return d.state.lightOn ? `Speed ${step} · light` : `Speed ${step}`;
+      return d.state.lightOn ? "Light on" : "Off";
     }
     case "tv": {
-      if (!isOn(d)) return "Éteinte";
+      if (!isOn(d)) return "Off";
       const what = d.state.media?.app ?? d.state.media?.channel ?? (d.state.source ? sourceLabel(d.state.source) : undefined);
-      return what ? `Allumée · ${what}` : "Allumée";
+      return what ? `On · ${what}` : "On";
     }
     case "speaker": {
       const m = d.state.media;
-      if (m?.state === "playing") return m.title ? `Lecture · ${m.title}` : "Lecture";
-      if (m?.state === "paused") return m.title ? `En pause · ${m.title}` : "En pause";
-      return "En veille";
+      if (m?.state === "playing") return m.title ? `Playing · ${m.title}` : "Playing";
+      if (m?.state === "paused") return m.title ? `Paused · ${m.title}` : "Paused";
+      return "Idle";
     }
     default:
-      return d.state.on ? "Allumé" : "Éteint";
+      return d.state.on ? "On" : "Off";
   }
 }
 
-/** Tile state line: "Éteint · Salon", "70 % · Salon". */
+/** Tile state line: "Off · Living room", "70% · Living room". */
 export function tileLabel(d: Device): string {
-  return d.room ? `${stateWord(d)} · ${d.room}` : stateWord(d);
+  return d.room ? `${stateWord(d)} · ${roomLabel(d.room)}` : stateWord(d);
 }
 
-export const UNREACHABLE_HINT = "Injoignable (interrupteur coupé ?)";
+/**
+ * Bridge room names are configured in French ("Salon", "Cuisine", "Chambre"…): show them in English.
+ * Display only — filters and the bridge keep the raw name. Unknown names pass through.
+ */
+const ROOM_LABELS: Record<string, string> = {
+  salon: "Living room",
+  sejour: "Living room",
+  cuisine: "Kitchen",
+  chambre: "Bedroom",
+  bureau: "Office",
+  "salle de bain": "Bathroom",
+  "salle de bains": "Bathroom",
+  "salle a manger": "Dining room",
+  entree: "Hallway",
+  couloir: "Hallway",
+  wc: "Toilet",
+  autre: "Other",
+};
+const foldRoom = (r: string) => r.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-/** "Chez Alex" from the bridge's home name. */
+export function roomLabel(room: string): string {
+  return ROOM_LABELS[foldRoom(room)] ?? room;
+}
+
+export const UNREACHABLE_HINT = "Unreachable (switched off at the wall?)";
+
+/** "Alex's home" from the bridge's home name (kept as is when it already reads as a title). */
 export function homeTitle(home: string | undefined): string {
   const h = (home ?? "").trim();
-  if (!h) return "Maison";
-  return /^chez\b/i.test(h) ? h : `Chez ${h}`;
+  if (!h) return "Home";
+  return /^chez\b|'s\b|\b(home|house|apartment|flat)\b/i.test(h) ? h : `${h}'s home`;
 }
 
-/** "2 lumières sur 5 allumées". */
+/** "2 of 5 lights on". */
 export function lightsSummary(devices: readonly Device[]): string {
   const lights = devices.filter(isLightLike);
   const on = lights.filter(isOn).length;
   const total = lights.length;
-  if (total === 0) return devices.length ? `${devices.length} appareil${devices.length > 1 ? "s" : ""}` : "Aucun appareil";
-  if (on === 0) return total === 1 ? "La lumière est éteinte" : "Toutes les lumières sont éteintes";
-  if (on === total && total > 1) return "Toutes les lumières sont allumées";
-  return `${on} lumière${on > 1 ? "s" : ""} sur ${total} allumée${on > 1 ? "s" : ""}`;
+  if (total === 0) return devices.length ? `${devices.length} device${devices.length > 1 ? "s" : ""}` : "No devices";
+  if (on === 0) return total === 1 ? "The light is off" : "All lights are off";
+  if (on === total && total > 1) return "All lights are on";
+  return `${on} of ${total} light${total > 1 ? "s" : ""} on`;
 }
 
 export interface RoomCount {
@@ -138,28 +162,29 @@ export interface RoomCount {
   on: number;
 }
 
-const ROOM_ORDER = ["Salon", "Séjour", "Cuisine", "Chambre", "Bureau", "Salle de bain", "Entrée"];
+// Bridge room names may be French or English: rank by the English label.
+const ROOM_ORDER = ["Living room", "Kitchen", "Bedroom", "Office", "Bathroom", "Hallway"];
 
-/** "Tous" first, then the rooms (usual order first, then alphabetical), with the number of devices on. */
+/** "All" first, then the rooms (usual order first, then alphabetical), with the number of devices on. */
 export function roomCounts(devices: readonly Device[]): RoomCount[] {
   const map = new Map<string, RoomCount>();
   for (const d of devices) {
-    const room = d.room || "Autre";
+    const room = d.room || "Other";
     const r = map.get(room) ?? { room, total: 0, on: 0 };
     r.total++;
     if (isOn(d)) r.on++;
     map.set(room, r);
   }
   const rank = (r: string) => {
-    const i = ROOM_ORDER.indexOf(r);
+    const i = ROOM_ORDER.indexOf(roomLabel(r));
     return i < 0 ? ROOM_ORDER.length : i;
   };
-  const rooms = [...map.values()].sort((a, b) => rank(a.room) - rank(b.room) || a.room.localeCompare(b.room, "fr"));
+  const rooms = [...map.values()].sort((a, b) => rank(a.room) - rank(b.room) || roomLabel(a.room).localeCompare(roomLabel(b.room), "en"));
   return [{ room: ALL_ROOMS, total: devices.length, on: devices.filter(isOn).length }, ...rooms];
 }
 
 export function devicesInRoom(devices: readonly Device[], room: string): Device[] {
-  return room === ALL_ROOMS ? [...devices] : devices.filter((d) => (d.room || "Autre") === room);
+  return room === ALL_ROOMS ? [...devices] : devices.filter((d) => (d.room || "Other") === room);
 }
 
 /** Devices linked to each 3D item (a TV item may carry the TV and the light strip behind it). */
@@ -209,7 +234,7 @@ export function devicesForItem(devices: readonly Device[], itemId: string): Devi
   return devices.filter((d) => d.itemId === itemId);
 }
 
-const SOURCE_LABELS: Record<string, string> = { youtube: "YouTube", netflix: "Netflix", "hdmi 1": "HDMI 1", "hdmi 2": "HDMI 2", tv_power: "Marche / arrêt", amp_mute: "Muet ampli", amp_power: "Marche ampli", primevideo: "Prime Video", disney: "Disney+", hdmi1: "HDMI 1", hdmi2: "HDMI 2", tv: "TV" };
+const SOURCE_LABELS: Record<string, string> = { youtube: "YouTube", netflix: "Netflix", "hdmi 1": "HDMI 1", "hdmi 2": "HDMI 2", tv_power: "Power", amp_mute: "Amp mute", amp_power: "Amp power", primevideo: "Prime Video", disney: "Disney+", hdmi1: "HDMI 1", hdmi2: "HDMI 2", tv: "TV" };
 
 export function sourceLabel(raw: string): string {
   const name = raw.replace(/^source:/, "");
@@ -425,7 +450,7 @@ export interface GlowLook {
   level: number;
 }
 
-/** How a 3D item shows its linked devices in Maison mode. */
+/** How a 3D item shows its linked devices in Home mode. */
 export interface ItemLook {
   /** Lamp shade / bulb / fan light. */
   glow?: GlowLook;
@@ -503,7 +528,7 @@ function glowOf(d: Device): GlowLook {
 }
 
 /**
- * Look of an item from its linked devices. Lamps without a device stay off in Maison mode (the 3D
+ * Look of an item from its linked devices. Lamps without a device stay off in Home mode (the 3D
  * shows the real state); other unlinked items keep their usual look (undefined).
  */
 export function lookForItem(category: ItemCategory, devices: readonly Device[] | undefined, opts: { screenOnTop?: boolean } = {}): ItemLook | undefined {
@@ -568,7 +593,7 @@ export function tvContent(d: Device): TvContent | undefined {
   return Object.keys(c).length ? c : undefined;
 }
 
-/** Light-pool contribution of an item in Maison mode (null: not driven by a device → usual night look). */
+/** Light-pool contribution of an item in Home mode (null: not driven by a device → usual night look). */
 export function homeLightFor(category: ItemCategory, look: ItemLook | undefined): GlowLook | null {
   if (!look) return LAMP_CATEGORIES.has(category) ? { on: false, color: WARM_WHITE, level: 0 } : null;
   if (look.glow) return look.glow;

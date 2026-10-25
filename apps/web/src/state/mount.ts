@@ -2,7 +2,7 @@ import { getCatalogEntry } from "@appart3d/catalog";
 import { effectiveMount } from "../lib/mount";
 import type { Item, ItemMount, Scene } from "@appart3d/scene";
 
-export const MOUNT_LABELS: Record<ItemMount, string> = { floor: "Sol", wall: "Mur", ceiling: "Plafond" };
+export const MOUNT_LABELS: Record<ItemMount, string> = { floor: "Floor", wall: "Wall", ceiling: "Ceiling" };
 
 /** Catalog default for the category ("floor" when the catalog says nothing). */
 export function catalogMount(item: Pick<Item, "category">): ItemMount {
@@ -30,7 +30,7 @@ export function defaultElevationFor(item: Pick<Item, "category" | "mount" | "dim
   const mount = effectiveMount(item);
   const ceil = ceilingHeight(scene);
   const h = item.dimensions[1];
-  // An explicit "Sol" puts it down; otherwise keep the catalog's elevation (e.g. legacy artwork entries).
+  // An explicit "Floor" mount puts it down; otherwise keep the catalog's elevation (e.g. legacy artwork entries).
   if (mount === "floor") return item.mount === "floor" ? 0 : (getCatalogEntry(item.category)?.defaultElevation ?? 0);
   if (mount === "ceiling") return round2(Math.max(0, ceil - h));
   const wanted = getCatalogEntry(item.category)?.defaultElevation || 1.2;

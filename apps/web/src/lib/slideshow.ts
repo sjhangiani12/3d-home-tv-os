@@ -2,7 +2,7 @@ import { itemFootprint, pointInPolygon, polygonArea, sceneBounds, type Item, typ
 import { centroid, pointSegment } from "./geom2d";
 
 /**
- * "Diaporama": the list of cinematic shots generated from a scene, plus the easing / path helpers
+ * "Slideshow": the list of cinematic shots generated from a scene, plus the easing / path helpers
  * the camera rig samples every frame. Pure logic (no three.js) so it is unit tested.
  */
 
@@ -144,7 +144,7 @@ export function captionReveal(time: number, duration: number): number {
 // ---------------------------------------------------------------------------------------------
 // Shot list
 
-export const formatArea = (m2: number): string => `${m2 >= 10 ? Math.round(m2) : Math.round(m2 * 10) / 10} m²`.replace(".", ",");
+export const formatArea = (m2: number): string => `${m2 >= 10 ? Math.round(m2) : Math.round(m2 * 10) / 10} m²`;
 
 const roomArea = (r: Room) => Math.abs(polygonArea(r.floor));
 
@@ -228,7 +228,7 @@ function roomShot(scene: Pick<Scene, "items" | "rooms">, room: Room, reduced: bo
     kind: "room",
     duration: 6.5,
     roomId: room.id,
-    caption: { title: room.name || "Pièce", detail: formatArea(area) },
+    caption: { title: room.name || "Room", detail: formatArea(area) },
     camera: { cam: "eye", fov: area < 10 ? 70 : 64, positions: [p0, p1, p2], targets: [t0, t1] },
   };
 }
@@ -253,7 +253,7 @@ function roomTopShot(room: Room, apartmentCenter: Vec3, reduced: boolean): Shot 
     kind: "room",
     duration: 6,
     roomId: room.id,
-    caption: { title: room.name || "Pièce", detail: formatArea(area) },
+    caption: { title: room.name || "Room", detail: formatArea(area) },
     camera: { cam: "fly", fov: 44, positions: [p0, p1], targets: [t, t] },
   };
 }
@@ -272,13 +272,13 @@ export function buildShots(scene: Pick<Scene, "name" | "items" | "rooms" | "wall
   const rooms = scene.rooms.filter((r) => roomArea(r) >= MIN_ROOM_AREA).sort((a, c) => roomArea(c) - roomArea(a));
   const total = scene.rooms.reduce((s, r) => s + roomArea(r), 0);
   const n = scene.rooms.length;
-  const summary = [n > 0 ? `${n} pièce${n > 1 ? "s" : ""}` : null, total > 0 ? formatArea(total) : null].filter(Boolean).join(" · ");
+  const summary = [n > 0 ? `${n} room${n > 1 ? "s" : ""}` : null, total > 0 ? formatArea(total) : null].filter(Boolean).join(" · ");
 
   const shots: Shot[] = [
     {
       kind: "orbit",
       duration: reduced ? 12 : 14,
-      caption: { eyebrow: "Appart3D", title: scene.name || "Mon appartement", detail: summary || undefined },
+      caption: { eyebrow: "Appart3D", title: scene.name || "My home", detail: summary || undefined },
       camera: { cam: "iso", center: isoCenter, az0: DEFAULT_AZ, sweep: reduced ? Math.PI / 3 : Math.PI * 2, polar: ISO_POLAR, zoomScale: 1 },
     },
   ];
@@ -295,7 +295,7 @@ export function buildShots(scene: Pick<Scene, "name" | "items" | "rooms" | "wall
   shots.push({
     kind: "flyover",
     duration: 7,
-    caption: { title: "Vue d'ensemble", detail: summary || undefined },
+    caption: { title: "Overview", detail: summary || undefined },
     camera: {
       cam: "fly",
       fov: 42,
@@ -309,7 +309,7 @@ export function buildShots(scene: Pick<Scene, "name" | "items" | "rooms" | "wall
       kind: "dusk",
       duration: 9,
       toggleNightAt: 1.6,
-      caption: { title: opts.night ? "Au petit matin" : "À la nuit tombée", detail: scene.name || undefined },
+      caption: { title: opts.night ? "Early morning" : "Nightfall", detail: scene.name || undefined },
       // Same side as the editor's default view: the moon stays behind the apartment.
       camera: { cam: "iso", center: isoCenter, az0: DEFAULT_AZ - Math.PI / 4, sweep: reduced ? Math.PI / 10 : Math.PI / 2, polar: 0.9, zoomScale: 1.12 },
     });

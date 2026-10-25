@@ -10,7 +10,7 @@ import { conflictsOf, needsReview } from "../state/analysis";
  *   ?photo=eye&eyeRoom=room_1 | ?photo=orbit (photo mode views)
  * Public (handled in main.tsx, not dev-only): ?night=1, ?demo=1. Dev slideshow jumps: &demoShot=3&demoT=2.5
  *   ?view=3d (&scene=…&night=0|1&autoRotate=0) — embedded 3D view for the native apps: canvas only,
- *   transparent, Maison looks, taps posted to window.webkit.messageHandlers.appart3d; commands via
+ *   transparent, Home-mode looks, taps posted to window.webkit.messageHandlers.appart3d; commands via
  *   window.appart3dEmbed.post({type:"focusItem"|"highlightDevice"|"setNight"|"overview"|"autoRotate", …}).
  *   Try it in a browser with &home=mock (devices simulated in the page).
  */
@@ -48,7 +48,7 @@ export function applyDevHooks(params: URLSearchParams) {
     if (r) s.selectRoom(r);
     s.setPhotoView(photo);
   }
-  // Maison mode (with ?home=mock): &homeScene=movie runs a scene, &homeOpen=<deviceId|item:itemId> opens a view,
+  // Home mode (with ?home=mock): &homeScene=movie runs a scene, &homeOpen=<deviceId|item:itemId> opens a view,
   // &homeAct=<deviceId>:<json action> sends an action, &homeRoom=Salon picks a room chip.
   void import("../state/home").then(({ useHome }) => {
     const run = () => {

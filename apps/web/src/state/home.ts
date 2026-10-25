@@ -20,11 +20,11 @@ import { createBridgeClient, createMockClient, HomeHttpError, resolveBridgeBase,
 import { useStore } from "./store";
 
 /**
- * "Maison" mode state: connection to the home bridge (or the mock), devices with optimistic
+ * "Home" mode state: connection to the home bridge (or the mock), devices with optimistic
  * updates, and the panel's navigation.
  */
 export type HomeStatus =
-  /** No bridge here (the Maison mode stays hidden). */
+  /** No bridge here (the Home mode stays hidden). */
   | "off"
   | "connecting"
   | "online"
@@ -54,7 +54,7 @@ export interface HomeState extends DevicesState {
   compact: boolean;
   /** `?widget=1`: menu-bar popover, no editor at all. */
   widget: boolean;
-  /** « Organiser » mode: tiles are dragged to reorder them (no toggling). */
+  /** "Arrange" mode: tiles are dragged to reorder them (no toggling). */
   organizing: boolean;
 
   act: (id: string, action: DeviceAction) => void;
@@ -102,7 +102,7 @@ export const useHome = create<HomeState>()((set, get) => ({
     const d = get().devices.find((x) => x.id === id);
     if (!client || !d) return;
     if (!isReachable(d)) {
-      useStore.getState().toast(`${d.name} est injoignable (interrupteur coupé ?).`, "warn");
+      useStore.getState().toast(`${d.name} is unreachable (switched off at the wall?).`, "warn");
       return;
     }
     const n = ++seq;
@@ -112,7 +112,7 @@ export const useHome = create<HomeState>()((set, get) => ({
       (err: unknown) => {
         const before = get().pending[id]?.seq;
         set(withDevices(failAction(get(), id, n)));
-        if (before === n) useStore.getState().toast(`${d.name} : ${errorText(err)}`, "error");
+        if (before === n) useStore.getState().toast(`${d.name}: ${errorText(err)}`, "error");
       },
     );
   },
@@ -125,7 +125,7 @@ export const useHome = create<HomeState>()((set, get) => ({
       (snap) => set({ ...withDevices(applySnapshot(get(), snap)), runningScene: null }),
       (err: unknown) => {
         set({ runningScene: null });
-        useStore.getState().toast(`Scène impossible : ${errorText(err)}`, "error");
+        useStore.getState().toast(`Scene failed: ${errorText(err)}`, "error");
       },
     );
   },
@@ -154,7 +154,7 @@ export const useHome = create<HomeState>()((set, get) => ({
     if (!list?.length) return;
     if (list.length === 1) {
       const d = list[0]!;
-      // A speaker opens its « Lecture en cours » (a stray click must not start / stop the music); the TV
+      // A speaker opens its "Now playing" view (a stray click must not start / stop the music); the TV
       // opens its card (apps, Ambilight, remote).
       if (d.kind === "speaker" || d.kind === "tv") set({ view: { kind: "device", id: d.id } });
       else if (isReachable(d)) get().toggle(d.id);
@@ -184,7 +184,7 @@ export const useHome = create<HomeState>()((set, get) => ({
           if (n === orderSeq) useHome.setState((st) => withDevices(applySnapshot(st, snap)));
         },
         (err: unknown) => {
-          useStore.getState().toast(`Ordre non enregistré : ${errorText(err)}`, "error");
+          useStore.getState().toast(`Order not saved: ${errorText(err)}`, "error");
           void client.snapshot().then((snap) => useHome.setState((st) => withDevices(applySnapshot(st, snap))));
         },
       );
@@ -194,28 +194,28 @@ export const useHome = create<HomeState>()((set, get) => ({
 
 function errorText(err: unknown): string {
   if (err instanceof HomeHttpError) {
-    if (err.status === 401 || err.status === 403) return "accès refusé (appairez cet appareil).";
+    if (err.status === 401 || err.status === 403) return "access denied (pair this device).";
     return err.message;
   }
-  if (err instanceof TypeError) return "pont injoignable.";
-  return err instanceof Error ? err.message : "erreur inconnue.";
+  if (err instanceof TypeError) return "bridge unreachable.";
+  return err instanceof Error ? err.message : "unknown error.";
 }
 
 /* ------------------------------------------------------------------ connection */
 
 export interface HomeBootOptions {
   params: URLSearchParams;
-  /** Embedded 3D view (`?view=3d`): always Maison mode, same-origin bridge. */
+  /** Embedded 3D view (`?view=3d`): always Home mode, same-origin bridge. */
   embed?: boolean;
 }
 
 /**
  * Finds the bridge (or starts the mock) and keeps the devices live. URL options:
  *   ?home=mock          in-browser mock (development, demos) — `&homeFail=0.3` makes actions fail
- *   ?home=1             open the Maison mode at start (PWA start URL); keeps retrying if unreachable
+ *   ?home=1             open the Home mode at start (PWA start URL); keeps retrying if unreachable
  *   ?bridge=http://h:p  bridge base URL (remembered; `?bridge=` resets to same origin)
- *   ?widget=1           compact popover layout (menu bar app), Maison mode only
- *   ?view=3d            embedded 3D view for the native apps (Maison mode, see state/embed.ts)
+ *   ?widget=1           compact popover layout (menu bar app), Home mode only
+ *   ?view=3d            embedded 3D view for the native apps (Home mode, see state/embed.ts)
  */
 export function startHome({ params, embed = false }: HomeBootOptions): void {
   const homeParam = params.get("home");
@@ -296,7 +296,7 @@ export function startHome({ params, embed = false }: HomeBootOptions): void {
   });
 }
 
-/** Maison mode can be shown (a bridge or the mock answered, or it was explicitly requested). */
+/** Home mode can be shown (a bridge or the mock answered, or it was explicitly requested). */
 export function homeAvailable(status: HomeStatus): boolean {
   return status !== "off";
 }

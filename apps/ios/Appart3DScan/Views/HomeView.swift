@@ -32,21 +32,21 @@ struct HomeView: View {
             .navigationDestination(for: ScanProject.self) { project in
                 ProjectSummaryView(project: project)
             }
-            .alert("Nouvel appartement", isPresented: $askingName) {
-                TextField("Nom", text: $newName)
-                Button("Annuler", role: .cancel) {}
-                Button("Commencer") { startScan() }
+            .alert("New home", isPresented: $askingName) {
+                TextField("Name", text: $newName)
+                Button("Cancel", role: .cancel) {}
+                Button("Start") { startScan() }
             } message: {
-                Text("Donnez un nom à ce scan. Vous scannerez ensuite les pièces une par une.")
+                Text("Give this scan a name. Then you scan the rooms one by one.")
             }
-            .confirmationDialog("Supprimer « \(pendingDelete?.name ?? "") » ?",
+            .confirmationDialog("Delete “\(pendingDelete?.name ?? "")”?",
                                 isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                                 titleVisibility: .visible) {
-                Button("Supprimer", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     if let pendingDelete { store.delete(pendingDelete) }
                 }
             } message: {
-                Text("Le fichier .appart3d.json et les modèles USDZ seront effacés de l'iPhone.")
+                Text("This erases the .appart3d.json file and the USDZ models from the iPhone.")
             }
             .sheet(isPresented: $showUnsupported) {
                 UnsupportedDeviceView(onDemo: { showUnsupported = false; openDemo() })
@@ -71,7 +71,7 @@ struct HomeView: View {
                     .font(.system(.largeTitle, design: .rounded, weight: .bold))
                     .foregroundStyle(Theme.ink)
             }
-            Text("Scannez votre appartement, retrouvez-le en maquette 3D sur le web.")
+            Text("Scan your home, then explore it as a 3D model on the web.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.inkSoft)
         }
@@ -81,15 +81,15 @@ struct HomeView: View {
     private var actions: some View {
         VStack(spacing: 12) {
             Button {
-                newName = "Mon appartement"
+                newName = "My home"
                 if isSupported { askingName = true } else { showUnsupported = true }
             } label: {
-                Label("Nouvel appartement", systemImage: "viewfinder")
+                Label("New home", systemImage: "viewfinder")
             }
             .buttonStyle(PrimaryButtonStyle())
 
             Button(action: openDemo) {
-                Label("Mode démo", systemImage: "sparkles")
+                Label("Demo mode", systemImage: "sparkles")
             }
             .buttonStyle(SecondaryButtonStyle())
         }
@@ -97,7 +97,7 @@ struct HomeView: View {
 
     @ViewBuilder private var projectsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Mes appartements")
+            Text("My homes")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.ink)
             if store.projects.isEmpty {
@@ -105,10 +105,10 @@ struct HomeView: View {
                     Image(systemName: "square.dashed")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.sage)
-                    Text("Aucun scan pour l'instant")
+                    Text("No scans yet")
                         .font(.headline)
                         .foregroundStyle(Theme.ink)
-                    Text("Vos appartements scannés apparaîtront ici, prêts à être partagés.")
+                    Text("Your scanned homes show up here, ready to share.")
                         .font(.footnote)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Theme.inkSoft)
@@ -123,10 +123,10 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         ShareLink(item: store.envelopeURL(for: project)) {
-                            Label("Partager le fichier", systemImage: "square.and.arrow.up")
+                            Label("Share file", systemImage: "square.and.arrow.up")
                         }
                         Button(role: .destructive) { pendingDelete = project } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
@@ -139,14 +139,14 @@ struct HomeView: View {
 
     private func startScan() {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        activeScan = ScanSession(projectName: name.isEmpty ? "Mon appartement" : name)
+        activeScan = ScanSession(projectName: name.isEmpty ? "My home" : name)
     }
 
     private func openDemo() {
         let id = UUID()
         do {
             let folder = try store.makeFolder(for: id)
-            let project = try ScanExportService.exportDemo(id: id, name: "Appartement démo", folder: folder)
+            let project = try ScanExportService.exportDemo(id: id, name: "Demo home", folder: folder)
             try store.register(project)
             path = [project]
         } catch {
@@ -169,10 +169,10 @@ private struct DeviceBanner: View {
                     .font(.title3)
                     .foregroundStyle(Theme.slate)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Appareil non compatible")
+                    Text("Device not supported")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.ink)
-                    Text("Le scan nécessite un iPhone ou iPad Pro avec LiDAR. Le mode démo reste disponible.")
+                    Text("Scanning needs an iPhone or iPad Pro with LiDAR. Demo mode is still available.")
                         .font(.caption)
                         .foregroundStyle(Theme.inkSoft)
                         .multilineTextAlignment(.leading)
@@ -202,8 +202,8 @@ private struct ProjectRow: View {
                 Text(project.name)
                     .font(.headline)
                     .foregroundStyle(Theme.ink)
-                Text(FrenchLabels.plural(project.summary.roomCount, "pièce") + " · "
-                     + FrenchLabels.plural(project.summary.objectCount, "objet"))
+                Text(DisplayLabels.plural(project.summary.roomCount, "room") + " · "
+                     + DisplayLabels.plural(project.summary.objectCount, "object"))
                     .font(.subheadline)
                     .foregroundStyle(Theme.inkSoft)
                 Text(project.createdAt.formatted(date: .abbreviated, time: .shortened))
