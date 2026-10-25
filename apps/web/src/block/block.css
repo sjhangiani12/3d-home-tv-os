@@ -1,16 +1,20 @@
-/* Layout: a fixed 1920x1080 TV frame scaled to fit the window; the city is a WebGL canvas rendered at
-   1/PIX resolution and scaled up with hard pixels; HTML signs float over it like SimCity info boxes. */
+/* Layout: a fixed 1920x1080 TV frame scaled to fit the window; the block is a WebGL canvas filling it,
+   and HTML cards float over it like SimCity info boxes — painted, not pixelled: a serif face, soft
+   corners, warm paper and shadows that fall instead of offsetting. */
 :root {
-  --night: #0c1022;
-  --ink: #1c1a24;
-  --paper: #fbf6ea;
-  --paper-2: #efe6d2;
-  --muted: #6a6170;
+  --night: #1a1b24;
+  --ink: #3b3328;
+  --paper: #fdf7e8;
+  --paper-2: #f2e7cd;
+  --muted: #7d6f5c;
   --mta-green: #00933c;
   --bike-blue: #1d64c4;
   --warm: #ffcf7a;
-  --focus: #ffd75e;
-  --font-pixel: "Pixelify Sans", "Silkscreen", ui-monospace, monospace;
+  --focus: #ffe08a;
+  --card: linear-gradient(180deg, #fffdf4, #f4e9d2);
+  --card-sel: linear-gradient(180deg, #ffeeb6, #f7d98a);
+  --lift: 0 12px 26px rgba(48, 36, 22, 0.3);
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -18,55 +22,77 @@ html, body { height: 100%; }
 body { background: var(--night); color: var(--paper); overflow: hidden; }
 #wrap { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); }
 #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #22263a; font-family: var(--font-ui); }
-#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; image-rendering: pixelated; image-rendering: crisp-edges; }
+#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; }
 #fade { position: absolute; inset: 0; background: #07080f; opacity: 0; pointer-events: none; transition: opacity 280ms ease; }
+/* Paper tooth over the whole frame: a warm wash and a soft vignette, under the cards. */
+#stage::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(130% 105% at 50% 38%, rgba(255, 248, 228, 0.07) 0 52%, rgba(62, 48, 32, 0.3) 100%);
+}
 
-/* Pixel sign: paper box, 3px ink border, hard offset shadow. */
-.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); box-shadow: 5px 5px 0 rgba(10, 8, 20, 0.55); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease; }
-.sign::after { content: ""; position: absolute; left: 50%; bottom: -14px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid var(--ink); transform: translateX(-50%); }
+/* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
+.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
+.sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
 .sign .row { display: flex; align-items: center; gap: 10px; }
 .sign .t { font-size: 22px; font-weight: 600; line-height: 1.1; }
-.sign .s { font-size: 18px; color: var(--muted); line-height: 1.25; }
+.sign .s { font-size: 19px; color: var(--muted); line-height: 1.25; }
 .sign .big { font-size: 30px; font-weight: 700; line-height: 1; }
 .bullet { width: 34px; height: 34px; border-radius: 50%; background: var(--mta-green); color: #fff; display: grid; place-items: center; font: 700 22px/1 var(--font-ui); flex: none; }
 .bolt { color: #2b7bd9; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--warm); box-shadow: 0 0 0 2px var(--ink); }
 .dot.off { background: #8b8496; }
-.street { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 15px/1 var(--font-pixel); letter-spacing: 0.08em; color: #fbf6ea; background: rgba(20, 20, 32, 0.72); padding: 4px 7px; transition: opacity 300ms ease; }
-.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
+.street { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 17px/1 var(--font-display); letter-spacing: 0.1em; color: #fbf6ea; background: rgba(58, 46, 32, 0.6); border-radius: 10px; padding: 5px 10px; transition: opacity 300ms ease; }
+.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
 
 /* HUD */
-#clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-pixel); text-shadow: 4px 4px 0 rgba(8, 6, 18, 0.6); transition: opacity 300ms ease; }
-#clock .time { font-size: 104px; font-weight: 700; line-height: 0.9; }
+#clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-display); text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
+#clock .time { font-size: 104px; font-weight: 600; line-height: 0.9; }
 #clock .time small { font-size: 44px; margin-left: 10px; }
 #clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; }
 #clock .place { font-size: 20px; margin-top: 6px; opacity: 0.85; letter-spacing: 0.08em; }
 
-#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); box-shadow: 6px 6px 0 rgba(10, 8, 20, 0.55); padding: 14px 18px; cursor: pointer; transition: transform 140ms ease, background 140ms ease, opacity 300ms ease; }
+#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 14px 18px; cursor: pointer; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
 #chip svg { width: 30px; height: 30px; }
 #chip .dots { display: flex; gap: 6px; }
-#chip:focus-visible, #chip.focus { outline: none; background: var(--focus); transform: translate(-3px, -3px); box-shadow: 9px 9px 0 rgba(10, 8, 20, 0.55); }
+#chip:focus-visible, #chip.focus { outline: none; background: var(--card-sel); transform: translateY(-4px) scale(1.04); box-shadow: 0 18px 34px rgba(48, 36, 22, 0.4); }
 
-#dock { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 22px; transition: opacity 300ms ease, transform 300ms ease; }
-.app { width: 196px; height: 92px; display: grid; place-items: center; font: 600 24px/1 var(--font-pixel); color: var(--paper); background: rgba(22, 20, 34, 0.82); border: 3px solid rgba(251, 246, 234, 0.85); box-shadow: 5px 5px 0 rgba(8, 6, 18, 0.5); cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
-.app:focus-visible, .app.focus { outline: none; background: var(--paper); color: var(--ink); transform: translateY(-8px); }
+/* Dock: glass tiles hovering over the block, lit from the top edge, blurring whatever is behind them.
+   They answer the remote exactly like the map cards — same lift, same warm fill when selected. */
+#dock { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 17px; transition: opacity 300ms ease, transform 300ms ease; }
+.app {
+  width: 147px; height: 69px; display: grid; place-items: center;
+  font: 600 18px/1 var(--font-display); color: rgba(253, 247, 232, 0.94);
+  background: linear-gradient(165deg, rgba(255, 252, 244, 0.22), rgba(52, 42, 30, 0.3));
+  border: 1px solid rgba(255, 250, 238, 0.4); border-radius: 18px;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 10px 26px rgba(26, 18, 10, 0.34), inset 0 1px 0 rgba(255, 253, 246, 0.55);
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+.app:focus-visible, .app.focus, .app.sel {
+  outline: none; color: var(--ink); background: var(--card-sel);
+  border-color: rgba(255, 255, 255, 0.85);
+  transform: translateY(-10px) scale(1.06);
+  box-shadow: 0 18px 34px rgba(26, 18, 10, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
 
 /* Drawer: the home's controls slide in from the right while the camera flies in. */
-#drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 500px; background: var(--paper); color: var(--ink); border-left: 4px solid var(--ink); box-shadow: -10px 0 0 rgba(8, 6, 18, 0.35); transform: translateX(110%); transition: transform 520ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; padding: 48px 36px 32px; gap: 22px; font-family: var(--font-pixel); }
+#drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 500px; background: var(--paper); color: var(--ink); border-left: 2px solid var(--ink); box-shadow: -18px 0 36px rgba(40, 30, 18, 0.35); transform: translateX(110%); transition: transform 520ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; padding: 48px 36px 32px; gap: 22px; font-family: var(--font-display); }
 #drawer.open { transform: translateX(0); }
 #drawer h2 { margin: 0; font-size: 40px; line-height: 1; }
-#drawer .addr { font-size: 20px; color: var(--muted); margin-top: 8px; }
+#drawer .addr { font-size: 19px; color: var(--muted); margin-top: 8px; }
 .scenes { display: flex; gap: 12px; }
-.pill { font: 600 22px/1 var(--font-pixel); color: var(--ink); background: var(--paper-2); border: 3px solid var(--ink); padding: 12px 18px; cursor: pointer; }
+.pill { font: 600 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 12px 18px; cursor: pointer; }
 .pill:focus-visible, .pill.focus { outline: none; background: var(--focus); }
 .roomgrp { display: flex; flex-direction: column; gap: 8px; }
 .roomgrp h3 { margin: 0; font-size: 20px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-.lamp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 14px; text-align: left; font: 500 22px/1.1 var(--font-pixel); color: var(--ink); background: transparent; border: 3px solid transparent; padding: 10px 12px; cursor: pointer; }
+.lamp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 14px; text-align: left; font: 500 22px/1.1 var(--font-display); color: var(--ink); background: transparent; border: 3px solid transparent; border-radius: 10px; padding: 10px 12px; cursor: pointer; }
 .lamp:focus-visible, .lamp.focus { outline: none; background: var(--ink); color: var(--paper); }
 .lamp .bar { grid-column: 1 / -1; height: 6px; background: rgba(28, 26, 36, 0.15); }
 .lamp.focus .bar, .lamp:focus-visible .bar { background: rgba(251, 246, 234, 0.25); }
 .lamp .bar i { display: block; height: 100%; background: #e2a73a; }
-.sw { width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); position: relative; }
+.sw { width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); border-radius: 10px; position: relative; }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: var(--ink); transition: left 140ms ease; }
 .lamp.on .sw { background: #f0b542; }
 .lamp.on .sw::after { left: 27px; }
@@ -87,10 +113,13 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Inside the TV launcher the app draws the dock, the Lights button and its drawer. */
 .tv #dock, .tv #drawer, .tv #mock { display: none; }
 
-/* The selected sign (remote focus) and the zoomed-in details. */
-.sign.sel { background: var(--focus); box-shadow: 8px 8px 0 rgba(10, 8, 20, 0.6); }
+/* The selected sign (remote focus). It cannot lift the way the dock tiles do — the sign's transform is
+   written every frame from its world position — so it says "selected" with the same warm fill, a white
+   rim and a deeper shadow instead. */
+.sign.sel { background: var(--card-sel); border-color: rgba(255, 255, 255, 0.85); box-shadow: 0 18px 34px rgba(48, 36, 22, 0.42), 0 0 0 3px rgba(255, 224, 138, 0.55); }
+.sign.sel::after { border-top-color: #f7d98a; }
 .bullet.sm { width: 28px; height: 28px; font-size: 18px; }
-.detail { position: absolute; left: 64px; bottom: 64px; min-width: 520px; font-family: var(--font-pixel); color: var(--ink); background: var(--paper); border: 4px solid var(--ink); box-shadow: 8px 8px 0 rgba(10, 8, 20, 0.55); padding: 22px 28px 20px; display: flex; flex-direction: column; gap: 14px; transition: opacity 300ms ease; }
+.detail { position: absolute; left: 64px; bottom: 64px; min-width: 520px; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 22px 28px 20px; display: flex; flex-direction: column; gap: 14px; transition: opacity 300ms ease; }
 .detail .dhead { display: flex; align-items: baseline; gap: 14px; }
 .detail .dhead .t { font-size: 36px; font-weight: 700; }
 .detail .dhead .s { font-size: 20px; color: var(--muted); }
@@ -101,12 +130,12 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .detail .drow.big small { font-size: 20px; font-weight: 500; color: var(--muted); margin-left: 8px; }
 .detail .dhint { font-size: 18px; color: var(--muted); }
 
-/* Now playing (Sonos): the cover as pixel art, the rooms with their volume. */
-.art { width: 64px; height: 64px; image-rendering: pixelated; border: 3px solid var(--ink); flex: none; display: grid; place-items: center; background: var(--paper-2); font-size: 30px; }
+/* Now playing (Sonos): the cover and the rooms with their volume. */
+.art { width: 64px; height: 64px; border: 2px solid var(--ink); border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--paper-2); font-size: 30px; }
 .art.big { width: 168px; height: 168px; font-size: 72px; }
-.sign .src { font-size: 15px; letter-spacing: 0.04em; }
+.sign .src { font-size: 16px; letter-spacing: 0.04em; }
 .notes { position: absolute; left: 0; top: 0; pointer-events: none; width: 120px; height: 160px; transition: opacity 300ms ease; }
-.notes i { position: absolute; bottom: 0; font: 700 34px/1 var(--font-pixel); font-style: normal; color: var(--paper); text-shadow: 3px 3px 0 rgba(10, 8, 20, 0.6); opacity: 0; animation: note 3.6s steps(12) infinite; }
+.notes i { position: absolute; bottom: 0; font: 700 34px/1 var(--font-display); font-style: normal; color: var(--paper); text-shadow: 0 4px 12px rgba(10, 8, 20, 0.6); opacity: 0; animation: note 3.6s ease-in-out infinite; }
 .notes i:nth-child(1) { left: 20px; }
 .notes i:nth-child(2) { left: 56px; animation-delay: 1.2s; color: var(--warm); }
 .notes i:nth-child(3) { left: 88px; animation-delay: 2.4s; }
@@ -117,16 +146,16 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .detail .np .src { font-size: 20px; margin-top: 12px; color: var(--ink); font-weight: 600; }
 .detail .np .src.spotify { color: #1db954; }
 .detail .spk { display: flex; flex-direction: column; gap: 8px; }
-.detail .spkrow { display: grid; grid-template-columns: 220px 160px 1fr; align-items: center; gap: 16px; font-size: 22px; color: var(--muted); }
+.detail .spkrow { display: grid; grid-template-columns: 220px 160px 1fr; align-items: center; gap: 16px; font-size: 22px; color: var(--muted); border-radius: 10px; }
 .detail .spkrow.on { color: var(--ink); }
 .detail .spkrow .vol { height: 10px; background: rgba(28, 26, 36, 0.15); border: 2px solid var(--ink); }
 .detail .spkrow .vol i { display: block; height: 100%; background: #e2a73a; }
 @media (prefers-reduced-motion: reduce) { .notes i { animation: none; opacity: 1; } }
 .notes { z-index: 0; } .sign { z-index: 1; }
 .detail { pointer-events: auto; }
-.detail .transport { display: flex; gap: 10px; margin-top: 14px; padding: 4px; border: 3px solid transparent; width: max-content; }
+.detail .transport { display: flex; gap: 10px; margin-top: 14px; padding: 4px; border: 3px solid transparent; border-radius: 10px; width: max-content; }
 .detail .transport.sel { border-color: var(--ink); background: var(--focus); }
-.detail .tbtn { font: 700 26px/1 var(--font-pixel); width: 64px; height: 48px; color: var(--paper); background: var(--ink); border: 3px solid var(--ink); cursor: pointer; }
+.detail .tbtn { font: 700 26px/1 var(--font-display); width: 64px; height: 48px; color: var(--paper); background: var(--ink); border: 3px solid var(--ink); border-radius: 10px; cursor: pointer; }
 .detail .tbtn.dis { opacity: 0.3; cursor: default; }
 .detail .spkrow { padding: 4px 8px; border: 3px solid transparent; cursor: pointer; }
 .detail .spkrow.sel { border-color: var(--ink); background: var(--focus); color: var(--ink); }

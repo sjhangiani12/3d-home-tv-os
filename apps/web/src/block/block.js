@@ -1,5 +1,5 @@
 /**
- * The block, live: an isometric pixel-art diorama of the streets around home (the TV's home screen). Traffic,
+ * The block, live: a hand-painted isometric diorama of the streets around home (the TV's home screen). Traffic,
  * people, the subway station (bridge /mta.json), two Citi Bike docks (bridge /citibike.json), the weather
  * (Open-Meteo), and the home's lamps (bridge SSE) lighting its windows and the dollhouse.
  *
@@ -8,25 +8,22 @@
  * model beside it. See README "Your block".
  *
  * Query: ?tv=1 (inside the TV launcher: no page dock, chip, drawer or mock controls; the native app drives it
- * through window.appart3dEmbed.post), ?pix=2|3 (pixel size), ?shadows=0, ?mock=1 (weather/time buttons).
+ * through window.appart3dEmbed.post), ?pix=2|3 (render at 1/n and scale up, for a slow TV), ?shadows=0,
+ * ?mock=1 (weather/time buttons).
  * Hash: #day #dusk #night #rain #snow #wind (forced look), #home #inside #street (start view).
  * Plain JS on purpose: a port of the approved mock, kept close to it while the design settles.
  */
 import * as THREE from "three";
+import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
+import * as P from "./paint.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
 const Q = new URLSearchParams(location.search);
 const TV = Q.has("tv"), MOCK = Q.has("mock"), SHADOWS = Q.get("shadows") !== "0";
-const W = 1920, H = 1080, PIX = Math.min(4, Math.max(1, Number(Q.get("pix")) || 2));
-// The home's own names and place (not in git); the demo block otherwise.
-async function loadHomeConfig() {
-  try { const r = await fetch("/shared/block-home.json", { cache: "no-store" }); if (r.ok) return await r.json(); } catch { /* demo */ }
-  return {};
-}
+const W = 1920, H = 1080, PIX = Math.min(4, Math.max(1, Number(Q.get("pix")) || 1));
 const CFG = await loadHomeConfig();
-const loc = CFG.location || null;
-const LOC = Q.get("lat") ? { lat: Number(Q.get("lat")), lon: Number(Q.get("lon")) } : loc ? { lat: loc.latitude, lon: loc.longitude } : null;
+const LOC = resolveLocation(CFG, Q);
 const NAMES = {
   place: CFG.place || "YOUR BLOCK",
   address: CFG.address || "Home",
@@ -103,20 +100,22 @@ const xSpans = spans(AVES, "x", AREA.x0, AREA.x1), zSpans = spans(STS, "z", AREA
 
 // ---------- textures: one window cell per 16x16 px, 16x16 cells, so a facade repeats it at world scale
 function windowTextures() {
-  const mk = () => { const c = document.createElement("canvas"); c.width = c.height = 256; return c; };
+  // One window per 16 world px, painted at 4x so that up close — on the stoop, in the doorway — a
+  // softened edge stays an edge and not a smear.
+  const SC = 4, S = 256 * SC;
+  const mk = () => { const c = document.createElement("canvas"); c.width = c.height = S; return c; };
   const d = mk(), e = mk(), g = d.getContext("2d"), h = e.getContext("2d");
-  g.fillStyle = "#e2ded6"; g.fillRect(0, 0, 256, 256);
-  h.fillStyle = "#000"; h.fillRect(0, 0, 256, 256);
-  const lit = ["#ffd27f", "#ffe3a6", "#ffc566", "#ffd9a0", "#bcd4ff"];
-  for (let cy = 0; cy < 16; cy++) for (let cx = 0; cx < 16; cx++) {
-    const x = cx * 16, y = cy * 16;
-    g.fillStyle = "#cfcac0"; g.fillRect(x, y, 16, 1);
-    g.fillStyle = "#3b4553"; g.fillRect(x + 4, y + 3, 8, 9);
-    g.fillStyle = "#64758a"; g.fillRect(x + 4, y + 3, 8, 2);
-    g.fillStyle = "#ffffff"; g.fillRect(x + 3, y + 12, 10, 1);
-    if (rng() < 0.17) { h.fillStyle = pick(lit); h.fillRect(x + 4, y + 3, 8, 9); }
-  }
-  const tex = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapNearestFilter; return t; };
+  g.fillStyle = "#efe3cd"; g.fillRect(0, 0, S, S);
+  h.fillStyle = "#000"; h.fillRect(0, 0, S, S);
+  g.scale(SC, SC); h.scale(SC, SC);
+  for (let cy = 0; cy < 16; cy++) for (let cx = 0; cx < 16; cx++) P.paintWindowCell(g, h, cx * 16, cy * 16, rng, pick);
+  g.setTransform(1, 0, 0, 1, 0, 0); P.grain(g, S, 40_000);
+  // The edges want to blur into the facade, so filter rather than point-sample.
+  const tex = (c) => {
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+    return t;
+  };
   return { map: tex(d), lit: tex(e) };
 }
 const WT = windowTextures();
@@ -130,13 +129,10 @@ function glowTexture() {
 
 // ---------- materials
 const lam = (color, extra) => new THREE.MeshLambertMaterial(Object.assign({ color }, extra || {}));
-const FAC = ["#a3563d", "#8c4433", "#b46b4b", "#7b4536", "#c6a47c", "#d9cba9", "#a59e91", "#cdc1a2", "#6f5c4e", "#938d86", "#b98c63", "#71899a", "#9aa7ad", "#c9b48e"];
+const FAC = P.FAC;
 const TOWER_FAC = [6, 9, 11, 12, 7, 5];
 const facMats = FAC.map((c) => lam(c, { map: WT.map, emissive: 0xffffff, emissiveMap: WT.lit, emissiveIntensity: 0 }));
-const BASE = {
-  asphalt: "#4a4a52", sidewalk: "#bcb4a3", yard: "#8a8b6b", roof: "#5d5953", roof2: "#77726a",
-  mark: "#e9e5da", yellow: "#d9b84a", bikeLane: "#3d8a58", trunk: "#5a4030", canopy: "#ffffff",
-};
+const BASE = P.BASE;
 const M = {
   asphalt: lam(BASE.asphalt), glass: new THREE.MeshLambertMaterial({ color: "#7fb3c4", transparent: true, opacity: 0.16, depthWrite: false }),
   sidewalk: lam(BASE.sidewalk), yard: lam(BASE.yard), roof: lam(BASE.roof), roof2: lam(BASE.roof2),
@@ -146,6 +142,7 @@ const M = {
   pole: lam("#3b3d44"), lampHead: new THREE.MeshBasicMaterial({ color: "#fff0c4" }),
   globe: new THREE.MeshBasicMaterial({ color: "#3fd37a" }), awning: ["#2f6e4f", "#a33a32", "#24486e", "#c08a2c", "#5b3e6e"].map((c) => lam(c)),
 };
+P.repaint(M);
 
 // ---------- geometry builder: plain arrays merged into a few big meshes (few draw calls)
 class Acc {
@@ -676,6 +673,7 @@ const leafPos = new Float32Array(LEAF_N * 3), leafGeo = new THREE.BufferGeometry
 leafGeo.setAttribute("position", new THREE.BufferAttribute(leafPos, 3));
 const leaves = new THREE.Points(leafGeo, new THREE.PointsMaterial({ color: "#c97a2e", size: 2, sizeAttenuation: false }));
 wxGroup.add(rain, snow, leaves);
+const scenery = P.createScenery(scene, AREA);
 const BOX = { x0: -140, x1: 260, z0: -160, z1: 190, y: 90 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 for (let i = 0; i < RAIN_N; i++) { const x = rnd(BOX.x0, BOX.x1), y = rnd(0, BOX.y), z = rnd(BOX.z0, BOX.z1); rainPos.set([x, y, z, x + 0.4, y + 2.2, z - 0.2], i * 6); }
@@ -714,20 +712,16 @@ sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 10, far: 1400 });
 sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
-const LOOKS = {
-  day: { sky: "#9fc6df", hemiSky: "#d6ebff", hemiGround: "#6f604c", hemiI: 0.66, sun: "#fff2d8", sunI: 0.9, az: 205, el: 48, win: 0, lamp: 0 },
-  dusk: { sky: "#e9a27a", hemiSky: "#f5b48c", hemiGround: "#3e2f48", hemiI: 0.5, sun: "#ff9b5a", sunI: 0.75, az: 250, el: 14, win: 0.55, lamp: 0.5 },
-  night: { sky: "#1a2142", hemiSky: "#6274b8", hemiGround: "#251d3a", hemiI: 0.78, sun: "#a9bcff", sunI: 0.34, az: 160, el: 50, win: 1, lamp: 1 },
-};
+const LOOKS = P.LOOKS;
 let look = null, todMode = "auto", wx = "clear", snowCover = 0;
 function nycHour() { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()); return parseInt(p, 10); }
 function currentTod() { if (todMode !== "auto") return todMode; const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night"; }
 const target = new THREE.Vector3(38, 0, 0);
 function applyLook() {
-  const L = LOOKS[currentTod()];
+  const tod = currentTod(), L = LOOKS[tod];
   const wet = wx === "rain" || wx === "snow";
   const dim = wet ? 0.72 : 1;
-  scene.background = new THREE.Color(L.sky).lerp(new THREE.Color("#7d8794"), wet ? 0.45 : 0);
+  scene.background = P.skyTexture(tod, wet);
   hemi.color.set(L.hemiSky); hemi.groundColor.set(L.hemiGround); hemi.intensity = L.hemiI * (wet ? 0.92 : 1) * PI;
   sun.color.set(L.sun); sun.intensity = L.sunI * (wet ? 0.35 : 1) * dim * PI;
   const az = L.az * Math.PI / 180, el = L.el * Math.PI / 180;
@@ -1024,11 +1018,11 @@ addEventListener("keydown", (e) => {
     }
     return;
   }
+  if (mode === "poi") { if (k === "Escape" || k === "Backspace") { e.preventDefault(); zoomOut(); } return; }
   if (mode !== "city" || flying) return;
-  const a = document.activeElement, ai = apps.indexOf(a);
-  if (k === "ArrowUp") { e.preventDefault(); chip.focus(); }
-  else if (k === "ArrowDown") { e.preventDefault(); if (ai < 0) apps[0].focus(); }
-  else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); if (ai >= 0) apps[clamp(ai + (k === "ArrowRight" ? 1 : -1), 0, apps.length - 1)].focus(); else apps[0].focus(); }
+  // Same ring as the TV: the signs, the Lights chip and the dock tiles are one plane of buttons.
+  if (k.startsWith("Arrow")) { e.preventDefault(); if (!sel) select(lastSel || POIS[1]); else navigate(k); }
+  else if (k === "Enter" || k === " ") { if (sel) { e.preventDefault(); enter(sel); } }
 });
 
 // ---------- points of interest
@@ -1042,16 +1036,21 @@ const POIS = [
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
   { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(33, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
+  // The dock tiles sit in the same ring as the signs, so Down off the block lands on them and Up comes
+  // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
+  ...apps.map((el, i) => ({ id: `app${i}`, el, app: true })),
 ];
 let sel = null, poi = null, lastSel = null;
 function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.id === "lights" ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
 function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
-/** Spatial move: the nearest sign in that direction (off-axis distance counts double). */
+/** On screen and reachable: not hidden by the TV, not faded out with the rest of the HUD. */
+const reachable = (el) => el.offsetParent !== null && el.style.opacity !== "0" && !el.closest(".hide");
+/** Spatial move: the nearest button in that direction (off-axis distance counts double). */
 function navigate(dir) {
   const from = centerOf(sel.el);
   let best = null, bestD = Infinity;
   for (const p of POIS) {
-    if (p === sel || p.el.style.opacity === "0") continue;
+    if (p === sel || !reachable(p.el)) continue;
     const c = centerOf(p.el), dx = c.x - from.x, dy = c.y - from.y;
     const main = dir === "ArrowRight" ? dx : dir === "ArrowLeft" ? -dx : dir === "ArrowDown" ? dy : -dy;
     if (main <= 8) continue;
@@ -1064,6 +1063,7 @@ function navigate(dir) {
 const poseFor = (p) => ({ pos: p.target.clone().add(dirOf(0.68, p.elev).multiplyScalar(p.dist)), target: p.target.clone(), fov: 30 });
 async function enter(p) {
   if (!p || flying) return;
+  if (p.app) return; // the dock tiles are a mock; selecting one is all they do
   if (p.id === "lights") { if (TV) toNative({ type: "openLights" }); else openHome(); return; }
   if (p.id === "home") { if (TV) toNative({ type: "viewHome" }); else openHome(); return; }
   flying = true; mode = "poi"; poi = p;
@@ -1125,7 +1125,11 @@ function command(type) {
   if (type === "reset") { select(null); if (mode === "poi") zoomOut(); return true; }
   return false;
 }
-for (const p of POIS) { p.el.style.pointerEvents = "auto"; p.el.style.cursor = "pointer"; if (p.id !== "lights") p.el.addEventListener("click", () => enter(p)); }
+// The mouse agrees with the remote: clicking a button selects it, then does whatever it does.
+for (const p of POIS) {
+  p.el.style.pointerEvents = "auto"; p.el.style.cursor = "pointer";
+  if (p.id !== "lights") p.el.addEventListener("click", () => { select(p); enter(p); });
+}
 
 // mock controls
 document.getElementById("mock").addEventListener("click", (e) => {
@@ -1161,59 +1165,48 @@ setInterval(bikeEvent, 9000);
 
 // ---------- live data
 let liveTrains = false, liveBikes = false, wxForced = false, wxTemp = null, wxLabel = null;
-async function getJson(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.json(); }
 async function pollTrains() {
-  try {
-    if (!NAMES.station.stop) return;
-    const d = await getJson(`/mta.json?stop=${encodeURIComponent(NAMES.station.stop)}`);
-    const nowS = Date.now() / 1000;
-    for (const [k, list] of [["down", d.downtown], ["up", d.uptown]]) {
-      const tr = trains[k];
-      const next = list.find((a) => a.at > nowS - DWELL);
-      const at = next ? clockS + (next.at - nowS) : clockS + 9999;
-      const cur = tr.next - clockS;
-      // A train at the platform or pulling out finishes its run; the next one waits its turn.
-      if (liveTrains && cur <= 0 && cur > -(DWELL + 30) && (!next || next.at - nowS > 30)) { tr.queued = at; tr.queuedRoute = next ? next.route : ""; }
-      else { tr.next = at; tr.route = next ? next.route : ""; tr.queued = null; }
-      tr.list = list.filter((a) => a.at > nowS - 30).slice(0, 4).map((a) => ({ route: a.route, at: clockS + (a.at - nowS) }));
-    }
-    liveTrains = true;
-  } catch { /* no bridge (plain preview): the sample schedule keeps running */ }
+  const d = await fetchTrains(NAMES.station.stop);
+  if (!d) return; // no bridge (plain preview): the sample schedule keeps running
+  const nowS = Date.now() / 1000;
+  for (const [k, list] of [["down", d.downtown], ["up", d.uptown]]) {
+    const tr = trains[k];
+    const next = list.find((a) => a.at > nowS - DWELL);
+    const at = next ? clockS + (next.at - nowS) : clockS + 9999;
+    const cur = tr.next - clockS;
+    // A train at the platform or pulling out finishes its run; the next one waits its turn.
+    if (liveTrains && cur <= 0 && cur > -(DWELL + 30) && (!next || next.at - nowS > 30)) { tr.queued = at; tr.queuedRoute = next ? next.route : ""; }
+    else { tr.next = at; tr.route = next ? next.route : ""; tr.queued = null; }
+    tr.list = list.filter((a) => a.at > nowS - 30).slice(0, 4).map((a) => ({ route: a.route, at: clockS + (a.at - nowS) }));
+  }
+  liveTrains = true;
 }
 async function pollBikes() {
-  try {
-    const d = await getJson("/citibike.json");
-    d.stations.forEach((st, i) => {
-      const dk = DOCKS.find((k) => k.name === st.name) || DOCKS[i];
-      if (!dk) return;
-      const before = dk.ebikes + dk.classic;
-      dk.ebikes = st.ebikes; dk.classic = st.classic; dk.free = st.docks; dk.capacity = st.capacity;
-      const after = dk.ebikes + dk.classic;
-      if (after !== before || !liveBikes) layoutDock(dk, after > before && liveBikes ? Math.min(after, dk.slots) - 1 : undefined);
-    });
-    liveBikes = true;
-  } catch { /* sample counts */ }
+  const d = await fetchBikes();
+  if (!d) return; // sample counts
+  d.stations.forEach((st, i) => {
+    const dk = DOCKS.find((k) => k.name === st.name) || DOCKS[i];
+    if (!dk) return;
+    const before = dk.ebikes + dk.classic;
+    dk.ebikes = st.ebikes; dk.classic = st.classic; dk.free = st.docks; dk.capacity = st.capacity;
+    const after = dk.ebikes + dk.classic;
+    if (after !== before || !liveBikes) layoutDock(dk, after > before && liveBikes ? Math.min(after, dk.slots) - 1 : undefined);
+  });
+  liveBikes = true;
 }
-const WMO = (c) => c === 0 ? "Clear" : c <= 2 ? "Partly cloudy" : c === 3 ? "Cloudy" : c <= 48 ? "Fog" : c <= 57 ? "Drizzle" : c <= 67 ? "Rain" : c <= 77 ? "Snow" : c <= 82 ? "Showers" : c <= 86 ? "Snow" : "Storm";
 async function pollWeather() {
   if (wxForced || !LOC) return;
-  try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${LOC.lat}&longitude=${LOC.lon}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York`;
-    const c = (await getJson(u)).current;
-    const code = c.weather_code;
-    const next = (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95 ? "rain" : (code >= 71 && code <= 77) || code === 85 || code === 86 ? "snow" : c.wind_speed_10m >= 18 ? "wind" : "clear";
-    wxTemp = Math.round(c.temperature_2m); wxLabel = next === "wind" ? "Windy" : WMO(code);
-    if (next !== wx) { wx = next; applyLook(); }
-    tickClock();
-  } catch { /* keep the last look */ }
+  const c = await fetchWeather(LOC);
+  if (!c) return; // keep the last look
+  wxTemp = c.temp; wxLabel = c.label;
+  if (c.kind !== wx) { wx = c.kind; applyLook(); }
+  tickClock();
 }
 // Remote control of the music panel: row 0 = the group's transport, rows 1… = a room's volume.
 let musicSel = 0, musicRooms = [];
 async function sonosAct(id, action) {
-  try {
-    const r = await fetch(`/api/home/devices/${encodeURIComponent(id)}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
-    if (r.ok) { const d = await r.json(); if (d && d.id) SPEAKERS.set(d.id, d); }
-  } catch { /* the next event brings the real state */ }
+  const d = await deviceAction(id, action);
+  if (d) SPEAKERS.set(d.id, d);
   lastSigns = 0;
 }
 function musicCmd(cmd) {
@@ -1287,18 +1280,8 @@ function applyDevice(d) {
   if (typeof d.state.brightness === "number") l.b = d.state.brightness;
   l.tone = null;
 }
-function connectHome() {
-  if (typeof EventSource === "undefined") return;
-  const es = new EventSource("/api/home/events");
-  es.onmessage = (e) => {
-    let ev; try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.type === "snapshot") (ev.snapshot && ev.snapshot.devices || []).forEach(applyDevice);
-    else if (ev.type === "device") applyDevice(ev.device);
-    else return;
-    updateLamps();
-  };
-}
-pollTrains(); pollBikes(); pollWeather(); connectHome();
+pollTrains(); pollBikes(); pollWeather();
+connectDevices((d) => { applyDevice(d); updateLamps(); });
 setInterval(pollTrains, 20_000); setInterval(pollBikes, 30_000); setInterval(pollWeather, 10 * 60_000);
 
 // The TV launcher drives the page: Lights opens the home (fly-in), Back closes it, the selected lamp glows.
@@ -1336,6 +1319,7 @@ function frame(now) {
   updatePeople(dt, clockS, wx);
   updateWeather(dt, clockS, wx);
   updateSnowCover(dt);
+  scenery(dt, clockS, look.lamp);
   placeTrain(trains.down, clockS); placeTrain(trains.up, clockS);
   // trees sway (much more when it is windy)
   const amp = wx === "wind" ? 0.22 : 0.035;
