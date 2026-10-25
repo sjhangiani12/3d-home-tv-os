@@ -542,9 +542,11 @@ for (let i = 0; i < NP; i++) { bodyP.setColorAt(i, tmpC.set(pick(COATS))); headP
 riders.forEach((r, k) => bodyP.setColorAt(walkers.length + k, tmpC.set(pick(COATS))));
 bodyP.instanceColor.needsUpdate = headP.instanceColor.needsUpdate = umbP.instanceColor.needsUpdate = true;
 
-// Citi Bike docks (west, on the street south of home; east, on the next avenue) and the bikes in them.
+// Citi Bike docks and the bikes in them. The west one stands in the parking lane of the street south of
+// home, a block further west than the house — one avenue over, where the real one is. The east one is on
+// the next avenue. Both sit inside the kerb, in the roadbed, the way the city actually docks them.
 const DOCKS = [
-  { name: NAMES.docks[0].name, side: NAMES.docks[0].side, slots: 26, ebikes: 10, classic: 12, axis: "x", x0: 19.5, fixed: 74.2, anchor: [33, 4, 74] },
+  { name: NAMES.docks[0].name, side: NAMES.docks[0].side, slots: 26, ebikes: 10, classic: 12, axis: "x", x0: -60.5, fixed: 74.2, anchor: [-47, 22, 74] },
   { name: NAMES.docks[1].name, side: NAMES.docks[1].side, slots: 26, ebikes: 10, classic: 1, axis: "z", x0: 44.5, fixed: 187.6, anchor: [188, 4, 58] },
 ];
 const bikeFrames = [];
@@ -1040,7 +1042,7 @@ const POIS = [
   { id: "home", el: homeSign.el },
   { id: "music", el: musicSign.el, target: new THREE.Vector3(46.5, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
-  { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(33, 0, 74.2), dist: 40, elev: 1.25 },
+  { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(-47, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
   // The dock tiles sit in the same ring as the signs, so Down off the block lands on them and Up comes
   // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
