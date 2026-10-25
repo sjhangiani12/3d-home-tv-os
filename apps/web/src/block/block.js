@@ -849,6 +849,9 @@ function sign(html, at, cls) { const el = document.createElement("div"); el.clas
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
 const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
+// What the speakers play: a sign over the home's far end, and notes rising off the roof while it plays.
+const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
+const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [46.5, HOME.floors * FH + 1, 12], "notes");
 for (const av of AVES) sign(av.name, [av.x, 0.5, 120], "street");
 for (const st of STS) if (Math.abs(st.z) <= 160) sign(st.name, [100, 0.5, st.z], "street").el.style.fontSize = "14px";
 const roomSigns = ROOMS.map((r) => { const s = sign(r.name, [HOUSE.x + r.label[0], 1.8, HOUSE.z + r.label[2]], "room"); s.city = false; return s; });
@@ -868,13 +871,14 @@ function renderSigns(now) {
   });
   const on = LAMPS.filter((l) => l.on).length;
   homeSign.el.innerHTML = `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`;
+  renderMusic();
   renderChip();
   if (poi) renderDetail(now);
 }
 const v3 = new THREE.Vector3();
 function projectSigns() {
   for (const s of signs) {
-    const show = mode === "home" ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost;
+    const show = !s.off && (mode === "home" ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
     v3.copy(s.at).project(camera);
     const vis = show && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05;
     s.el.style.opacity = vis ? "1" : "0";
@@ -995,6 +999,7 @@ function focusDrawer(i) { const items = drawerItems(); (items[i] || items[0]).fo
 const drawerItems = () => [...drawer.querySelectorAll(".pill, .lamp")];
 addEventListener("keydown", (e) => {
   const k = e.key;
+  if (mode === "poi" && poi && poi.id === "music" && !flying && musicKey(k)) { e.preventDefault(); return; }
   if (TV) {
     e.preventDefault();
     if (mode === "poi") { if (k === "Escape" || k === "Backspace") zoomOut(); return; }
@@ -1033,6 +1038,7 @@ stage.appendChild(detailHost);
 const POIS = [
   { id: "lights", el: chip },
   { id: "home", el: homeSign.el },
+  { id: "music", el: musicSign.el, target: new THREE.Vector3(46.5, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
   { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(33, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
@@ -1077,14 +1083,33 @@ async function zoomOut() {
   cityHud.forEach((e) => e.classList.remove("hide"));
   toNative({ type: "poi", on: false });
 }
+let detailHtml = "";
 function renderDetail(now) {
   if (!poi) return;
+  if (poi.id !== "music") detailHtml = "";
   if (poi.id === "train") {
     const rows = (label, tr) => {
       const list = (tr.list && tr.list.length ? tr.list : [{ route: tr.route || "6", at: tr.next }]).filter((a) => a.at - now > -DWELL).slice(0, 3);
       return `<div class="drow"><span class="dlabel">${label}</span>${list.length ? list.map((a) => `<span class="dtrain">${bullet(a.route, true)}<b>${mins(Math.max(0, a.at - now))}</b></span>`).join("") : "<b>–</b>"}</div>`;
     };
     detailHost.innerHTML = `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`;
+  } else if (poi.id === "music") {
+    const np = nowPlaying();
+    if (!np) { detailHost.innerHTML = `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`; return; }
+    const m = np.state.media;
+    const rooms = [...SPEAKERS.values()].sort((a, b) => (b.state.volume ?? -1) - (a.state.volume ?? -1));
+    musicRooms = rooms;
+    musicSel = clamp(musicSel, 0, rooms.length);
+    const ctl = np.capabilities && np.capabilities.media || [];
+    const btn = (cmd, label, ok) => `<button type="button" class="tbtn${ok ? "" : " dis"}" data-cmd="${cmd}"${ok ? "" : " disabled"}>${label}</button>`;
+    const html = `<div class="np">${artImg(m.artworkUrl, 32, "big")}<div class="nptxt"><div class="t">${esc(m.title || "Playing")}</div>
+      <div class="s">${esc([m.artist, m.album].filter(Boolean).join(" · "))}</div><div class="src${m.app === "Spotify" ? " spotify" : ""}">${m.state === "paused" ? "Paused · " : ""}${esc(m.app || "Sonos")}</div>
+      <div class="transport${musicSel === 0 ? " sel" : ""}">${btn("previous", "⏮", ctl.includes("previous"))}${btn("playPause", m.state === "playing" ? "❚❚" : "▶", ctl.includes("play"))}${btn("next", "⏭", ctl.includes("next"))}</div></div></div>
+      <div class="spk">${rooms.map((d, i) => { const dm = d.state.media || {}; const here = (m.group || [np.name]).includes(d.name);
+        return `<div class="spkrow${here && dm.state === "playing" ? " on" : ""}${musicSel === i + 1 ? " sel" : ""}" data-room="${i + 1}"><span class="nm">${esc(d.name)}</span><span class="vol"><i style="width:${d.state.volume ?? 0}%"></i></span><span class="st">${!d.state.reachable ? "offline" : here ? (dm.state === "playing" ? `♪ ${d.state.volume ?? ""}` : "paused") : dm.state === "playing" ? esc(dm.title || "other") : "idle"}</span></div>`; }).join("")}</div>
+      <div class="dhint">${musicSel === 0 ? "OK play / pause · ← → skip" : "← → volume"} · ↑ ↓ choose · Back to the block</div>`;
+    // Unchanged panel: keep its nodes (a click in progress keeps its target).
+    if (html !== detailHtml) { detailHtml = html; detailHost.innerHTML = html; }
   } else {
     const d = poi.dock;
     detailHost.innerHTML = `<div class="dhead"><span class="t">${d.name}</span><span class="s">${d.side}</span></div>
@@ -1182,8 +1207,79 @@ async function pollWeather() {
     tickClock();
   } catch { /* keep the last look */ }
 }
+// Remote control of the music panel: row 0 = the group's transport, rows 1… = a room's volume.
+let musicSel = 0, musicRooms = [];
+async function sonosAct(id, action) {
+  try {
+    const r = await fetch(`/api/home/devices/${encodeURIComponent(id)}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
+    if (r.ok) { const d = await r.json(); if (d && d.id) SPEAKERS.set(d.id, d); }
+  } catch { /* the next event brings the real state */ }
+  lastSigns = 0;
+}
+function musicCmd(cmd) {
+  const np = nowPlaying(); if (!np) return;
+  const ctl = np.capabilities && np.capabilities.media || [];
+  if (cmd === "playPause" ? !ctl.includes("play") : !ctl.includes(cmd)) return;
+  if (cmd === "playPause") np.state.media.state = np.state.media.state === "playing" ? "paused" : "playing";
+  sonosAct(np.id, { type: "media", command: cmd });
+}
+function musicVolume(i, delta) {
+  const d = musicRooms[i - 1]; if (!d || typeof d.state.volume !== "number") return;
+  d.state.volume = clamp(d.state.volume + delta * 3, 0, 100);
+  sonosAct(d.id, { type: "volume", value: d.state.volume });
+}
+/** A key in the music panel; true when used. */
+function musicKey(k) {
+  if (k === "ArrowUp" || k === "ArrowDown") { musicSel = clamp(musicSel + (k === "ArrowDown" ? 1 : -1), 0, musicRooms.length); lastSigns = 0; return true; }
+  if (k === "ArrowLeft" || k === "ArrowRight") { if (musicSel === 0) musicCmd(k === "ArrowRight" ? "next" : "previous"); else musicVolume(musicSel, k === "ArrowRight" ? 1 : -1); return true; }
+  if (k === "Enter" || k === " ") { if (musicSel === 0) musicCmd("playPause"); return true; }
+  return false;
+}
+detailHost.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cmd]"); if (b) { musicSel = 0; musicCmd(b.dataset.cmd); return; }
+  const row = e.target.closest("[data-room]"); if (!row) return;
+  const i = Number(row.dataset.room), bar = row.querySelector(".vol").getBoundingClientRect();
+  musicSel = i;
+  const d = musicRooms[i - 1]; if (!d) return;
+  if (e.clientX >= bar.left && e.clientX <= bar.right) { d.state.volume = Math.round(clamp((e.clientX - bar.left) / bar.width, 0, 1) * 100); sonosAct(d.id, { type: "volume", value: d.state.volume }); }
+});
+
+// The Sonos speakers (one device per room; a group's rooms share its media, media.group names them).
+const SPEAKERS = new Map();
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+/** The group to show: one playing (most rooms first), else one paused. */
+function nowPlaying() {
+  const ds = [...SPEAKERS.values()].filter((d) => d.state.reachable && d.state.media && d.state.media.state !== "idle");
+  const rank = (d) => (d.state.media.state === "playing" ? 100 : 0) + (d.state.media.group || [d.name]).length;
+  return ds.sort((a, b) => rank(b) - rank(a))[0] || null;
+}
+// Covers drawn as pixel art: shrunk to n×n, shown scaled up with hard pixels.
+const ART = new Map();
+function artImg(url, n, cls) {
+  if (!url) return `<span class="art ${cls || ""} none">♪</span>`;
+  const key = `${url}|${n}`;
+  if (!ART.has(key)) {
+    ART.set(key, null);
+    const img = new Image();
+    img.onload = () => { const c = document.createElement("canvas"); c.width = c.height = n; const g = c.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(img, 0, 0, n, n); ART.set(key, c.toDataURL()); lastSigns = 0; };
+    img.src = url;
+  }
+  const data = ART.get(key);
+  return data ? `<img class="art ${cls || ""}" src="${data}" alt="">` : `<span class="art ${cls || ""} none">♪</span>`;
+}
+function renderMusic() {
+  const np = nowPlaying();
+  musicSign.off = !np; notesSign.off = !np || np.state.media.state !== "playing";
+  if (!np) return;
+  const m = np.state.media, rooms = m.group || [np.name];
+  const html = `<div class="row">${artImg(m.artworkUrl, 16)}<div><div class="t">${esc(m.title || "Playing")}</div><div class="s">${esc(m.artist || m.app || "")}</div>
+    <div class="s src">${m.state === "paused" ? "❚❚ " : "♪ "}${esc(m.app || "Sonos")} · ${rooms.length > 1 ? `${rooms.length} rooms` : esc(rooms[0])}</div></div></div>`;
+  if (musicSign.el.innerHTML !== html) musicSign.el.innerHTML = html;
+}
+
 // The home's lamps: the bridge's event stream (a snapshot, then one event per change), cookie auth.
 function applyDevice(d) {
+  if (d && d.source === "sonos") { SPEAKERS.set(d.id, d); return; }
   const m = /^hue:light:(\d+)$/.exec(d.id || "");
   const l = m && LAMPS.find((x) => String(x.id) === m[1]);
   if (!l || !d.state) return;

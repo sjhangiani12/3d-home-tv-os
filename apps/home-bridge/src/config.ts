@@ -67,6 +67,8 @@ export interface BridgeConfig {
    * `python` = bin directory of the pyatv venv.
    */
   homepod: { enabled: boolean; host: string; ip: string | null; id: string | null; name: string; room: string; python: string };
+  /** Sonos speakers over their local API (read-only). `hosts` = speaker IPs to ask first; empty = SSDP discovery. */
+  sonos: { enabled: boolean; hosts: string[]; pollMs: number };
 }
 
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -142,6 +144,7 @@ export function defaultConfig(): BridgeConfig {
       room: "Salon",
       python: "~/.config/appart3d/pyatv-venv/bin",
     },
+    sonos: { enabled: true, hosts: [], pollMs: 3000 },
   };
 }
 
@@ -155,7 +158,7 @@ export function mergeConfig(defaults: BridgeConfig, saved: unknown): BridgeConfi
   const out: Record<string, unknown> = { ...defaults };
   for (const [k, v] of Object.entries(saved)) {
     const d = (defaults as unknown as Record<string, unknown>)[k];
-    if (isObj(d) && isObj(v) && (k === "hue" || k === "homeAssistant" || k === "roles" || k === "location" || k === "homepod")) out[k] = { ...d, ...v };
+    if (isObj(d) && isObj(v) && (k === "hue" || k === "homeAssistant" || k === "roles" || k === "location" || k === "homepod" || k === "sonos")) out[k] = { ...d, ...v };
     else out[k] = v;
   }
   const cfg = out as unknown as BridgeConfig;

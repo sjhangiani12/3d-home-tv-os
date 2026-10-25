@@ -10,6 +10,7 @@ import { lanAddresses } from "./lan.ts";
 import { errMsg, logger } from "./log.ts";
 import { MockAdapter } from "./mock.ts";
 import { RobotClient } from "./robot.ts";
+import { SonosAdapter } from "./sonos.ts";
 import { createBridgeServer, type ServerState } from "./server.ts";
 import type { Adapter } from "./types.ts";
 
@@ -33,6 +34,7 @@ if (mock) {
   }
   if (config.homepod?.enabled) adapters.push(new HomePodAdapter(config.homepod));
   else log.info("HomePod désactivé (homepod.enabled)");
+  if (config.sonos?.enabled) adapters.push(new SonosAdapter(config.sonos));
   if (config.robotUrl) robot = new RobotClient(config.robotUrl, config.robotKey);
   else log.info("robot désactivé (robotUrl non renseigné)");
 }

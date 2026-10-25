@@ -5,7 +5,7 @@
  */
 
 export type DeviceKind = "light" | "plug" | "fan" | "tv" | "remote" | "speaker";
-export type DeviceSource = "hue" | "homeassistant" | "robot" | "mock" | "airplay";
+export type DeviceSource = "hue" | "homeassistant" | "robot" | "mock" | "airplay" | "sonos";
 
 /** Transport commands of a media device (speaker; the bridge only accepts those listed in `capabilities.media`). */
 export type MediaCommand = "play" | "pause" | "playPause" | "next" | "previous";
@@ -22,6 +22,8 @@ export interface MediaInfo {
   artist?: string;
   album?: string;
   app?: string;
+  /** Additive (Sonos): every room playing this together, the group's lead first. Absent for a lone room. */
+  group?: string[];
   /** TV channel (Home Assistant `media_channel`). */
   channel?: string;
   /**

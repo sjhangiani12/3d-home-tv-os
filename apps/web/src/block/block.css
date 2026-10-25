@@ -100,3 +100,33 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .detail .drow.big { font-size: 56px; font-weight: 700; gap: 40px; }
 .detail .drow.big small { font-size: 20px; font-weight: 500; color: var(--muted); margin-left: 8px; }
 .detail .dhint { font-size: 18px; color: var(--muted); }
+
+/* Now playing (Sonos): the cover as pixel art, the rooms with their volume. */
+.art { width: 64px; height: 64px; image-rendering: pixelated; border: 3px solid var(--ink); flex: none; display: grid; place-items: center; background: var(--paper-2); font-size: 30px; }
+.art.big { width: 168px; height: 168px; font-size: 72px; }
+.sign .src { font-size: 15px; letter-spacing: 0.04em; }
+.notes { position: absolute; left: 0; top: 0; pointer-events: none; width: 120px; height: 160px; transition: opacity 300ms ease; }
+.notes i { position: absolute; bottom: 0; font: 700 34px/1 var(--font-pixel); font-style: normal; color: var(--paper); text-shadow: 3px 3px 0 rgba(10, 8, 20, 0.6); opacity: 0; animation: note 3.6s steps(12) infinite; }
+.notes i:nth-child(1) { left: 20px; }
+.notes i:nth-child(2) { left: 56px; animation-delay: 1.2s; color: var(--warm); }
+.notes i:nth-child(3) { left: 88px; animation-delay: 2.4s; }
+@keyframes note { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 1; } 50% { transform: translate(10px, -70px); } 85% { opacity: 1; } 100% { transform: translate(-6px, -140px); opacity: 0; } }
+.detail .np { display: flex; gap: 24px; align-items: center; }
+.detail .np .t { font-size: 40px; font-weight: 700; line-height: 1.05; max-width: 560px; }
+.detail .np .s { font-size: 22px; color: var(--muted); margin-top: 6px; }
+.detail .np .src { font-size: 20px; margin-top: 12px; color: var(--ink); font-weight: 600; }
+.detail .np .src.spotify { color: #1db954; }
+.detail .spk { display: flex; flex-direction: column; gap: 8px; }
+.detail .spkrow { display: grid; grid-template-columns: 220px 160px 1fr; align-items: center; gap: 16px; font-size: 22px; color: var(--muted); }
+.detail .spkrow.on { color: var(--ink); }
+.detail .spkrow .vol { height: 10px; background: rgba(28, 26, 36, 0.15); border: 2px solid var(--ink); }
+.detail .spkrow .vol i { display: block; height: 100%; background: #e2a73a; }
+@media (prefers-reduced-motion: reduce) { .notes i { animation: none; opacity: 1; } }
+.notes { z-index: 0; } .sign { z-index: 1; }
+.detail { pointer-events: auto; }
+.detail .transport { display: flex; gap: 10px; margin-top: 14px; padding: 4px; border: 3px solid transparent; width: max-content; }
+.detail .transport.sel { border-color: var(--ink); background: var(--focus); }
+.detail .tbtn { font: 700 26px/1 var(--font-pixel); width: 64px; height: 48px; color: var(--paper); background: var(--ink); border: 3px solid var(--ink); cursor: pointer; }
+.detail .tbtn.dis { opacity: 0.3; cursor: default; }
+.detail .spkrow { padding: 4px 8px; border: 3px solid transparent; cursor: pointer; }
+.detail .spkrow.sel { border-color: var(--ink); background: var(--focus); color: var(--ink); }
