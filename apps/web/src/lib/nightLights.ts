@@ -189,7 +189,7 @@ export function pickKeyLight(selected: readonly LampSource[], focus: Vec3): Lamp
   return best;
 }
 
-/* ------------------------------------------------------------------ Maison mode */
+/* ------------------------------------------------------------------ Home mode */
 
 /** Suffix of the extra light source of a light strip linked to a screen item. */
 export const STRIP_SUFFIX = "#strip";
@@ -215,7 +215,7 @@ export function stripSource(item: Item, scene: Pick<Scene, "walls" | "rooms">): 
 }
 
 /**
- * Maison mode: what each source shows from the linked devices. `null` = not driven by a device
+ * Home mode: what each source shows from the linked devices. `null` = not driven by a device
  * (keeps the usual night look); a GlowLook with `on: false` = dark.
  */
 export function homeLightMap(sources: readonly LampSource[], byItem: ReadonlyMap<string, Device[]>): Map<string, GlowLook | null> {
@@ -236,5 +236,5 @@ export function sourceFactor(look: GlowLook | null | undefined, nightMix: number
   return (0.4 + 0.6 * look.level) * Math.max(nightMix, HOME_DAY_FACTOR);
 }
 
-/** In daylight, lit lamps still cast a visible warm pool in Maison mode. */
+/** In daylight, lit lamps still cast a visible warm pool in Home mode. */
 export const HOME_DAY_FACTOR = 0.5;

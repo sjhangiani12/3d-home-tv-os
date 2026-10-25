@@ -85,17 +85,17 @@ function WelcomeSheet({ onClose }: { onClose: () => void }) {
     fn();
   };
   return (
-    <Modal label="Bienvenue dans Appart3D" className="welcome" onClose={onClose}>
-      <button className="icon-btn ghost modal-close" onClick={onClose} aria-label="Fermer">
+    <Modal label="Welcome to Appart3D" className="welcome" onClose={onClose}>
+      <button className="icon-btn ghost modal-close" onClick={onClose} aria-label="Close">
         <IconClose />
       </button>
       <div className="welcome-hero" aria-hidden>
         <HouseIllustration />
       </div>
       <div className="welcome-body">
-        <p className="eyebrow">Bienvenue</p>
-        <h2>Votre appartement, en maquette 3D</h2>
-        <p className="lead">Scannez vos pièces avec un iPhone, puis aménagez-les ici : déplacez les meubles, essayez des couleurs et prenez de jolies photos.</p>
+        <p className="eyebrow">Welcome</p>
+        <h2>Your home, as a 3D model</h2>
+        <p className="lead">Scan your rooms with an iPhone, then arrange them here: move furniture, try colors and take nice photos.</p>
 
         <div className="welcome-actions">
           <button className="action-card is-primary" data-autofocus onClick={act(() => useStore.getState().setMode("arrange"))}>
@@ -103,8 +103,8 @@ function WelcomeSheet({ onClose }: { onClose: () => void }) {
               <IconSofa />
             </span>
             <span className="action-text">
-              <strong>Explorer l'appartement démo</strong>
-              <small>Un deux-pièces meublé, prêt à aménager</small>
+              <strong>Explore the demo apartment</strong>
+              <small>A furnished one-bedroom, ready to arrange</small>
             </span>
             <IconArrowRight className="action-go" />
           </button>
@@ -113,8 +113,8 @@ function WelcomeSheet({ onClose }: { onClose: () => void }) {
               <IconScan />
             </span>
             <span className="action-text">
-              <strong>Charger le scan exemple</strong>
-              <small>Un vrai scan RoomPlan, pour voir le résultat</small>
+              <strong>Load the sample scan</strong>
+              <small>A real RoomPlan scan, to see the result</small>
             </span>
             <IconArrowRight className="action-go" />
           </button>
@@ -123,8 +123,8 @@ function WelcomeSheet({ onClose }: { onClose: () => void }) {
               <IconUpload />
             </span>
             <span className="action-text">
-              <strong>Importer mon scan iPhone</strong>
-              <small>Fichier .appart3d.json — ou glissez-le dans la fenêtre</small>
+              <strong>Import my iPhone scan</strong>
+              <small>An .appart3d.json file, or drag it into the window</small>
             </span>
             <IconArrowRight className="action-go" />
           </button>
@@ -132,19 +132,19 @@ function WelcomeSheet({ onClose }: { onClose: () => void }) {
 
         <div className={`howto${howTo ? " is-open" : ""}`}>
           <button className="howto-toggle" aria-expanded={howTo} onClick={() => setHowTo(!howTo)}>
-            <IconPhone width={16} height={16} /> Comment scanner mon appartement ?
+            <IconPhone width={16} height={16} /> How do I scan my home?
             <IconChevronDown className="chev" width={14} height={14} />
           </button>
           {howTo && (
             <ol className="howto-steps">
               <li>
-                Ouvrez l'app <strong>Appart3D</strong> sur un iPhone ou iPad équipé du LiDAR (modèles Pro).
+                Open the <strong>Appart3D</strong> app on an iPhone or iPad with LiDAR (Pro models).
               </li>
-              <li>Scannez chaque pièce en balayant lentement les murs, les portes, les fenêtres et les meubles.</li>
+              <li>Scan each room. Sweep slowly across the walls, doors, windows and furniture.</li>
               <li>
-                Exportez le fichier <code>.appart3d.json</code> (AirDrop, Fichiers, e-mail…).
+                Export the <code>.appart3d.json</code> file (AirDrop, Files, email…).
               </li>
-              <li>Importez-le ici, ou glissez-le n'importe où dans la fenêtre.</li>
+              <li>Import it here, or drop it anywhere in the window.</li>
             </ol>
           )}
         </div>
@@ -175,43 +175,43 @@ function HouseIllustration() {
 
 const SHORTCUTS: { title: string; rows: [string[], string][] }[] = [
   {
-    title: "Général",
+    title: "General",
     rows: [
-      [["1"], "Naviguer"],
-      [["2"], "Aménager"],
-      [["3"], "Pièces"],
+      [["1"], "Navigate"],
+      [["2"], "Arrange"],
+      [["3"], "Rooms"],
       [["4"], "Photo"],
-      [["Ctrl", "+", "Z"], "Annuler"],
-      [["Ctrl", "+", "Maj", "+", "Z"], "Rétablir"],
-      [["?"], "Afficher cette aide"],
-      [["Échap"], "Désélectionner / fermer"],
+      [["Ctrl", "+", "Z"], "Undo"],
+      [["Ctrl", "+", "Shift", "+", "Z"], "Redo"],
+      [["?"], "Show this help"],
+      [["Esc"], "Deselect / close"],
     ],
   },
   {
-    title: "Vue",
+    title: "View",
     rows: [
-      [["Glisser"], "Tourner autour"],
-      [["Clic droit"], "Déplacer la vue"],
-      [["Molette"], "Zoomer"],
-      [["Flèches", "/", "WASD"], "Se déplacer"],
-      [["Q", "/", "E"], "Pivoter de 45°"],
-      [["0"], "Vue d'ensemble"],
-      [["M"], "Murs abaissés / pleins"],
-      [["N"], "Version jour / nuit"],
-      [["P"], "Diaporama (Échap pour quitter)"],
-      [["Double-clic"], "Cadrer une pièce"],
+      [["Drag"], "Orbit"],
+      [["Right-click"], "Pan the view"],
+      [["Scroll"], "Zoom"],
+      [["Arrows", "/", "WASD"], "Move around"],
+      [["Q", "/", "E"], "Rotate 45°"],
+      [["0"], "Overview"],
+      [["M"], "Low / full walls"],
+      [["N"], "Day / night"],
+      [["P"], "Slideshow (Esc to exit)"],
+      [["Double-click"], "Frame a room"],
     ],
   },
   {
-    title: "Aménager",
+    title: "Arrange",
     rows: [
-      [["Glisser"], "Déplacer un meuble"],
-      [["Alt"], "Sans aimantation"],
-      [["R"], "Pivoter de 15°"],
-      [["Maj", "+", "R"], "Pivoter de −15°"],
-      [["F"], "Cadrer le meuble"],
-      [["Ctrl", "+", "D"], "Dupliquer"],
-      [["Suppr"], "Supprimer"],
+      [["Drag"], "Move a piece of furniture"],
+      [["Alt"], "No snapping"],
+      [["R"], "Rotate 15°"],
+      [["Shift", "+", "R"], "Rotate −15°"],
+      [["F"], "Frame the furniture"],
+      [["Ctrl", "+", "D"], "Duplicate"],
+      [["Delete"], "Delete"],
     ],
   },
 ];
@@ -219,10 +219,10 @@ const SHORTCUTS: { title: string; rows: [string[], string][] }[] = [
 function HelpOverlay({ onClose }: { onClose: () => void }) {
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   return (
-    <Modal label="Raccourcis clavier" className="help" onClose={onClose}>
+    <Modal label="Keyboard shortcuts" className="help" onClose={onClose}>
       <div className="modal-head">
-        <h2>Raccourcis clavier</h2>
-        <button className="icon-btn ghost" onClick={onClose} aria-label="Fermer">
+        <h2>Keyboard shortcuts</h2>
+        <button className="icon-btn ghost" onClick={onClose} aria-label="Close">
           <IconClose />
         </button>
       </div>
@@ -316,8 +316,8 @@ function DropOverlay() {
         <span className="drop-icon">
           <IconUpload width={30} height={30} />
         </span>
-        <strong>Déposez votre fichier ici</strong>
-        <span>Scan iPhone (.appart3d.json) ou scène Appart3D exportée</span>
+        <strong>Drop your file here</strong>
+        <span>iPhone scan (.appart3d.json) or exported Appart3D scene</span>
       </div>
     </div>
   );

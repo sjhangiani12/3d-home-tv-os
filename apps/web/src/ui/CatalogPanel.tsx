@@ -9,9 +9,9 @@ import { SearchField } from "./SearchField";
 import { IconPlus } from "./icons";
 
 type Group = CatalogEntry["group"];
-const GROUP_ORDER: Group[] = ["Salon", "Chambre", "Cuisine", "Salle de bain", "Bureau", "Déco", "Divers"];
+const GROUP_ORDER: Group[] = ["Living room", "Bedroom", "Kitchen", "Bathroom", "Office", "Decor", "Misc"];
 
-const fmt = (v: number) => (Math.round(v * 100) / 100).toString().replace(".", ",");
+const fmt = (v: number) => (Math.round(v * 100) / 100).toString();
 const isPhone = () => window.matchMedia("(max-width: 720px)").matches;
 
 /** Catalog tab of the left panel: search, group filter, model cards (click or drag into the scene to add). */
@@ -40,11 +40,11 @@ export function CatalogPanel() {
   return (
     <>
       <div className="panel-tools">
-        <SearchField value={query} onChange={setQuery} placeholder="Canapé, lampe, plante…" label="Rechercher un meuble" />
-        <div className="chips" role="tablist" aria-label="Catégories">
+        <SearchField value={query} onChange={setQuery} placeholder="Sofa, lamp, plant…" label="Search furniture" />
+        <div className="chips" role="tablist" aria-label="Categories">
           {(["all", ...allGroups] as const).map((g) => (
             <button key={g} role="tab" aria-selected={group === g} className={`chip-filter${group === g ? " is-active" : ""}`} onClick={() => setGroup(g)}>
-              {g === "all" ? "Tout" : g}
+              {g === "all" ? "All" : g}
             </button>
           ))}
         </div>
@@ -52,8 +52,8 @@ export function CatalogPanel() {
       <div className="catalog-scroll" ref={scrollRef}>
         {count === 0 ? (
           <div className="empty-state">
-            <p className="empty-title">Aucun meuble ne correspond</p>
-            <p className="empty">Essayez un autre mot, ou une autre catégorie.</p>
+            <p className="empty-title">No furniture matches</p>
+            <p className="empty">Try another word or another category.</p>
             <button
               className="btn"
               onClick={() => {
@@ -61,12 +61,12 @@ export function CatalogPanel() {
                 setGroup("all");
               }}
             >
-              Tout afficher
+              Show all
             </button>
           </div>
         ) : (
           <>
-            <p className="catalog-tip">Cliquez pour ajouter, ou glissez un meuble dans la pièce.</p>
+            <p className="catalog-tip">Click to add, or drag furniture into the room.</p>
             {sections.map(({ group: g, entries }) => (
               <section key={g} className="catalog-group" aria-label={g}>
                 {(group === "all" || query) && <h3>{g}</h3>}
@@ -102,8 +102,8 @@ function CatalogCard({ entry }: { entry: CatalogEntry }) {
         useStore.getState().addItem(entry.category);
         if (isPhone()) useStore.getState().setCatalogOpen(false);
       }}
-      title={`Ajouter : ${entry.label}`}
-      aria-label={`Ajouter : ${entry.label}, ${fmt(dims[0])} × ${fmt(dims[2])} mètres`}
+      title={`Add: ${entry.label}`}
+      aria-label={`Add: ${entry.label}, ${fmt(dims[0])} × ${fmt(dims[2])} meters`}
     >
       <Thumb category={entry.category} variant={variant?.key} color={color} />
       <span className="catalog-meta">

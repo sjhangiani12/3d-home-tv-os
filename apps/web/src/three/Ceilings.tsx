@@ -12,7 +12,7 @@ const CEILING_DAY_EMISSIVE = new THREE.Color(CEILING_COLOR).multiplyScalar(0.55)
 const CEILING_NIGHT_EMISSIVE = new THREE.Color("#2a2c4a").multiplyScalar(0.25);
 
 /**
- * Warm white ceiling per room, only when standing inside (photo mode « À hauteur d'yeux »).
+ * Warm white ceiling per room, only when standing inside (photo mode "Eye level").
  * Single-sided, facing down: invisible from above anyway, never casts shadows.
  */
 export function Ceilings() {

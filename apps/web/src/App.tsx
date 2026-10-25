@@ -38,7 +38,7 @@ function EditorApp() {
   const photo = mode === "photo";
   const widget = useHome((s) => s.widget);
   const narrow = useMediaQuery("(max-width: 720px)");
-  // Widget (menu bar popover) and phones in Maison mode: 3D on top, control panel below.
+  // Widget (menu bar popover) and phones in Home mode: 3D on top, control panel below.
   const compact = !slideshow && (widget || (mode === "home" && narrow));
   useEffect(() => useHome.getState().setCompact(compact), [compact]);
   return (

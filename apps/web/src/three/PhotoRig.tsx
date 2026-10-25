@@ -260,7 +260,7 @@ export function PhotoCapture() {
           const out = night ? nightComposite(canvas) : canvas;
           out.toBlob((blob) => {
             if (!blob) {
-              useStore.getState().toast("Impossible de générer la photo.", "error");
+              useStore.getState().toast("Could not create the photo.", "error");
               return;
             }
             const url = URL.createObjectURL(blob);
@@ -272,7 +272,7 @@ export function PhotoCapture() {
             a.click();
             a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 2000);
-            useStore.getState().toast("Photo enregistrée.");
+            useStore.getState().toast("Photo saved.");
           }, "image/png");
         } finally {
           gl.setClearColor(prevClear, prevAlpha);

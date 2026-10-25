@@ -133,7 +133,7 @@ describe("buildShots", () => {
   });
 
   it("captions: project name on the first shot, room name + area for rooms", () => {
-    expect(shots[0]!.caption).toEqual({ eyebrow: "Appart3D", title: "Test", detail: "4 pièces · 48 m²" });
+    expect(shots[0]!.caption).toEqual({ eyebrow: "Appart3D", title: "Test", detail: "4 rooms · 48 m²" });
     expect(shots[1]!.caption).toEqual({ title: "Séjour", detail: "30 m²" });
     expect(shots[3]!.caption.detail).toBe("4 m²");
   });
@@ -202,8 +202,8 @@ describe("room helpers", () => {
     expect(Math.hypot(p[0] - 3, p[1] - 1)).toBeGreaterThan(2.5);
   });
 
-  it("formatArea rounds big areas, keeps one decimal for small ones (French comma)", () => {
+  it("formatArea rounds big areas, keeps one decimal for small ones", () => {
     expect(formatArea(29.6)).toBe("30 m²");
-    expect(formatArea(3.62)).toBe("3,6 m²");
+    expect(formatArea(3.62)).toBe("3.6 m²");
   });
 });

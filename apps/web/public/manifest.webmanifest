@@ -1,8 +1,8 @@
 {
   "name": "Appart3D",
-  "short_name": "Maison",
-  "description": "Mon appartement en 3D : lampes, ventilateur et télé pilotés depuis la maquette.",
-  "lang": "fr",
+  "short_name": "Home",
+  "description": "My home in 3D: lamps, fan and TV controlled from the model.",
+  "lang": "en",
   "start_url": "/?home=1",
   "scope": "/",
   "display": "standalone",

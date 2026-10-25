@@ -278,7 +278,7 @@ export const IconFilm = (p: P) => (
   </svg>
 );
 
-/* ---------- Maison (smart home) ---------- */
+/* ---------- Home (smart home) ---------- */
 
 export const IconHouse = (p: P) => (
   <svg {...base(p)}>
@@ -395,7 +395,7 @@ export const IconMusic = (p: P) => (
     <circle cx="16.5" cy="16" r="2.5" />
   </svg>
 );
-/** « Organiser »: reorder (up / down arrows). */
+/** "Arrange": reorder (up / down arrows). */
 export const IconReorder = (p: P) => (
   <svg {...base(p)}>
     <path d="M7 4v16" />

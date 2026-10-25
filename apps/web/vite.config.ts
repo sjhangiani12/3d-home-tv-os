@@ -7,6 +7,7 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
+      input: { main: "index.html", citibike: "citibike.html", block: "block.html" },
       output: {
         manualChunks: {
           three: ["three"],

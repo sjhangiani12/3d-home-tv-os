@@ -8,7 +8,7 @@ import { appBrand } from "../lib/tvCard";
 import { useHome } from "../state/home";
 
 /**
- * Mise en abyme: while the real TV shows the Maison home screen, the 3D TV shows that screen too —
+ * Mise en abyme: while the real TV shows the launcher home screen, the 3D TV shows that screen too —
  * background, lights panel, dock — with the live 3D view itself in the apartment area, so the TV
  * inside contains the TV inside… Drawn in a canvas from the WebGL canvas right after each render
  * (the drawing buffer is only readable then), a few times per second. The feedback is free: each
@@ -73,7 +73,7 @@ interface Row {
 function lampRows(devices: readonly Device[]): Row[] {
   return devices.flatMap((d): Row[] => {
     if (d.kind === "light" || d.kind === "plug") return [{ name: d.name, on: d.state.on === true, color: d.state.color ?? "#ffd27a" }];
-    if (d.kind === "fan" && d.capabilities.fanLight) return [{ name: "Ventilateur", on: d.state.lightOn === true, color: "#ffe2b0" }];
+    if (d.kind === "fan" && d.capabilities.fanLight) return [{ name: "Fan", on: d.state.lightOn === true, color: "#ffe2b0" }];
     return [];
   });
 }
@@ -109,7 +109,7 @@ function paint(g: CanvasRenderingContext2D, scene: HTMLCanvasElement) {
   g.stroke();
   g.fillStyle = "#fff";
   g.font = `600 ${20 * DP}px -apple-system, "Helvetica Neue", sans-serif`;
-  g.fillText("Lumières", px + 22 * DP, py + 40 * DP);
+  g.fillText("Lights", px + 22 * DP, py + 40 * DP);
   const rows = lampRows(devices);
   let y = py + 72 * DP;
   for (const r of rows) {

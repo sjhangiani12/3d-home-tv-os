@@ -84,7 +84,7 @@ export function createBridgeClient(base: string): HomeClient {
     });
     const type = res.headers.get("content-type") ?? "";
     if (!res.ok) {
-      let msg = `Erreur ${res.status}`;
+      let msg = `Error ${res.status}`;
       if (type.includes("json")) {
         const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
         msg = body?.error ?? body?.message ?? msg;
@@ -92,7 +92,7 @@ export function createBridgeClient(base: string): HomeClient {
       throw new HomeHttpError(msg, res.status);
     }
     // A static host answering index.html for every path is not a bridge.
-    if (!type.includes("json")) throw new HomeHttpError("Pas de pont maison ici.", 404);
+    if (!type.includes("json")) throw new HomeHttpError("No home bridge here.", 404);
     return (await res.json()) as T;
   }
 
@@ -182,10 +182,10 @@ export function mockDevices(): Device[] {
         volume: 35,
         media: {
           state: "playing",
-          title: "Lumière d'octobre",
+          title: "October Light",
           artist: "Les Voisins du Dessus",
           album: "Rue Oberkampf",
-          app: "Musique",
+          app: "Music",
           position: 62,
           duration: 214,
           updatedAt: new Date().toISOString(),
@@ -196,7 +196,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "hue:light:lightstrip",
-      name: "Bandeau bureau",
+      name: "Desk light strip",
       kind: "light",
       source: "mock",
       room: "Salon",
@@ -206,7 +206,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "hue:light:ikea-lampe",
-      name: "IKEA lampe",
+      name: "IKEA lamp",
       kind: "light",
       source: "mock",
       room: "Salon",
@@ -216,7 +216,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "hue:light:lustre",
-      name: "Lustre",
+      name: "Chandelier",
       kind: "light",
       source: "mock",
       room: "Salon",
@@ -225,7 +225,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "hue:light:lustre-cuisine",
-      name: "Lustre Cuisine",
+      name: "Kitchen chandelier",
       kind: "light",
       source: "mock",
       room: "Cuisine",
@@ -235,7 +235,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "ha:switch.ikea_donut",
-      name: "Lampe VARMBLIXT",
+      name: "VARMBLIXT lamp",
       kind: "plug",
       source: "mock",
       room: "Chambre",
@@ -245,7 +245,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "ha:fan.ventilateur",
-      name: "Ventilateur",
+      name: "Fan",
       kind: "fan",
       source: "mock",
       room: "Salon",
@@ -255,7 +255,7 @@ export function mockDevices(): Device[] {
     },
     {
       id: "robot:tv",
-      name: "Télévision",
+      name: "TV",
       kind: "tv",
       source: "mock",
       room: "Salon",
@@ -321,8 +321,8 @@ export function createMockClient(opts: MockOptions = {}): HomeClient {
   const emit = (e: HomeEvent) => listeners.forEach((l) => l(e));
   const apply = (id: string, action: DeviceAction): Device => {
     const d = devices.find((x) => x.id === id);
-    if (!d) throw new HomeHttpError("Appareil inconnu.", 404);
-    if (!d.state.reachable) throw new HomeHttpError(`${d.name} est injoignable.`, 503);
+    if (!d) throw new HomeHttpError("Unknown device.", 404);
+    if (!d.state.reachable) throw new HomeHttpError(`${d.name} is unreachable.`, 503);
     let next = predict(d, action);
     // Fans: a light toggle on the device means "light"; snap speeds to the steps.
     if (d.kind === "fan" && typeof next.state.speed === "number") {
@@ -336,7 +336,7 @@ export function createMockClient(opts: MockOptions = {}): HomeClient {
   return {
     kind: "mock",
     base: "",
-    label: "démo locale",
+    label: "local demo",
     async snapshot() {
       await wait();
       return snap();
@@ -348,7 +348,7 @@ export function createMockClient(opts: MockOptions = {}): HomeClient {
     },
     async action(id, action) {
       await wait();
-      if (failRate > 0 && Math.random() < failRate) throw new HomeHttpError("Le pont n'a pas répondu.", 504);
+      if (failRate > 0 && Math.random() < failRate) throw new HomeHttpError("The bridge did not respond.", 504);
       const d = apply(id, action);
       // Like the real bridge, the change is also pushed to every client.
       setTimeout(() => emit({ type: "device", device: structuredClone(d) }), 30);
@@ -357,7 +357,7 @@ export function createMockClient(opts: MockOptions = {}): HomeClient {
     async scene(id) {
       await wait();
       const fn = MOCK_SCENES[id];
-      if (!fn) throw new HomeHttpError("Scène inconnue.", 404);
+      if (!fn) throw new HomeHttpError("Unknown scene.", 404);
       for (const d of devices) {
         if (!d.state.reachable) continue;
         for (const a of fn(d)) apply(d.id, a);

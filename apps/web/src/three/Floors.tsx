@@ -104,7 +104,7 @@ const Floor = memo(function Floor({ room, highlight, label }: { room: Room; high
         <Html position={[center[0], 0.15, center[1]]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
           <div className={`room-tag${highlight === "selected" ? " is-selected" : ""}`}>
             <strong>{room.name}</strong>
-            <span>{area.toFixed(1).replace(".", ",")} m²</span>
+            <span>{area.toFixed(1)} m²</span>
           </div>
         </Html>
       )}

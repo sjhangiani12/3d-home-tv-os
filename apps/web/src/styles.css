@@ -1369,7 +1369,7 @@ body.is-dragging-card * {
   color: var(--sage-deep);
 }
 
-/* ---------- Rooms list (left, "Pièces") ---------- */
+/* ---------- Rooms list (left, "Rooms") ---------- */
 
 .room-list {
   list-style: none;
@@ -2854,7 +2854,7 @@ kbd {
     0 1px 3px rgba(74, 52, 36, 0.18);
 }
 
-/* Jour / Nuit switch */
+/* Day / Night switch */
 .night-toggle {
   display: inline-flex;
   align-items: center;
@@ -2908,7 +2908,7 @@ kbd {
   height: 38px;
 }
 
-/* Diaporama entry in the top bar */
+/* Slideshow entry in the top bar */
 .demo-btn {
   display: inline-flex;
   align-items: center;
@@ -3165,7 +3165,7 @@ body.ss-idle * {
 
 
 /* ==========================================================================
-   Mode Maison (smart home)
+   Home mode (smart home)
    Dark glass panel (also in the day version), warm accents from the app tokens.
    ========================================================================== */
 
@@ -4140,13 +4140,13 @@ body.ss-idle * {
   display: none;
 }
 
-/* Maison mode, desktop: hint bar shifted left of the panel. */
+/* Home mode, desktop: hint bar shifted left of the panel. */
 .mode-home .hintbar {
   max-width: calc(100% - 2 * var(--gutter) - 420px);
   transform: translateX(calc(-50% - 190px));
 }
 
-/* ---------- Compact layout: widget (?widget=1) and phones in Maison mode ---------- */
+/* ---------- Compact layout: widget (?widget=1) and phones in Home mode ---------- */
 
 .app.is-compact {
   --hp-split: 45%;
@@ -4365,7 +4365,7 @@ body.ss-idle * {
 }
 
 /* ==========================================================================
-   Vue 3D intégrée (?view=3d) — appli iOS : seul le canevas, fond transparent
+   Embedded 3D view (?view=3d) — iOS app: canvas only, transparent background
    ========================================================================== */
 
 html.is-embed,
@@ -4385,7 +4385,7 @@ html.is-embed :focus {
   outline: none;
 }
 
-/* ------------------------------------------------------------------ Maison: now playing */
+/* ------------------------------------------------------------------ Home: now playing */
 
 .hp-np {
   --tint: #d77dff;
@@ -4677,7 +4677,7 @@ html.is-embed :focus {
   color: var(--hp-ink-2);
 }
 
-/* ------------------------------------------------------------------ TV apps, Ambilight, « Organiser » */
+/* ------------------------------------------------------------------ TV apps, Ambilight, "Arrange" */
 
 .hp-tvapps {
   display: grid;
@@ -4737,7 +4737,7 @@ html.is-embed :focus {
 }
 
 .hp-tvapp.is-active::after {
-  content: "À l'écran";
+  content: "On screen";
   position: absolute;
   top: 7px;
   right: 8px;

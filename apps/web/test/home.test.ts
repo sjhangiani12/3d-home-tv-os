@@ -10,6 +10,7 @@ import {
   fanStep,
   hasStripGlow,
   homeTitle,
+  roomLabel,
   moveInOrder,
   sortByOrder,
   isOn,
@@ -31,27 +32,39 @@ const byId = (id: string, list = mockDevices()) => list.find((d) => d.id.include
 
 describe("tile labels", () => {
   it("formats states with the room", () => {
-    expect(tileLabel(byId("ikea-lampe"))).toBe("70 % · Salon");
-    expect(tileLabel(byId("lustre-cuisine"))).toBe("Éteint · Cuisine");
-    expect(tileLabel(byId("hue:light:lustre"))).toBe("Injoignable · Salon");
-    expect(tileLabel(byId("donut"))).toBe("Éteint · Chambre");
-    expect(tileLabel(byId("robot:tv"))).toBe("Éteinte · Salon");
+    // Bridge room names are French ("Salon"…): tiles show them in English.
+    expect(tileLabel(byId("ikea-lampe"))).toBe("70% · Living room");
+    expect(tileLabel(byId("lustre-cuisine"))).toBe("Off · Kitchen");
+    expect(tileLabel(byId("hue:light:lustre"))).toBe("Unreachable · Living room");
+    expect(tileLabel(byId("donut"))).toBe("Off · Bedroom");
+    expect(tileLabel(byId("robot:tv"))).toBe("Off · Living room");
   });
   it("describes fans by speed step", () => {
     const fan = byId("ventilateur");
-    expect(tileLabel(predict(fan, { type: "speed", value: 50 }))).toBe("Vitesse 3 · Salon");
-    expect(tileLabel(predict(fan, { type: "fanLight", on: true }))).toBe("Lumière allumée · Salon");
+    expect(tileLabel(predict(fan, { type: "speed", value: 50 }))).toBe("Speed 3 · Living room");
+    expect(tileLabel(predict(fan, { type: "fanLight", on: true }))).toBe("Light on · Living room");
   });
-  it("summarizes lights in French", () => {
+  it("summarizes lights", () => {
     const list = mockDevices();
     // The Ambilight lives in the TV: not counted as a light.
-    expect(lightsSummary(list)).toBe("2 lumières sur 5 allumées");
+    expect(lightsSummary(list)).toBe("2 of 5 lights on");
     const one = list.map((d) => (d.id.includes("lightstrip") ? predict(d, { type: "power", on: false }) : d));
-    expect(lightsSummary(one)).toBe("1 lumière sur 5 allumée");
+    expect(lightsSummary(one)).toBe("1 of 5 lights on");
     const none = one.map((d) => (d.kind === "light" ? predict(d, { type: "power", on: false }) : d));
-    expect(lightsSummary(none)).toBe("Toutes les lumières sont éteintes");
-    expect(homeTitle("Alex")).toBe("Chez Alex");
+    expect(lightsSummary(none)).toBe("All lights are off");
+    expect(homeTitle("Alex")).toBe("Alex's home");
     expect(homeTitle("Chez Alex")).toBe("Chez Alex");
+    expect(homeTitle("Alex's place")).toBe("Alex's place");
+    expect(homeTitle("")).toBe("Home");
+  });
+  it("shows French or English room names in English", () => {
+    expect(roomLabel("Salon")).toBe("Living room");
+    expect(roomLabel("Séjour")).toBe("Living room");
+    expect(roomLabel("cuisine")).toBe("Kitchen");
+    expect(roomLabel("Chambre")).toBe("Bedroom");
+    expect(roomLabel("Salle de bain")).toBe("Bathroom");
+    expect(roomLabel("Living room")).toBe("Living room");
+    expect(roomLabel("Garage")).toBe("Garage");
   });
   it("converts kelvin to a warm/cool hex", () => {
     expect(kelvinToHex(6500)).toMatch(/^#ff[f-f][0-9a-f]{3}$/);
@@ -60,7 +73,7 @@ describe("tile labels", () => {
 });
 
 describe("room counts", () => {
-  it("counts devices on per room, Tous first", () => {
+  it("counts devices on per room, All first", () => {
     const counts = roomCounts(mockDevices());
     // the mock HomePod is playing: it counts as on
     expect(counts[0]).toEqual({ room: ALL_ROOMS, total: 8, on: 3 });
@@ -126,7 +139,7 @@ describe("device ↔ item lookup", () => {
     const map = devicesByItem(mockDevices());
     expect(map.get("item_30")?.map((d) => d.kind)).toEqual(["tv"]);
     expect(hasStripGlow(map.get("item_30")!)).toBe(true);
-    expect(map.get("item_floorlamp")?.[0]?.name).toBe("IKEA lampe");
+    expect(map.get("item_floorlamp")?.[0]?.name).toBe("IKEA lamp");
     expect(devicesForItem(mockDevices(), "item_fan")[0]?.kind).toBe("fan");
     expect([...map.keys()]).not.toContain(undefined);
   });

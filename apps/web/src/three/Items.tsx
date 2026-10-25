@@ -50,7 +50,7 @@ export function Items() {
   // Ceiling items would hide the room from above: ghost them unless standing inside (or walls full).
   const ghostCeiling = useStore(isCutActive);
   const editing = mode === "arrange";
-  // Maison mode: items linked to devices show their real state and toggle them on click.
+  // Home mode: items linked to devices show their real state and toggle them on click.
   const homeMode = mode === "home";
   const byItem = useHome((s) => s.byItem);
   // Embedded 3D view (native apps): every item is tappable (reported to the app, no toggling), no
@@ -156,9 +156,9 @@ interface ItemViewProps {
   hovered: boolean;
   colliding: boolean;
   onDown: (e: ThreeEvent<PointerEvent>, item: Item, mount: ItemMount) => void;
-  /** Maison mode: real state of the linked devices. */
+  /** Home mode: real state of the linked devices. */
   look?: ItemLook;
-  /** Maison mode: linked to a device (hover + click toggles). */
+  /** Home mode: linked to a device (hover + click toggles). */
   clickable?: boolean;
   /** Embedded view: highlighted device's item, or just tapped (strong halo). */
   marked?: boolean;
@@ -166,14 +166,14 @@ interface ItemViewProps {
   embed?: boolean;
 }
 
-/** Maison mode: where the current press on a linked item started. */
+/** Home mode: where the current press on a linked item started. */
 let homePress: { itemId: string; x: number; y: number; t: number } | null = null;
 
 const ItemView = memo(function ItemView({ item, pose, ghost, editing, selected, hovered, colliding, onDown, look, clickable, marked, embed }: ItemViewProps) {
   const group = useRef<THREE.Group>(null);
   const spin = useRef<THREE.Group>(null);
   const lookMats = useRef<ReturnType<typeof applyLook>>([]);
-  // What the real TV shows (Maison mode), drawn on its screen.
+  // What the real TV shows (Home mode), drawn on its screen.
   const screenTexture = useTvScreenTexture(look?.screen?.content);
   // Runs after every render, i.e. after R3F re-applied the shared catalog materials.
   useLayoutEffect(() => {

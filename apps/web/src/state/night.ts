@@ -75,7 +75,7 @@ export function saveDaylightPref(mode: DaylightMode) {
 
 /**
  * Target of the day ↔ night blend: { progress (linear 0..1, eased later), dusk }. In `auto` with a
- * known sun it follows the elevation; otherwise the plain Jour / Nuit flag.
+ * known sun it follows the elevation; otherwise the plain Day / Night flag.
  */
 export function daylightTarget(mode: DaylightMode, sunElevation: number | null, night: boolean): { progress: number; dusk: number } {
   if (mode === "auto" && sunElevation !== null) return { progress: nightProgressForElevation(sunElevation), dusk: duskForElevation(sunElevation) };

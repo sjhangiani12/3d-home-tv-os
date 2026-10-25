@@ -1,7 +1,7 @@
 import type { TvContent } from "./home";
 
 /**
- * What the 3D TV screen shows in Maison mode (pure, tested): the real artwork / logo when the bridge
+ * What the 3D TV screen shows in Home mode (pure, tested): the real artwork / logo when the bridge
  * has one, otherwise a branded card for known apps / inputs — brand colors and a simple wordmark drawn
  * in canvas by three/TvScreen.ts (no logo files).
  */
@@ -96,7 +96,7 @@ export function appBrand(label: string): TvBrand {
 
 /** The TV is on but tells nothing about what it shows. */
 const ON_CARD: TvCardModel = {
-  brand: { style: "generic", name: "TV allumée", bg: ["#22345c", "#070b18"], fg: "#ffffff", accent: "#8fb0ff" },
+  brand: { style: "generic", name: "TV on", bg: ["#22345c", "#070b18"], fg: "#ffffff", accent: "#8fb0ff" },
 };
 
 /** Card for the TV screen; null only without content (TV off: black screen). */

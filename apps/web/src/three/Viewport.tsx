@@ -27,7 +27,7 @@ export function Viewport() {
   const slideshow = useStore((s) => s.slideshow);
   const embed = useEmbed((s) => s.active);
   const lite = useEmbed((s) => s.lite);
-  // The real TV shows the Maison home screen: its 3D twin mirrors it.
+  // The real TV shows the Home screen: its 3D twin mirrors it.
   const mirror = useHome((s) => s.devices.some((d) => d.kind === "tv" && d.state.on === true && isLauncherApp(d.state.media?.app)));
   return (
     <Canvas

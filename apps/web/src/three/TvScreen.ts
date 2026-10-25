@@ -8,7 +8,7 @@ import { isLauncherApp } from "../lib/launcherLook";
 import { useLauncherMirror } from "./LauncherMirror";
 
 /**
- * Maison mode: the 3D TV shows what the real TV shows — the artwork / logo from the bridge, large,
+ * Home mode: the 3D TV shows what the real TV shows — the artwork / logo from the bridge, large,
  * over a blurred tinted copy of itself, with the app / channel and the title; otherwise a branded card
  * (colors + a wordmark drawn here, no logo files). Drawn in a canvas texture, redrawn only when the
  * content changes.
@@ -371,7 +371,7 @@ export function useTvScreenTexture(content: TvContent | undefined): THREE.Canvas
     };
   }, [key, model, base, texture, invalidate]);
 
-  // The TV shows the Maison home screen: mise en abyme (see LauncherMirror).
+  // The TV shows the Home screen: mise en abyme (see LauncherMirror).
   const mirror = useLauncherMirror((s) => s.texture);
   if (mirror && isLauncherApp(content?.app)) return mirror;
   return model && drawn ? texture : null;

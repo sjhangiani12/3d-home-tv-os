@@ -169,8 +169,8 @@ export function startEmbed(params: URLSearchParams): boolean {
   // Bridge problems are surfaced natively (the embedded view shows no UI of its own).
   useHome.subscribe((s, prev) => {
     if (s.status === prev.status) return;
-    if (s.status === "unauthorized") postToNative({ type: "error", message: "Accès refusé : appareil non appairé." });
-    else if (s.status === "offline") postToNative({ type: "error", message: "Pont maison injoignable." });
+    if (s.status === "unauthorized") postToNative({ type: "error", message: "Access denied: device not paired." });
+    else if (s.status === "offline") postToNative({ type: "error", message: "Home bridge unreachable." });
   });
   return true;
 }

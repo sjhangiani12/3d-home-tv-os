@@ -18,7 +18,7 @@ const ROLE_RE = /^appart3d:[^|]*\|(glow|screen|mirror)\|/;
 
 type Emissive = THREE.Material & { emissiveIntensity: number };
 
-/** Blend target: the sun (Maison, `auto`), else the Jour / Nuit flag (always the flag in the slideshow). */
+/** Blend target: the sun (Home mode, `auto`), else the Day / Night flag (always the flag in the slideshow). */
 function blendTarget(): { progress: number; dusk: number } {
   const s = useStore.getState();
   return s.slideshow ? { progress: s.night ? 1 : 0, dusk: 0 } : daylightTarget(s.daylight, s.sunElevation, s.night);
@@ -86,8 +86,8 @@ export function NightController() {
 }
 
 /**
- * Real lights exist only once night (or the Maison mode) has been used in this session (no cost for
- * day-only users). In Maison mode the lamps follow their linked devices instead of "all on at night".
+ * Real lights exist only once night (or the Home mode) has been used in this session (no cost for
+ * day-only users). In Home mode the lamps follow their linked devices instead of "all on at night".
  */
 export function NightLights() {
   const items = useStore((s) => s.scene.items);
@@ -100,7 +100,7 @@ export function NightLights() {
   useEffect(() => {
     if (wanted) setArmed(true);
   }, [wanted]);
-  // Light strips linked to screens get their own source (only while in Maison mode).
+  // Light strips linked to screens get their own source (only while in Home mode).
   const stripIds = useMemo(() => {
     if (!homeMode) return "";
     const ids: string[] = [];
@@ -180,7 +180,7 @@ function LampRig({ sources, home }: { sources: LampSource[]; home: Map<string, G
     const mix = nightFx.mix;
     const home = homeRef.current;
     if (mix === 0 && !dirty.current && !home) return;
-    // Maison mode: only sources that actually give light compete for the real lights.
+    // Home mode: only sources that actually give light compete for the real lights.
     const lit = (s: LampSource) => sourceFactor(home?.get(s.itemId), mix) > 0;
     dirty.current = false;
 

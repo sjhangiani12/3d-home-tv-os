@@ -13,7 +13,7 @@ export function parseSceneJson(text: string, fileName = "scan"): LoadResult {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("Ce fichier n'est pas un JSON lisible.");
+    throw new Error("This file is not readable JSON.");
   }
   const scanName = fileName.replace(/\.appart3d\.json$|\.json$/i, "") || "Scan";
   if (isRoomPlanEnvelope(data)) return importScan(data, scanName);
@@ -23,7 +23,7 @@ export function parseSceneJson(text: string, fileName = "scan"): LoadResult {
     // (Checked after validateScene because isRoomPlanData also matches Appart3D scenes.)
     if (isRoomPlanData(data) && !(typeof data === "object" && data !== null && "version" in data && "items" in data)) return importScan(data, scanName);
     const more = errors.length > 3 ? ` (+${errors.length - 3})` : "";
-    throw new Error(`Scène invalide : ${errors.slice(0, 3).join(" ; ")}${more}`);
+    throw new Error(`Invalid scene: ${errors.slice(0, 3).join("; ")}${more}`);
   }
   return { scene: data as Scene, warnings: [], fromScan: false };
 }
@@ -35,7 +35,7 @@ export function parseSceneJson(text: string, fileName = "scan"): LoadResult {
 export function importScan(data: unknown, name: string): LoadResult {
   const { scene, warnings } = importRoomPlan(data, { name });
   const errors = validateScene(scene);
-  if (errors.length) throw new Error(`Le scan importé est incohérent : ${errors.slice(0, 3).join(" ; ")}`);
+  if (errors.length) throw new Error(`The imported scan is inconsistent: ${errors.slice(0, 3).join("; ")}`);
   const withMeta: Scene = warnings.length ? { ...scene, meta: { ...scene.meta, importWarnings: warnings } } : scene;
   return { scene: withMeta, warnings, fromScan: true };
 }
@@ -53,7 +53,7 @@ export function slugify(name: string): string {
       .replace(/\p{Diacritic}/gu, "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "appartement"
+      .replace(/^-|-$/g, "") || "home"
   );
 }
 

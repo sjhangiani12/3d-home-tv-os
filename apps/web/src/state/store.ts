@@ -10,7 +10,7 @@ import { ceilingHeightAt, ceilingItemY, snapToWall } from "../lib/mount";
 import { normalizeAngle, snapToGridAngle } from "./angles";
 import { loadDaylightPref, loadNightPref, saveDaylightPref, saveNightPref, type DaylightMode } from "./night";
 
-/** "home": Maison mode (smart-home control, see state/home.ts). */
+/** "home": Home mode (smart-home control, see state/home.ts). */
 export type Mode = "navigate" | "arrange" | "rooms" | "photo" | "home";
 export type PhotoView = "orbit" | "eye";
 export type LeftTab = "catalog" | "objects";
@@ -44,7 +44,7 @@ export interface AppState {
   dragging: boolean;
   photoView: PhotoView;
   photoFov: number;
-  /** Left panel (catalog / objects list) open in "Aménager" mode. */
+  /** Left panel (catalog / objects list) open in "Arrange" mode. */
   catalogOpen: boolean;
   leftTab: LeftTab;
   objectFilter: ObjectFilter;
@@ -110,7 +110,7 @@ export interface AppState {
   /** Marks a scanned item as checked by the user (confidence = 1). */
   markVerified: (id: string) => void;
   setItemMount: (id: string, mount: ItemMount) => void;
-  /** Selects an item (switching to "Aménager") and frames it with the camera. */
+  /** Selects an item (switching to "Arrange") and frames it with the camera. */
   focusItem: (id: string) => void;
   duplicateSelected: () => void;
   rotateSelected: (deg: number) => void;
@@ -244,7 +244,7 @@ export const useStore = create<AppState>()((set, get) => ({
   },
   toggleNight: () => {
     const s = get();
-    // With the sun known (Maison mode), the switch cycles Auto (soleil) → Jour → Nuit.
+    // With the sun known (Home mode), the switch cycles Auto (sun) → Day → Night.
     if (s.sunElevation !== null && !s.slideshow) {
       s.setDaylight(s.daylight === "auto" ? "day" : s.daylight === "day" ? "night" : "auto");
       return;
@@ -403,7 +403,7 @@ export const useStore = create<AppState>()((set, get) => ({
   },
 }));
 
-/** Standing inside a room (photo « Hauteur d'yeux » or a slideshow interior shot): ceilings on, walls full. */
+/** Standing inside a room (photo "Eye level" or a slideshow interior shot): ceilings on, walls full. */
 export function isEyeView(s: Pick<AppState, "mode" | "photoView" | "slideshow" | "slideCam">): boolean {
   return s.slideshow ? s.slideCam === "eye" : s.mode === "photo" && s.photoView === "eye";
 }
@@ -422,16 +422,49 @@ function pruneSelection(scene: Scene, s: AppState): Partial<AppState> {
   };
 }
 
+/**
+ * Scene file on the home bridge that edits are also saved to (e.g. "my-home.json" for
+ * `?scene=/shared/my-home.json`), so the TV, phone and other browsers load the same edits.
+ */
+let bridgeSceneFile: string | null = null;
+export function setBridgeSceneFile(name: string | null): void {
+  bridgeSceneFile = name;
+}
+
+let bridgeSaveFailed = false;
+function saveToBridge(scene: Scene): void {
+  if (!bridgeSceneFile) return;
+  fetch(`/api/scenes/${bridgeSceneFile}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scene),
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error(`Error ${r.status}`);
+      bridgeSaveFailed = false;
+    })
+    .catch((err: unknown) => {
+      // One toast per failure streak, not one per edit.
+      if (bridgeSaveFailed) return;
+      bridgeSaveFailed = true;
+      const why = err instanceof Error ? err.message : "unknown error";
+      useStore.getState().toast(`Could not save to the home bridge (${why}). Edits are kept in this browser only.`, "error");
+    });
+}
+
 // Autosave (debounced). Storage may be unavailable (private mode, quota): never crash.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 useStore.subscribe((s, prev) => {
   if (s.scene === prev.scene || typeof window === "undefined") return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    const scene = useStore.getState().scene;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(useStore.getState().scene));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(scene));
     } catch {
       /* ignore */
     }
+    saveToBridge(scene);
   }, 400);
 });

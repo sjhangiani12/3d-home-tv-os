@@ -11,9 +11,9 @@ import { Thumb } from "./Thumb";
 import { IconAlert, IconCeiling, IconCheck, IconClose, IconCopy, IconFloor, IconRotateLeft, IconRotateRight, IconTarget, IconTrash, IconWallMount } from "./icons";
 
 const AXES: { idx: 0 | 1 | 2; label: string; max: number }[] = [
-  { idx: 0, label: "Largeur", max: 4 },
-  { idx: 1, label: "Hauteur", max: 3 },
-  { idx: 2, label: "Profondeur", max: 4 },
+  { idx: 0, label: "Width", max: 4 },
+  { idx: 1, label: "Height", max: 3 },
+  { idx: 2, label: "Depth", max: 4 },
 ];
 
 const MOUNT_ICONS: Record<ItemMount, typeof IconFloor> = { floor: IconFloor, wall: IconWallMount, ceiling: IconCeiling };
@@ -52,9 +52,9 @@ function ItemFields({ item }: { item: Item }) {
     if (!report) return [];
     const names = report.items.map((id) => {
       const other = scene.items.find((i) => i.id === id);
-      return { id, name: other ? itemTitle(other) : "objet" };
+      return { id, name: other ? itemTitle(other) : "object" };
     });
-    return report.walls.length ? [{ id: "", name: report.walls.length > 1 ? `${report.walls.length} murs` : "un mur" }, ...names] : names;
+    return report.walls.length ? [{ id: "", name: report.walls.length > 1 ? `${report.walls.length} walls` : "a wall" }, ...names] : names;
   }, [report, scene.items]);
 
   const setDim = (idx: 0 | 1 | 2, v: number) =>
@@ -75,7 +75,7 @@ function ItemFields({ item }: { item: Item }) {
   const showElevation = mount === "wall" || (mount === "floor" && item.position[1] > 0);
 
   return (
-    <aside className="inspector panel" aria-label="Propriétés de l'objet">
+    <aside className="inspector panel" aria-label="Object properties">
       <div className="insp-head">
         <Thumb category={item.category} variant={item.variant} color={color} size="md" />
         <div className="insp-title">
@@ -86,8 +86,8 @@ function ItemFields({ item }: { item: Item }) {
           <input
             className="title-input"
             value={item.label ?? ""}
-            placeholder={entry?.label ?? "Sans nom"}
-            aria-label="Nom de l'objet"
+            placeholder={entry?.label ?? "Untitled"}
+            aria-label="Object name"
             onChange={(e) =>
               updateItem(
                 item.id,
@@ -100,7 +100,7 @@ function ItemFields({ item }: { item: Item }) {
             }
           />
         </div>
-        <button className="icon-btn ghost" onClick={() => selectItem(null)} aria-label="Désélectionner (Échap)" title="Fermer (Échap)">
+        <button className="icon-btn ghost" onClick={() => selectItem(null)} aria-label="Deselect (Esc)" title="Close (Esc)">
           <IconClose />
         </button>
       </div>
@@ -110,10 +110,10 @@ function ItemFields({ item }: { item: Item }) {
           <p className="status status-red" role="status">
             <IconAlert width={15} height={15} />
             <span>
-              Chevauche{" "}
+              Overlaps{" "}
               {collisionNames.map((c, i) => (
                 <span key={c.id || "wall"}>
-                  {i > 0 && (i === collisionNames.length - 1 ? " et " : ", ")}
+                  {i > 0 && (i === collisionNames.length - 1 ? " and " : ", ")}
                   {c.id ? (
                     <button className="link" onClick={() => focusItem(c.id)}>
                       {c.name}
@@ -127,16 +127,16 @@ function ItemFields({ item }: { item: Item }) {
           </p>
         ) : (
           <p className="status status-ok">
-            <IconCheck width={15} height={15} /> Bien placé
+            <IconCheck width={15} height={15} /> Well placed
           </p>
         )}
         {review && (
           <div className="status status-amber">
             <span>
-              Scan incertain · {Math.round((item.confidence ?? 0) * 100)} %
+              Uncertain scan · {Math.round((item.confidence ?? 0) * 100)}%
             </span>
             <button className="btn btn-sm" onClick={() => markVerified(item.id)}>
-              <IconCheck width={14} height={14} /> Vérifié
+              <IconCheck width={14} height={14} /> Verified
             </button>
           </div>
         )}
@@ -144,16 +144,16 @@ function ItemFields({ item }: { item: Item }) {
 
       <div className="inspector-scroll">
         {entry?.variants && entry.variants.length > 1 && (
-          <Section title="Modèle">
+          <Section title="Model">
             <VariantPicker item={item} variants={entry.variants} color={color} />
           </Section>
         )}
 
-        <Section title="Couleur">
+        <Section title="Color">
           <ColorField value={color} swatches={FURNITURE_SWATCHES} onChange={(c, live) => updateItem(item.id, (it) => void (it.color = c), live ? `color:${item.id}` : undefined)} />
         </Section>
 
-        <Section title="Dimensions" aside="mètres">
+        <Section title="Dimensions" aside="meters">
           {AXES.map(({ idx, label, max }) => (
             <SliderRow
               key={idx}
@@ -182,35 +182,35 @@ function ItemFields({ item }: { item: Item }) {
                     aria-checked={mount === m}
                     className={mount === m ? "is-active" : ""}
                     onClick={() => setItemMount(item.id, m)}
-                    title={m === defaultMount ? `${MOUNT_LABELS[m]} (par défaut pour ce meuble)` : MOUNT_LABELS[m]}
+                    title={m === defaultMount ? `${MOUNT_LABELS[m]} (default for this item)` : MOUNT_LABELS[m]}
                   >
                     <Icon width={16} height={16} />
                     {MOUNT_LABELS[m]}
-                    {m === defaultMount && <span className="default-dot" aria-label="par défaut" />}
+                    {m === defaultMount && <span className="default-dot" aria-label="default" />}
                   </button>
                 );
               })}
             </div>
           </div>
-          {mount === "ceiling" && <p className="field-note">Accroché au plafond de la pièce.</p>}
+          {mount === "ceiling" && <p className="field-note">Hung from the room's ceiling.</p>}
           {showElevation && (
-            <SliderRow id="elev" label="Hauteur" min={0} max={Math.max(0.1, elevMax)} value={item.position[1]} onChange={setElevation} />
+            <SliderRow id="elev" label="Height" min={0} max={Math.max(0.1, elevMax)} value={item.position[1]} onChange={setElevation} />
           )}
           <div className="sub-field">
             <span className="sub-label">
               Rotation <output className="angle">{toDeg(item.rotationY)}°</output>
             </span>
             <div className="segmented">
-              <button onClick={() => rotateSelected(-90)} title="Pivoter de −90°" aria-label="Pivoter de −90°">
+              <button onClick={() => rotateSelected(-90)} title="Rotate −90°" aria-label="Rotate −90°">
                 <IconRotateLeft /> 90°
               </button>
-              <button onClick={() => rotateSelected(-15)} title="Pivoter de −15° (Maj+R)" aria-label="Pivoter de −15°">
+              <button onClick={() => rotateSelected(-15)} title="Rotate −15° (Shift+R)" aria-label="Rotate −15°">
                 <IconRotateLeft /> 15°
               </button>
-              <button onClick={() => rotateSelected(15)} title="Pivoter de +15° (R)" aria-label="Pivoter de +15°">
+              <button onClick={() => rotateSelected(15)} title="Rotate +15° (R)" aria-label="Rotate +15°">
                 15° <IconRotateRight />
               </button>
-              <button onClick={() => rotateSelected(90)} title="Pivoter de +90°" aria-label="Pivoter de +90°">
+              <button onClick={() => rotateSelected(90)} title="Rotate +90°" aria-label="Rotate +90°">
                 90° <IconRotateRight />
               </button>
             </div>
@@ -219,14 +219,14 @@ function ItemFields({ item }: { item: Item }) {
       </div>
 
       <div className="inspector-foot">
-        <button className="icon-btn bordered" onClick={() => focusItem(item.id)} title="Cadrer l'objet (F)" aria-label="Cadrer l'objet">
+        <button className="icon-btn bordered" onClick={() => focusItem(item.id)} title="Frame the object (F)" aria-label="Frame the object">
           <IconTarget />
         </button>
-        <button onClick={duplicateSelected} title="Dupliquer (Ctrl/⌘+D)">
-          <IconCopy /> Dupliquer
+        <button onClick={duplicateSelected} title="Duplicate (Ctrl/⌘+D)">
+          <IconCopy /> Duplicate
         </button>
-        <button className="danger" onClick={removeSelected} title="Supprimer (Suppr)">
-          <IconTrash /> Supprimer
+        <button className="danger" onClick={removeSelected} title="Delete (Del)">
+          <IconTrash /> Delete
         </button>
       </div>
     </aside>
@@ -248,7 +248,7 @@ function SliderRow({ id, label, min, max, value, onChange }: { id: string; label
           const v = Number(e.target.value);
           if (Number.isFinite(v) && v >= min) onChange(v);
         }}
-        aria-label={`${label} en mètres`}
+        aria-label={`${label} in meters`}
       />
     </div>
   );
@@ -259,7 +259,7 @@ function VariantPicker({ item, variants, color }: { item: Item; variants: Catalo
   const pick = (v: CatalogVariant) => useStore.getState().updateItem(item.id, (it) => void (it.variant = v.key));
   if (variants.length > 6) {
     return (
-      <select className="select" value={current} onChange={(e) => pick(variants.find((v) => v.key === e.target.value)!)} aria-label="Modèle">
+      <select className="select" value={current} onChange={(e) => pick(variants.find((v) => v.key === e.target.value)!)} aria-label="Model">
         {variants.map((v) => (
           <option key={v.key} value={v.key}>
             {v.label}
@@ -269,7 +269,7 @@ function VariantPicker({ item, variants, color }: { item: Item; variants: Catalo
     );
   }
   return (
-    <div className="variant-grid" role="radiogroup" aria-label="Modèle">
+    <div className="variant-grid" role="radiogroup" aria-label="Model">
       {variants.map((v) => (
         <button key={v.key} role="radio" aria-checked={current === v.key} className={`variant${current === v.key ? " is-active" : ""}`} onClick={() => pick(v)} title={v.label}>
           <Thumb category={item.category} variant={v.key} color={color} size="sm" />

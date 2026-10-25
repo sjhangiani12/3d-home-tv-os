@@ -26,7 +26,7 @@ export function SearchField({ value, onChange, placeholder, label }: Props) {
         }}
       />
       {value && (
-        <button className="search-clear" onClick={() => onChange("")} aria-label="Effacer la recherche">
+        <button className="search-clear" onClick={() => onChange("")} aria-label="Clear search">
           <IconClose width={14} height={14} />
         </button>
       )}
