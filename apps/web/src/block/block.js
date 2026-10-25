@@ -3,7 +3,7 @@
  * people, the subway station (bridge /mta.json), two Citi Bike docks (bridge /citibike.json), the weather
  * (Open-Meteo), and the home's lamps (bridge SSE) lighting its windows and the dollhouse.
  *
- * Privacy: the code draws a generic block. The real names (streets, station, docks, address, rooms, lamps),
+ * Privacy: the code draws a generic block. The real names (station, docks, address, rooms, lamps),
  * coordinates and layout seed come from /shared/block-home.json, which stays out of git like the apartment
  * model beside it. See README "Your block".
  *
@@ -28,10 +28,10 @@ const NAMES = {
   place: CFG.place || "YOUR BLOCK",
   address: CFG.address || "Home",
   homeLabel: CFG.homeLabel || "Home",
-  avenues: CFG.avenues || ["5 AV", "4 AV", "3 AV", "2 AV", "1 AV"],
-  streets: CFG.streets || ["N 3 ST", "N 2 ST", "N 1 ST", "MAIN ST", "S 1 ST", "S 2 ST", "S 3 ST"],
   station: Object.assign({ name: "Station", line: "", stop: null }, CFG.station || {}),
-  docks: CFG.docks || [{ name: "West dock", side: "← WEST" }, { name: "East dock", side: "EAST →" }],
+  // Each dock says what it is and which avenue it stands on; the near one is a block over, the far one
+  // across the avenue. `side` is the line on the sign, `name` the heading of its panel.
+  docks: CFG.docks || [{ name: "Citi Bike", side: "3 AV" }, { name: "Citi Bike", side: "2 AV" }],
   rooms: CFG.rooms || [],
 };
 const PI = Math.PI;
@@ -69,21 +69,23 @@ const camera = new THREE.PerspectiveCamera(12, W / H, 100, 3000);
 
 // ---------- the map (meters; x east, z south). Distances are squeezed so the station's avenue fits beside
 // the home's (the second avenue); home sits on the fourth street, two docks on the fifth and on the fourth avenue.
+// The roads carry no names: the geometry is a squeezed invention, so any name hung on it would be a lie — and
+// the three things worth naming (the station, the two docks) name themselves on their own signs.
 const AVES = [
-  { x: -190, w: 22, name: NAMES.avenues[0], dir: -1 },
-  { x: -80, w: 28, name: NAMES.avenues[1], two: true },
-  { x: 0, w: 28, name: NAMES.avenues[2], dir: -1 },
-  { x: 200, w: 28, name: NAMES.avenues[3], dir: 1, bike: true },
-  { x: 380, w: 30, name: NAMES.avenues[4], dir: -1 },
+  { x: -190, w: 22, dir: -1 },
+  { x: -80, w: 28, two: true },
+  { x: 0, w: 28, dir: -1 },
+  { x: 200, w: 28, dir: 1, bike: true },
+  { x: 380, w: 30, dir: -1 },
 ];
 const STS = [
-  { z: -240, w: 16, name: NAMES.streets[0], dir: -1 },
-  { z: -160, w: 26, name: NAMES.streets[1], two: true },
-  { z: -80, w: 16, name: NAMES.streets[2], dir: -1 },
-  { z: 0, w: 16, name: NAMES.streets[3], dir: 1 },
-  { z: 80, w: 16, name: NAMES.streets[4], dir: -1 },
-  { z: 160, w: 16, name: NAMES.streets[5], dir: 1 },
-  { z: 240, w: 16, name: NAMES.streets[6], dir: -1 },
+  { z: -240, w: 16, dir: -1 },
+  { z: -160, w: 26, two: true },
+  { z: -80, w: 16, dir: -1 },
+  { z: 0, w: 16, dir: 1 },
+  { z: 80, w: 16, dir: -1 },
+  { z: 160, w: 16, dir: 1 },
+  { z: 240, w: 16, dir: -1 },
 ];
 const AREA = { x0: -260, x1: 460, z0: -290, z1: 290 };
 const SW = 4.5, CURB = 0.18, FH = 3.3, CW = 3.4;
@@ -846,8 +848,6 @@ const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
 // What the speakers play: a sign over the home's far end, and notes rising off the roof while it plays.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
 const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [46.5, HOME.floors * FH + 1, 12], "notes");
-for (const av of AVES) sign(av.name, [av.x, 0.5, 120], "street");
-for (const st of STS) if (Math.abs(st.z) <= 160) sign(st.name, [100, 0.5, st.z], "street").el.style.fontSize = "14px";
 const roomSigns = ROOMS.map((r) => { const s = sign(r.name, [HOUSE.x + r.label[0], 1.8, HOUSE.z + r.label[2]], "room"); s.city = false; return s; });
 function mins(s) { return s <= 30 ? "Now" : `${Math.ceil(s / 60)} min`; }
 function shown(tr, now) { const s = tr.next - now; return s >= -DWELL ? s : tr.queued != null ? tr.queued - now : s; }
@@ -859,7 +859,7 @@ function renderSigns(now) {
   const row = (label, tr, s) => `<div class="row" style="justify-content:space-between;gap:18px;margin-top:6px"><span class="s">${label}</span>${s < -DWELL || s > 5400 ? `<span class="t">–</span>` : `<span class="row" style="gap:8px">${bullet(routeOf(tr, now), true)}<span class="t">${mins(Math.max(0, s))}</span></span>`}</div>`;
   trainSign.el.innerHTML = `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`;
   DOCKS.forEach((dk, i) => {
-    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.side}</div>
+    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
       <div class="row" style="gap:14px;margin-top:4px"><span class="big"><span class="bolt">⚡</span>${dk.ebikes}</span><span class="big" style="color:${BIKE_BLUE}">${dk.classic}</span></div>
       <div class="s" style="font-size:15px">e-bikes · classic</div>`;
   });

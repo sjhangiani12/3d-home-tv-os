@@ -41,7 +41,6 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .bolt { color: #2b7bd9; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--warm); box-shadow: 0 0 0 2px var(--ink); }
 .dot.off { background: #8b8496; }
-.street { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 17px/1 var(--font-display); letter-spacing: 0.1em; color: #fbf6ea; background: rgba(58, 46, 32, 0.6); border-radius: 10px; padding: 5px 10px; transition: opacity 300ms ease; }
 .room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
 
 /* HUD */
