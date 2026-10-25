@@ -48,9 +48,35 @@ instructions (`AGENTS.md`, plus thin `CLAUDE.md` / `GEMINI.md` / `.cursor/rules`
 [Verification](playbook/verification.md) · [Recovery (undo on the TV)](playbook/recovery.md) ·
 [Privacy](playbook/privacy.md)
 
+## The block
+
+The TV's home screen can also be your street: a live isometric pixel-art diorama (`apps/web/block.html`)
+with traffic, people, the nearest subway station (MTA feed via the bridge's `/mta.json`), two Citi Bike
+docks (`/citibike.json`), the weather (Open-Meteo) and your lamps lighting your windows. Lights flies the
+camera to your door and into your 3D home. On the remote, ↑ from the dock moves between the signs; OK zooms
+into the station or a dock.
+
+The code draws a generic block. Your own names stay out of git, in `apps/web/public/shared/block-home.json`
+beside your apartment model (all optional):
+
+```json
+{
+  "title": "My Block", "place": "MY STREET", "address": "12 Main St", "homeLabel": "12 · Home",
+  "seed": 1234, "location": { "latitude": 40.75, "longitude": -73.98 },
+  "avenues": ["…5 names, west to east…"], "streets": ["…7 names, north to south…"],
+  "station": { "name": "Grand Central", "line": "Lexington Av line", "stop": "631" },
+  "docks": [{ "name": "West dock name", "side": "← WEST" }, { "name": "East dock name", "side": "EAST →" }],
+  "rooms": [{ "name": "Living room", "lamps": [{ "id": 4, "name": "Hue light 4's name" }] }]
+}
+```
+
+`stop` is the MTA GTFS parent stop id; `lamps[].id` is the Hue light id. Set `citibikeStations` in
+`~/.config/appart3d/home.json` to pick the docks (the two nearest to `location` by default).
+
 ## What works with what
 
-- **TV:** Google TV and Android TV (e.g. Philips, Sony, TCL, Hisense, Chromecast with Google TV).
+- **TV:** Google TV and Android TV (e.g. Philips, Sony, TCL, Hisense, Chromecast with Google TV), and
+  Fire TV (Fire OS 8, the same accessibility-service approach).
   Apple TV, Samsung and LG home screens can't be replaced — add a Google TV dongle.
 - **Lights:** Philips Hue directly; anything Home Assistant supports.
 - **Scan:** iPhone/iPad Pro with LiDAR for the scanner app; otherwise draw the plan.
