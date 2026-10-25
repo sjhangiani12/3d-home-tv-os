@@ -720,6 +720,15 @@ const LOOKS = P.LOOKS;
 let look = null, todMode = "auto", wx = "clear", snowCover = 0;
 function nycHour() { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()); return parseInt(p, 10); }
 function currentTod() { if (todMode !== "auto") return todMode; const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night"; }
+/** Pin the block to an hour, or let it follow New York again. Kept in memory on purpose: the screen is a
+ *  window on the street first, so a reload — or the TV waking up tomorrow — comes back to the real sky. */
+function setTod(m) {
+  todMode = m;
+  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.tod === m)));
+  const lbl = document.getElementById("lookLbl");
+  if (lbl) lbl.textContent = m === "auto" ? "Auto" : m[0].toUpperCase() + m.slice(1);
+  applyLook();
+}
 const target = new THREE.Vector3(38, 0, 0);
 function applyLook() {
   const tod = currentTod(), L = LOOKS[tod];
@@ -930,7 +939,7 @@ const setPose = (p) => { cam.pos.copy(p.pos); cam.target.copy(p.target); cam.fov
 const fadeEl = document.getElementById("fade");
 const fade = (v) => new Promise((res) => { fadeEl.style.opacity = v; setTimeout(res, 300); });
 let mode = "city", flying = false, wantClose = false;
-const cityHud = ["chip", "dock", "mock"].map((id) => document.getElementById(id));
+const cityHud = ["panel", "dock", "mock"].map((id) => document.getElementById(id));
 async function openHome() {
   if (flying || mode !== "city") return;
   flying = true; cityHud.forEach((e) => e.classList.add("hide"));
@@ -1020,7 +1029,7 @@ addEventListener("keydown", (e) => {
     e.preventDefault();
     if (mode === "poi") { if (k === "Escape" || k === "Backspace") zoomOut(); return; }
     if (mode !== "city" || flying) return;
-    if (k.startsWith("Arrow")) { if (!sel) select(lastSel || POIS[1]); else navigate(k); }
+    if (k.startsWith("Arrow")) { if (!sel) select(lastSel || homePoi); else navigate(k); }
     else if (k === "Enter" || k === " ") enter(sel);
     return;
   }
@@ -1043,7 +1052,7 @@ addEventListener("keydown", (e) => {
   if (mode === "poi") { if (k === "Escape" || k === "Backspace") { e.preventDefault(); zoomOut(); } return; }
   if (mode !== "city" || flying) return;
   // Same ring as the TV: the signs, the Lights chip and the dock tiles are one plane of buttons.
-  if (k.startsWith("Arrow")) { e.preventDefault(); if (!sel) select(lastSel || POIS[1]); else navigate(k); }
+  if (k.startsWith("Arrow")) { e.preventDefault(); if (!sel) select(lastSel || homePoi); else navigate(k); }
   else if (k === "Enter" || k === " ") { if (sel) { e.preventDefault(); enter(sel); } }
 });
 
@@ -1052,7 +1061,11 @@ const detailHost = document.createElement("div");
 detailHost.id = "detail"; detailHost.className = "detail hide";
 stage.appendChild(detailHost);
 const POIS = [
-  { id: "lights", el: chip },
+  { id: "lights", el: chip, hud: true },
+  // The look buttons are four ordinary stops in the ring rather than one stop with a cycle inside it:
+  // a row of four is exactly what Left/Right already does, so the remote needs no special case and you
+  // can see which one you are on before you press OK.
+  ...[...document.querySelectorAll(".lk")].map((el) => ({ id: `look-${el.dataset.tod}`, el, tod: el.dataset.tod, hud: true })),
   { id: "home", el: homeSign.el },
   { id: "music", el: musicSign.el, target: new THREE.Vector3(46.5, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
@@ -1062,8 +1075,10 @@ const POIS = [
   // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
   ...apps.map((el, i) => ({ id: `app${i}`, el, app: true })),
 ];
+const homePoi = POIS.find((p) => p.id === "home");
 let sel = null, poi = null, lastSel = null;
-function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.id === "lights" ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
+// The panel's own rows take `.focus` (they live in a card already); the map signs take `.sel`.
+function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.hud ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
 function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 /** On screen and reachable: not hidden by the TV, not faded out with the rest of the HUD. */
 const reachable = (el) => el.offsetParent !== null && el.style.opacity !== "0" && !el.closest(".hide");
@@ -1086,6 +1101,7 @@ const poseFor = (p) => ({ pos: p.target.clone().add(dirOf(0.68, p.elev).multiply
 async function enter(p) {
   if (!p || flying) return;
   if (p.app) return; // the dock tiles are a mock; selecting one is all they do
+  if (p.tod) { setTod(p.tod); return; }
   if (p.id === "lights") { if (TV) toNative({ type: "openLights" }); else openHome(); return; }
   if (p.id === "home") { if (TV) toNative({ type: "viewHome" }); else openHome(); return; }
   flying = true; mode = "poi"; poi = p;
@@ -1141,7 +1157,7 @@ function renderDetail(now) {
 }
 // Commands from the TV app (focus in/out of the block, Back, Home)
 function command(type) {
-  if (type === "focusIn") { if (mode === "city") select(lastSel || POIS[1]); return true; }
+  if (type === "focusIn") { if (mode === "city") select(lastSel || homePoi); return true; }
   if (type === "focusOut") { select(null); return true; }
   if (type === "back") { if (mode === "poi") zoomOut(); else if (mode === "city") { select(null); toNative({ type: "focusDock" }); } return true; }
   if (type === "reset") { select(null); if (mode === "poi") zoomOut(); return true; }
@@ -1157,7 +1173,7 @@ for (const p of POIS) {
 document.getElementById("mock").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.wx) { wx = b.dataset.wx; wxForced = true; wxTemp = null; wxLabel = null; document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x === b)); applyLook(); }
-  if (b.dataset.tod) { todMode = b.dataset.tod; document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x === b)); applyLook(); }
+  if (b.dataset.tod) setTod(b.dataset.tod);
 });
 document.getElementById("trainNow").addEventListener("click", () => { trains.down.next = clockS + APPROACH; });
 
@@ -1285,8 +1301,6 @@ function artImg(url, n, cls) {
 function renderMusic() {
   const np = nowPlaying();
   musicSign.off = !np; notesSign.off = !np || np.state.media.state !== "playing";
-  // The card takes the top-right corner, so the Lights chip has to move over for it; CSS does the sliding.
-  document.body.classList.toggle("playing", !!np);
   if (!np) return;
   const m = np.state.media, rooms = m.group || [np.name];
   const html = `<div class="row">${artImg(m.artworkUrl, 16)}<div><div class="t">${esc(m.title || "Playing")}</div><div class="s">${esc(m.artist || m.app || "")}</div>
@@ -1327,10 +1341,9 @@ let clockS = 0, last = performance.now(), lastSigns = 0;
 const UP = new THREE.Vector3(0, 1, 0);
 {
   const h = (location.hash || "").slice(1).toLowerCase();
-  if (LOOKS[h]) todMode = h;
   if (WX_TEXT[h]) { wx = h; wxForced = true; }
   document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
-  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
+  setTod(LOOKS[h] ? h : "auto");
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
   if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }

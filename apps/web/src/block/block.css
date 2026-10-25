@@ -33,10 +33,10 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
 .sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
 .sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
-/* Pinned to the top-right corner instead of to a point on the map, so no tail and no transform — the loop
+/* Pinned under the control panel instead of to a point on the map, so no tail and no transform — the loop
    leaves `transform` alone for these, and `left/top/right` here are the whole of their placement. The width
-   is fixed rather than fitted so the Lights chip beside it keeps its place whatever the track is called. */
-.sign.pinned { left: auto; right: 64px; top: 48px; transform: none; width: 430px; box-sizing: border-box; }
+   is fixed rather than fitted so the panel above it keeps its width whatever the track is called. */
+.sign.pinned { left: auto; right: 64px; top: 212px; transform: none; width: 430px; box-sizing: border-box; }
 .sign.pinned::after { display: none; }
 /* Track titles are arbitrary length; the card holds its width and cuts the text rather than growing. */
 .sign.pinned .t, .sign.pinned .s { overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
@@ -57,12 +57,23 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 #clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; }
 #clock .place { font-size: 20px; margin-top: 6px; opacity: 0.85; letter-spacing: 0.08em; }
 
-#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 14px 18px; cursor: pointer; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), right 320ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
-/* Lights steps aside when a track is playing and takes the corner back when the music stops. */
-body.playing #chip { right: 518px; }
+/* Control panel: one card in the corner holding the things you can change — the lights, and the hour the
+   block is painted at. The now-playing card sits under it and is deliberately not part of it: a control
+   reads as a control, what's playing reads as content. Same width as that card so the two stack flush. */
+#panel { position: absolute; right: 64px; top: 48px; width: 430px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px; transition: opacity 300ms ease; }
+/* The rows are flat inside the card and only light up when chosen, so the card reads as one object. */
+#panel > * { border: 2px solid transparent; border-radius: 11px; }
+#chip { display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: transparent; box-shadow: none; padding: 12px 12px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease; }
 #chip svg { width: 30px; height: 30px; }
-#chip .dots { display: flex; gap: 6px; }
-#chip:focus-visible, #chip.focus { outline: none; background: var(--card-sel); transform: translateY(-4px) scale(1.04); box-shadow: 0 18px 34px rgba(48, 36, 22, 0.4); }
+#chip .dots { display: flex; gap: 6px; margin-left: auto; }
+#chip:focus-visible, #chip.focus { outline: none; background: var(--card-sel); border-color: var(--ink); }
+/* Day / dusk / night, plus Auto — the one that follows the real clock, and the one it falls back to on
+   every reload: the pin is for right now, not a setting. The label says which of them is in force. */
+#panel .look { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+#panel .look .lbl { font: 500 20px/1 var(--font-display); color: var(--muted); margin-right: auto; }
+.lk { width: 46px; height: 42px; font: 600 22px/1 var(--font-display); color: var(--ink); background: transparent; border: 2px solid transparent; border-radius: 11px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease; }
+.lk[aria-pressed="true"] { background: var(--paper-2); border-color: rgba(59, 51, 40, 0.3); }
+.lk:focus-visible, .lk.focus { outline: none; background: var(--card-sel); border-color: var(--ink); }
 
 /* Dock: glass tiles hovering over the block, lit from the top edge, blurring whatever is behind them.
    They answer the remote exactly like the map cards — same lift, same warm fill when selected. */
@@ -119,7 +130,7 @@ body.playing #chip { right: 518px; }
 #mock button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
 #mock .title { font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; font-size: 13px; text-transform: uppercase; }
 .hide { opacity: 0 !important; }
-@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .sign { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .lk, .sign { transition: none; } }
 
 /* Inside the TV launcher the app draws the dock, the Lights button and its drawer. */
 .tv #dock, .tv #drawer, .tv #mock { display: none; }
