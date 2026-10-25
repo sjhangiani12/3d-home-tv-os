@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="false"
     android:description="@string/home_service_description"
     android:notificationTimeout="0"
-    android:packageNames="com.google.android.apps.tv.launcherx" />
+    android:packageNames="com.google.android.apps.tv.launcherx,com.amazon.tv.launcher" />
