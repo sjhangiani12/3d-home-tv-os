@@ -12,7 +12,7 @@ enum ScanUploadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAvailable:
-            "L'envoi en ligne arrive bientôt. En attendant, partagez le fichier par AirDrop vers votre Mac."
+            "Online upload is coming soon. For now, AirDrop the file to your Mac."
         }
     }
 }

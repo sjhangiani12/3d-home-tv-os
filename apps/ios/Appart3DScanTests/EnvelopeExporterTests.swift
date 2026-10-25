@@ -32,13 +32,13 @@ private let livingRoom = FakeRoom(identifier: "A", walls: [FakeSurface(dimension
 private let bedroom = FakeRoom(identifier: "B", walls: [FakeSurface(dimensions: [3, 2.5, 0])],
                                objects: [FakeObject(category: ["bed": [:]]), FakeObject(category: ["storage": [:]])])
 
-@Suite("Enveloppe appart3d.roomplan")
+@Suite("appart3d.roomplan envelope")
 struct EnvelopeExporterTests {
     private let date = Date(timeIntervalSince1970: 1_791_547_200) // 2026-10-09T12:00:00Z
 
     @Test func headerKeysArePresent() throws {
         let envelope = EnvelopeExporter.makeEnvelope(
-            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Séjour"],
+            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Living room"],
             capturedAt: date, device: "iPhone17,1", appVersion: "0.1.0")
         let root = try json(try EnvelopeExporter.encode(envelope))
 
@@ -53,7 +53,7 @@ struct EnvelopeExporterTests {
 
     @Test func missingStructureIsEncodedAsNull() throws {
         let envelope = EnvelopeExporter.makeEnvelope(
-            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Séjour"], capturedAt: date)
+            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Living room"], capturedAt: date)
         let root = try json(try EnvelopeExporter.encode(envelope))
         #expect(root.keys.contains("structure"))
         #expect(root["structure"] is NSNull)
@@ -63,7 +63,7 @@ struct EnvelopeExporterTests {
         let structure = FakeStructure(rooms: [livingRoom, bedroom], walls: livingRoom.walls + bedroom.walls,
                                       objects: livingRoom.objects + bedroom.objects)
         let envelope = EnvelopeExporter.makeEnvelope(
-            structure: structure, rooms: [livingRoom, bedroom], roomNames: ["Séjour", "Chambre"], capturedAt: date)
+            structure: structure, rooms: [livingRoom, bedroom], roomNames: ["Living room", "Bedroom"], capturedAt: date)
         let data = try EnvelopeExporter.encode(envelope)
         let root = try json(data)
 
@@ -79,34 +79,40 @@ struct EnvelopeExporterTests {
 
     @Test func roomNamesAreAlignedWithRooms() throws {
         let tooFew = EnvelopeExporter.makeEnvelope(
-            structure: Optional<FakeStructure>.none, rooms: [livingRoom, bedroom], roomNames: ["Séjour"], capturedAt: date)
-        #expect(tooFew.roomNames == ["Séjour", "Pièce 2"])
+            structure: Optional<FakeStructure>.none, rooms: [livingRoom, bedroom], roomNames: ["Living room"], capturedAt: date)
+        #expect(tooFew.roomNames == ["Living room", "Pièce 2"]) // "Pièce N" is the wire placeholder (web importer matches it)
 
         let tooMany = EnvelopeExporter.makeEnvelope(
-            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Séjour", "Cuisine"], capturedAt: date)
-        #expect(tooMany.roomNames == ["Séjour"])
+            structure: Optional<FakeStructure>.none, rooms: [livingRoom], roomNames: ["Living room", "Kitchen"], capturedAt: date)
+        #expect(tooMany.roomNames == ["Living room"])
 
-        let blank = EnvelopeExporter.alignedNames(["  ", "Chambre "], count: 2)
-        #expect(blank == ["Pièce 1", "Chambre"])
+        let blank = EnvelopeExporter.alignedNames(["  ", "Bedroom "], count: 2)
+        #expect(blank == ["Pièce 1", "Bedroom"])
 
         let root = try json(try EnvelopeExporter.encode(tooFew))
         #expect((root["roomNames"] as? [String])?.count == (root["rooms"] as? [Any])?.count)
     }
 
     @Test func fileNameIsSanitized() {
-        #expect(EnvelopeExporter.fileName(for: "Mon appart") == "Mon appart.appart3d.json")
-        #expect(EnvelopeExporter.fileName(for: "Rue: 12/3") == "Rue- 12-3.appart3d.json")
-        #expect(EnvelopeExporter.fileName(for: "   ") == "appartement.appart3d.json")
+        #expect(EnvelopeExporter.fileName(for: "My home") == "My home.appart3d.json")
+        #expect(EnvelopeExporter.fileName(for: "Street: 12/3") == "Street- 12-3.appart3d.json")
+        #expect(EnvelopeExporter.fileName(for: "   ") == "home.appart3d.json")
+    }
+
+    @Test func placeholderRoomNamesDisplayInEnglish() {
+        #expect(DisplayLabels.roomName("Pièce 3") == "Room 3")
+        #expect(DisplayLabels.roomName("Kitchen") == "Kitchen")
+        #expect(DisplayLabels.roomName("Pièce de vie") == "Pièce de vie")
     }
 }
 
-@Suite("Résumé d'enveloppe")
+@Suite("Envelope summary")
 struct ScanSummaryTests {
     @Test func summaryPrefersStructure() throws {
         let structure = FakeStructure(rooms: [livingRoom, bedroom], walls: [FakeSurface(dimensions: [1, 1, 0])],
                                       objects: [FakeObject(category: ["sofa": [:]])])
         let envelope = EnvelopeExporter.makeEnvelope(
-            structure: structure, rooms: [livingRoom, bedroom], roomNames: ["Séjour", "Chambre"])
+            structure: structure, rooms: [livingRoom, bedroom], roomNames: ["Living room", "Bedroom"])
         let summary = try ScanSummary.from(envelopeData: try EnvelopeExporter.encode(envelope))
         #expect(summary.fromMergedStructure)
         #expect(summary.roomCount == 2)

@@ -9,7 +9,7 @@ enum ScanExportService {
 
         var errorDescription: String? {
             switch self {
-            case .demoMissing: "Le fichier de démonstration est introuvable dans l'application."
+            case .demoMissing: "The demo file is missing from the app."
             }
         }
     }

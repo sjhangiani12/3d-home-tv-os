@@ -96,8 +96,8 @@ export function buildRooms(input: RoomBuildInput): Room[] {
     if (signedArea(poly) < 0) poly.reverse();
 
     const rawName = cand.capture !== null ? roomNames[cand.capture] ?? null : null;
-    // The iOS app pads unnamed rooms with "Pièce N": treat those as unnamed so the section label wins.
-    const userName = rawName && !/^pi[eè]ce\s*\d+$/i.test(rawName.trim()) ? rawName : null;
+    // The iOS app pads unnamed rooms with "Pièce N" (or "Room N"): treat those as unnamed so the section label wins.
+    const userName = rawName && !/^(pi[eè]ce|room)\s*\d+$/i.test(rawName.trim()) ? rawName : null;
     const section =
       plannedSections.find((s) => pointInPolygon(s.at, poly) && kindFromSectionLabel(s.label)) ??
       plannedSections.find((s) => pointInPolygon(s.at, poly));
@@ -116,7 +116,7 @@ export function buildRooms(input: RoomBuildInput): Room[] {
       floorColor: FLOOR_COLOR[material],
     });
   }
-  // Rename the first duplicate too ("Chambre" + "Chambre 2" → "Chambre 1" + "Chambre 2") only for auto names.
+  // Rename the first duplicate too ("Bedroom" + "Bedroom 2" → "Bedroom 1" + "Bedroom 2") only for auto names.
   for (const [base, count] of nameCount) {
     if (count < 2) continue;
     const first = rooms.find((r) => r.name === base);

@@ -1,6 +1,6 @@
 import RoomPlan
 
-/// Copie Sendable de `RoomCaptureSession.Instruction` avec un texte français.
+/// Sendable copy of `RoomCaptureSession.Instruction` with an English message.
 enum ScanInstruction: Sendable, Equatable {
     case normal, moveCloseToWall, moveAwayFromWall, slowDown, turnOnLight, lowTexture
 
@@ -18,11 +18,11 @@ enum ScanInstruction: Sendable, Equatable {
     var message: String? {
         switch self {
         case .normal: nil
-        case .moveCloseToWall: "Rapprochez-vous du mur"
-        case .moveAwayFromWall: "Éloignez-vous un peu du mur"
-        case .slowDown: "Ralentissez"
-        case .turnOnLight: "Allumez la lumière"
-        case .lowTexture: "Surface peu texturée : visez des zones plus détaillées"
+        case .moveCloseToWall: "Move closer to the wall"
+        case .moveAwayFromWall: "Move a little away from the wall"
+        case .slowDown: "Slow down"
+        case .turnOnLight: "Turn on the light"
+        case .lowTexture: "Low texture: aim at more detailed areas"
         }
     }
 

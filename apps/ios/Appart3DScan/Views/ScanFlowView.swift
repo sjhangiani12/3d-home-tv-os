@@ -54,13 +54,13 @@ struct ScanFlowView: View {
             .presentationDetents([.medium, .large])
             .presentationBackground(Theme.cream)
         }
-        .confirmationDialog("Quitter le scan ?", isPresented: $confirmQuit, titleVisibility: .visible) {
-            Button("Quitter sans enregistrer", role: .destructive) {
+        .confirmationDialog("Quit the scan?", isPresented: $confirmQuit, titleVisibility: .visible) {
+            Button("Quit without saving", role: .destructive) {
                 session.cancel()
                 onClose(nil)
             }
         } message: {
-            Text("Les pièces déjà scannées seront perdues.")
+            Text("You will lose the rooms you already scanned.")
         }
     }
 
@@ -80,11 +80,11 @@ struct ScanFlowView: View {
                     .background(.ultraThinMaterial, in: Circle())
             }
             .disabled(isBusy)
-            .accessibilityLabel("Quitter")
+            .accessibilityLabel("Quit")
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.projectName).font(.headline)
-                Text(FrenchLabels.plural(session.rooms.count, "pièce scannée", "pièces scannées"))
+                Text(DisplayLabels.plural(session.rooms.count, "room scanned", "rooms scanned"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -100,45 +100,45 @@ struct ScanFlowView: View {
             switch session.phase {
             case .ready:
                 if session.rooms.isEmpty {
-                    Text("Placez-vous à l'entrée de la première pièce, porte fermée, puis démarrez.")
+                    Text("Stand at the entrance of the first room with the door closed, then start.")
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                 } else {
                     ScannedRoomsStrip(names: session.roomNames)
                 }
                 Button { session.startRoom() } label: {
-                    Label(session.rooms.isEmpty ? "Démarrer le scan" : "Scanner la pièce \(session.nextRoomNumber)",
+                    Label(session.rooms.isEmpty ? "Start scan" : "Scan room \(session.nextRoomNumber)",
                           systemImage: "record.circle")
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 if !session.rooms.isEmpty {
                     Button { Task { await session.finish(store: store) } } label: {
-                        Label("Terminer l'appartement", systemImage: "checkmark")
+                        Label("Finish home", systemImage: "checkmark")
                     }
                     .buttonStyle(PrimaryButtonStyle(color: Theme.sage))
                 }
             case .scanning:
-                Text("Balayez lentement murs, sol et meubles.")
+                Text("Slowly sweep the walls, floor, and furniture.")
                     .font(.subheadline)
                 Button { session.stopRoom() } label: {
-                    Label("Terminer cette pièce", systemImage: "stop.circle.fill")
+                    Label("Finish this room", systemImage: "stop.circle.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
             case .processing:
-                ProgressRow(text: "Calcul de la pièce…")
+                ProgressRow(text: "Processing the room…")
             case .naming:
-                ProgressRow(text: "Pièce prête")
+                ProgressRow(text: "Room ready")
             case .merging:
-                ProgressRow(text: "Assemblage des pièces…")
+                ProgressRow(text: "Merging the rooms…")
             case .exporting:
-                ProgressRow(text: "Export du fichier…")
+                ProgressRow(text: "Exporting the file…")
             case .finished:
-                ProgressRow(text: "Terminé")
+                ProgressRow(text: "Done")
             case .failed(let message):
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.subheadline)
                     .foregroundStyle(Theme.terracotta)
-                Button("Réessayer") { session.recoverFromFailure() }
+                Button("Try again") { session.recoverFromFailure() }
                     .buttonStyle(SecondaryButtonStyle())
             }
         }
@@ -184,7 +184,7 @@ private struct ScannedRoomsStrip: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(names.enumerated()), id: \.offset) { _, name in
-                    Label(name, systemImage: "checkmark.circle.fill")
+                    Label(DisplayLabels.roomName(name), systemImage: "checkmark.circle.fill")
                         .font(.subheadline.weight(.medium))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -208,7 +208,7 @@ struct NoticeBanner: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(Theme.inkSoft)
             }
-            .accessibilityLabel("Fermer le message")
+            .accessibilityLabel("Dismiss message")
         }
         .padding(12)
         .background(Theme.card.opacity(0.95), in: RoundedRectangle(cornerRadius: 14, style: .continuous))

@@ -29,8 +29,8 @@ function expectFit(parts: ReturnType<typeof buildParts>, [w, h, d]: Vec3, tag: s
 describe("person", () => {
   it("catalog entry", () => {
     const e = getCatalogEntry("person")!;
-    expect(e.label).toBe("Personne");
-    expect(e.group).toBe("Divers");
+    expect(e.label).toBe("Person");
+    expect(e.group).toBe("Misc");
     expect(e.variants!.map((v) => v.key)).toEqual(["person/sitting", "person/standing", "person/sitting-relaxed"]);
     expect(e.variants![0]!.defaultDimensions).toEqual([0.5, 1.3, 0.75]);
     expect(e.variants![1]!.defaultDimensions).toEqual([0.5, 1.75, 0.3]);
@@ -103,9 +103,9 @@ describe("person", () => {
 });
 
 describe("armchair/swivel", () => {
-  it("is registered with its French label and green default", () => {
+  it("is registered with its English label and green default", () => {
     const v = MODELS.armchair.find((x) => x.key === "armchair/swivel")!;
-    expect(v.label).toBe("Fauteuil pivotant");
+    expect(v.label).toBe("Swivel armchair");
     expect(v.defaultColor).toBe("#2f7d4f");
   });
   for (const dims of [[0.8, 0.74, 0.78], [0.56, 0.52, 0.55], [1.2, 0.95, 1.0]] as Vec3[]) {

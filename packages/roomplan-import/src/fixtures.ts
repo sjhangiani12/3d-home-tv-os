@@ -1,7 +1,7 @@
 /**
  * Synthetic RoomPlan exports that mimic Swift's JSONEncoder output for CapturedRoom /
  * CapturedStructure (iOS 17, and an iOS 16 variant). Used by the tests and shipped as
- * `fixtures/*.appart3d.json`; the web app can use `generateFixtureEnvelope()` as a "Scan exemple".
+ * `fixtures/*.appart3d.json`; the web app can use `generateFixtureEnvelope()` as a "Sample scan".
  *
  * Everything is authored in a clean plan frame ([x, z], meters, walls listed counter-clockwise so
  * that their local +Z normal points into the room, like real RoomPlan walls) and then moved by an
@@ -303,7 +303,7 @@ export function singleRoomFixture(): Json {
       { category: "chair", at: [1.0, 3.3], yaw: (3 * PI) / 4, dims: [0.8, 0.8, 0.8], confidence: "low" },
     ],
   });
-  return envelope(null, [json], ["Séjour"]);
+  return envelope(null, [json], ["Living room"]);
 }
 
 /**
@@ -416,7 +416,7 @@ export function multiRoomFixture(): Json {
     sections: all("sections"),
     rooms,
   };
-  return envelope(structure, rooms, ["Séjour", "Chambre", "Salle de bain"]);
+  return envelope(structure, rooms, ["Living room", "Bedroom", "Bathroom"]);
 }
 
 /**
@@ -445,10 +445,10 @@ export function ios16Fixture(): Json {
       { category: "plant", at: [3.7, 0.3], yaw: 0, dims: [0.4, 1.0, 0.4] },
     ],
   });
-  return envelope(null, [json], ["Chambre"]);
+  return envelope(null, [json], ["Bedroom"]);
 }
 
-/** Example envelope for the web app ("Scan exemple"). Default: the multi-room apartment. */
+/** Example envelope for the web app ("Sample scan"). Default: the multi-room apartment. */
 export function generateFixtureEnvelope(kind: FixtureKind = "multi"): Record<string, unknown> {
   switch (kind) {
     case "single":

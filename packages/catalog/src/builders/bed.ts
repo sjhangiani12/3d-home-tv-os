@@ -64,7 +64,8 @@ function bed(c: Ctx, st: BedStyle): Parts {
   p.rbox([-dx + 0.005, duvTop - 0.03, dz0 - 0.02], [dx - 0.005, Math.min(h, duvTop + 0.012), dz0 + 0.2], lighten(color, 0.4), 0.02, { seg: 1 });
   // throw blanket at the foot for wide beds
   if (w > 1.2 && d > 1.6) {
-    const accent = color.toLowerCase() === palette.terracotta ? palette.mustard : palette.terracotta;
+    // `attributes.throw` sets the throw's color (hex); otherwise a contrasting accent.
+    const accent = c.attrs.throw ?? (color.toLowerCase() === palette.terracotta ? palette.mustard : palette.terracotta);
     p.rbox([-dx - 0.003, mattressTop - mattressT * 0.5, mz1 - 0.42], [dx + 0.003, Math.min(h, duvTop + 0.012), Math.min(d / 2, mz1 + 0.02)], accent, 0.02, { seg: 1 });
   }
   return p;

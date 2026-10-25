@@ -22,7 +22,7 @@ struct RoomCaptureContainer: UIViewControllerRepresentable {
         }
 
         @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError("init(coder:) non supporté") }
+        required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
 
         override func viewDidLoad() {
             super.viewDidLoad()

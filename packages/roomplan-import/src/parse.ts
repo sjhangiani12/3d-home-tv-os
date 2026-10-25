@@ -256,11 +256,11 @@ export function parseEnvelope(input: unknown): ParsedEnvelope {
     try {
       data = JSON.parse(data);
     } catch {
-      throw new RoomPlanImportError("Fichier illisible : le contenu n'est pas du JSON valide.");
+      throw new RoomPlanImportError("Unreadable file: the content is not valid JSON.");
     }
   }
   if (Array.isArray(data) && data.some(looksLikeCapture)) data = { rooms: data };
-  if (!isObj(data)) throw new RoomPlanImportError("Fichier invalide : un objet JSON de scan RoomPlan était attendu.");
+  if (!isObj(data)) throw new RoomPlanImportError("Invalid file: expected a RoomPlan scan JSON object.");
 
   const counter = { bad: 0 };
   const issues: string[] = [];
@@ -271,24 +271,24 @@ export function parseEnvelope(input: unknown): ParsedEnvelope {
       ? { structure: env, rooms: env.rooms }
       : { rooms: [env] };
   } else if (typeof env.format === "string" && env.format !== "appart3d.roomplan") {
-    throw new RoomPlanImportError(`Format de fichier non reconnu (« ${env.format} »). Exportez le scan depuis l'app Appart3D.`);
+    throw new RoomPlanImportError(`Unrecognized file format ("${env.format}"). Export the scan from the Appart3D app.`);
   } else if (env.format === undefined && !("structure" in env) && !("rooms" in env)) {
-    throw new RoomPlanImportError("Fichier invalide : ce n'est pas un export de scan Appart3D (champ « format » absent).");
+    throw new RoomPlanImportError("Invalid file: not an Appart3D scan export (no \"format\" field).");
   }
 
   const version = isNum(env.version) ? env.version : null;
-  if (version !== null && version > 1) issues.push(`Version d'export ${version} plus récente que l'importeur : certains éléments peuvent manquer.`);
+  if (version !== null && version > 1) issues.push(`Export version ${version} is newer than the importer: some elements may be missing.`);
 
   const structure = looksLikeCapture(env.structure) ? parseStructure(env.structure, counter) : null;
-  if (env.structure !== undefined && env.structure !== null && !structure) issues.push("Structure fusionnée illisible, utilisation des pièces individuelles.");
+  if (env.structure !== undefined && env.structure !== null && !structure) issues.push("Merged structure unreadable, using the individual rooms.");
   const rawRooms = Array.isArray(env.rooms) ? env.rooms : [];
   const rooms = rawRooms.filter(looksLikeCapture).map((r) => parseCapture(r, counter));
   const roomNames = Array.isArray(env.roomNames) ? env.roomNames.map((n) => (typeof n === "string" && n.trim() ? n.trim() : null)) : [];
 
   if (!structure && rooms.length === 0) {
-    throw new RoomPlanImportError("Le fichier ne contient aucune pièce scannée exploitable (ni « structure » ni « rooms »).");
+    throw new RoomPlanImportError("The file contains no usable scanned room (neither \"structure\" nor \"rooms\").");
   }
-  if (counter.bad > 0) issues.push(`${counter.bad} élément${counter.bad > 1 ? "s" : ""} du scan illisible${counter.bad > 1 ? "s" : ""} ignoré${counter.bad > 1 ? "s" : ""}.`);
+  if (counter.bad > 0) issues.push(`${counter.bad} unreadable scan element${counter.bad > 1 ? "s" : ""} ignored.`);
 
   return {
     format: typeof env.format === "string" ? env.format : null,

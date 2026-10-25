@@ -12,7 +12,7 @@ export type MediaCommand = "play" | "pause" | "playPause" | "next" | "previous";
 
 /**
  * What a speaker (AirPlay / HomePod) or a TV is playing.
- * Speaker: title / artist / album / app (« Musique », « Spotify »…), position + duration in seconds.
+ * Speaker: title / artist / album / app ("Music", "Spotify"…), position + duration in seconds.
  * TV: `app` = running app (Netflix…), `channel` = TV channel name, `title` = programme / media title;
  * the input (HDMI 1…) stays in `DeviceState.source`.
  */
@@ -126,7 +126,7 @@ export interface Device {
   name: string;
   kind: DeviceKind;
   source: DeviceSource;
-  /** Room label as configured in the bridge (Salon, Cuisine, Chambre…). */
+  /** Room label as configured in the bridge (e.g. Salon, Cuisine, Chambre, or English names). */
   room: string;
   /** Id of the 3D item this device is linked to (Scene item id), if mapped. */
   itemId?: string;
@@ -156,7 +156,7 @@ export type DeviceAction =
 
 export interface HomeScene {
   id: string;
-  /** French label: Lumineux, Cosy, Film, Nuit, Absent. */
+  /** UI label: Bright, Cozy, Movie, Night, Away. */
   name: string;
   icon: "sun" | "sofa" | "film" | "moon" | "door";
 }
@@ -228,7 +228,7 @@ export const HOME_API = {
 /** Native app pairing: exchange the 6-digit pair code (shown by `pnpm pair`, also in its QR URL) for the token. */
 export interface PairRequest {
   code: string;
-  /** e.g. "iPhone d'Alex" — for the bridge log only. */
+  /** e.g. "Alex's iPhone" — for the bridge log only. */
   deviceName?: string;
 }
 
@@ -272,36 +272,36 @@ export type EmbedEvent =
   | { type: "itemTapped"; itemId: string; deviceIds: string[] }
   | { type: "error"; message: string };
 
-/** French label of a Philips Ambilight effect id ("FOLLOW_VIDEO: STANDARD" → "Vidéo · Standard"). */
+/** UI label of a Philips Ambilight effect id ("FOLLOW_VIDEO: STANDARD" → "Video · Standard"). */
 export function ambilightEffectLabel(effect: string): string {
   const [group = "", name = "", expert] = effect.split(":").map((p) => p.trim());
-  const groups: Record<string, string> = { FOLLOW_VIDEO: "Vidéo", FOLLOW_AUDIO: "Son", FOLLOW_COLOR: "Couleur", Mode: "Mode" };
+  const groups: Record<string, string> = { FOLLOW_VIDEO: "Video", FOLLOW_AUDIO: "Audio", FOLLOW_COLOR: "Color", Mode: "Mode" };
   const names: Record<string, string> = {
     STANDARD: "Standard",
-    NATURAL: "Naturel",
-    VIVID: "Vif",
-    GAME: "Jeu",
-    IMMERSIVE: "Immersif",
-    ENERGY_ADAPTIVE_BRIGHTNESS: "Énergie",
-    ENERGY_ADAPTIVE_COLORS: "Couleurs énergie",
+    NATURAL: "Natural",
+    VIVID: "Vivid",
+    GAME: "Game",
+    IMMERSIVE: "Immersive",
+    ENERGY_ADAPTIVE_BRIGHTNESS: "Energy",
+    ENERGY_ADAPTIVE_COLORS: "Energy colors",
     RANDOM_PIXEL_FLASH: "Flash",
-    VU_METER: "VU-mètre",
-    SPECTRUM_ANALYZER: "Spectre",
-    KNIGHT_RIDER_ALTERNATING: "K2000",
-    KNIGHT_RIDER_CLOCKWISE: "K2000 rotatif",
-    PARTY: "Fête",
-    STROBO: "Strobo",
-    CUSTOM_COLOR: "Personnalisée",
-    DEEP_WATER: "Eau profonde",
+    VU_METER: "VU meter",
+    SPECTRUM_ANALYZER: "Spectrum",
+    KNIGHT_RIDER_ALTERNATING: "Knight Rider",
+    KNIGHT_RIDER_CLOCKWISE: "Knight Rider spin",
+    PARTY: "Party",
+    STROBO: "Strobe",
+    CUSTOM_COLOR: "Custom",
+    DEEP_WATER: "Deep water",
     FRESH_NATURE: "Nature",
-    HOT_LAVA: "Lave",
-    ISF: "Blanc chaud",
-    AUTOMATIC_HUE: "Teinte auto",
-    MANUAL_HUE: "Teinte manuelle",
+    HOT_LAVA: "Hot lava",
+    ISF: "Warm white",
+    AUTOMATIC_HUE: "Auto hue",
+    MANUAL_HUE: "Manual hue",
     expert: "Expert",
-    internal: "Interne",
+    internal: "Internal",
     lounge: "Lounge",
-    manual: "Manuel",
+    manual: "Manual",
   };
   const g = groups[group];
   if (!g) return effect;
@@ -310,9 +310,11 @@ export function ambilightEffectLabel(effect: string): string {
 }
 
 export const DEFAULT_SCENES: HomeScene[] = [
-  { id: "bright", name: "Lumineux", icon: "sun" },
-  { id: "cozy", name: "Cosy", icon: "sofa" },
-  { id: "movie", name: "Film", icon: "film" },
-  { id: "night", name: "Nuit", icon: "moon" },
-  { id: "away", name: "Absent", icon: "door" },
+  { id: "bright", name: "Bright", icon: "sun" },
+  { id: "cozy", name: "Cozy", icon: "sofa" },
+  { id: "relax", name: "Relax", icon: "sofa" },
+  { id: "read", name: "Read", icon: "sun" },
+  { id: "movie", name: "Movie", icon: "film" },
+  { id: "night", name: "Night", icon: "moon" },
+  { id: "away", name: "Away", icon: "door" },
 ];

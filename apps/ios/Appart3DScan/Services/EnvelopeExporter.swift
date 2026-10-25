@@ -3,6 +3,8 @@ import Foundation
 /// Construction et encodage de l'enveloppe `.appart3d.json`. Pur et sans dépendance à RoomPlan → testable.
 enum EnvelopeExporter {
     static let fileExtension = "appart3d.json"
+    /// Placeholder for unnamed rooms. Written to the envelope; the web importer matches `Pièce N`. Do not translate.
+    static let placeholderRoomPrefix = "Pièce "
 
     static func makeEnvelope<S, R>(
         structure: S?,
@@ -33,7 +35,7 @@ enum EnvelopeExporter {
     static func alignedNames(_ names: [String], count: Int) -> [String] {
         (0..<count).map { index in
             let name = index < names.count ? names[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
-            return name.isEmpty ? "Pièce \(index + 1)" : name
+            return name.isEmpty ? "\(placeholderRoomPrefix)\(index + 1)" : name
         }
     }
 
@@ -53,6 +55,6 @@ enum EnvelopeExporter {
             .map { forbidden.contains($0) ? "-" : String($0) }
             .joined()
             .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
-        return cleaned.isEmpty ? "appartement" : String(cleaned.prefix(80))
+        return cleaned.isEmpty ? "home" : String(cleaned.prefix(80))
     }
 }

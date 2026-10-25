@@ -1,5 +1,5 @@
 /**
- * "Divers" / mounted pieces: bicycle, coat rack, pendant lamps, ceiling fan, radiator, curtains.
+ * "Misc" / mounted pieces: bicycle, coat rack, pendant lamps, ceiling fan, radiator, curtains.
  *
  * Mounted items still use the standard local frame (origin = center of the footprint at the
  * item's BOTTOM, y up, front +Z): wall pieces have their back on z = -d/2, ceiling pieces touch
@@ -128,6 +128,136 @@ export const bicycle: Build = (c) => {
   p.add({ kind: "tube", path: [[bb[0], bb[1] + cr, 0.045], [xr, R + 0.03, 0.045]], r: 0.004, seg: 4, steps: 1 }, [0, 0, 0], palette.charcoal);
   p.add({ kind: "tube", path: [[bb[0], bb[1] - cr, 0.045], [xr, R - 0.03, 0.045]], r: 0.004, seg: 4, steps: 1 }, [0, 0, 0], palette.charcoal);
   p.cylZ(xr, R, 0.03, 0.05, 0.035, 0.035, metal, { seg: 12 });
+  return p;
+};
+
+/* ------------------------------------------------------- bike share (Citi Bike) */
+
+const SHARE_SKIRT = "#7fb2ee"; // light-blue rear wheel skirt
+const SHARE_DARK = "#3b4047"; // rack, fenders, battery
+
+/**
+ * Bike-share bike, side view along X (front = +X): step-through frame, upright bar spanning the depth,
+ * front rack, light-blue skirts over the rear wheel. `electric`: battery on the down tube, rear hub motor.
+ */
+function shareBike(c: Parameters<Build>[0], electric: boolean): Parts {
+  const p = new Parts();
+  const { w, h, d, color } = c;
+  if (w < 0.4 || h < 0.3 || d < 0.08) return tiny(p, w, h, d, color);
+  const R = Math.min(h * 0.32, w * 0.19);
+  const tr = clamp(R * 0.09, 0.01, 0.03); // fat tires
+  const xr = -w / 2 + R;
+  const xf = w / 2 - R;
+  const L = xf - xr;
+  const tube = clamp(R * 0.09, 0.012, 0.035); // chunky frame
+  const metal = "#8d939a";
+
+  for (const x of [xr, xf]) {
+    p.add({ kind: "torus", R: R - tr, r: tr, seg: 28 }, [x, R, 0], SHARE_DARK);
+    p.add({ kind: "torus", R: R - tr * 2.2, r: tr * 0.4, seg: 24 }, [x, R, 0], palette.steel);
+    p.cylZ(x, R, -0.035, 0.035, tube, tube, metal, { seg: 10 });
+  }
+  // rear skirts: upper half-discs on both sides of the rear wheel, plus a fender over each wheel
+  const half: V2[] = Array.from({ length: 13 }, (_, i) => {
+    const a = (i / 12) * Math.PI;
+    return [Math.cos(a) * (R - tr * 2.2), Math.sin(a) * (R - tr * 2.2)] as V2;
+  });
+  // skirts match a light frame (white e-bikes), otherwise the signature light blue
+  const skirt = electric ? lighten(color, 0.15) : SHARE_SKIRT;
+  for (const s of [-1, 1]) p.add({ kind: "prism", pts: half, depth: 0.006 }, [xr, R, s * 0.03], skirt);
+  for (const x of [xr, xf]) {
+    const arc: V3[] = Array.from({ length: 7 }, (_, i) => {
+      const a = Math.PI * (0.12 + (i / 6) * 0.76);
+      return [x + Math.cos(a) * (R + 0.012), R + Math.sin(a) * (R + 0.012), 0];
+    });
+    p.add({ kind: "tube", path: arc, r: tr * 0.9, seg: 6, steps: 12 }, [0, 0, 0], SHARE_DARK);
+  }
+
+  // frame key points (XY): a low curved main tube, no top tube
+  const bb: V2 = [xr + L * 0.45, R * 0.7];
+  const sadTop = h;
+  const sadY = sadTop - 0.04;
+  const seatAng = 0.32;
+  const sadX = bb[0] - Math.tan(seatAng) * (sadY - bb[1]);
+  const cl: V2 = [bb[0] - Math.tan(seatAng) * (h * 0.66 - bb[1]), h * 0.66];
+  const htTop: V2 = [xf - L * 0.2, h * 0.78];
+  const htBot: V2 = [xf - L * 0.14, h * 0.6];
+  const v = (q: V2, z = 0): V3 => [q[0], q[1], z];
+  p.add({ kind: "tube", path: [v(bb), [bb[0] + L * 0.14, bb[1] + R * 0.12, 0], [htBot[0] - L * 0.1, htBot[1] - R * 0.25, 0], v(htBot)], r: tube, seg: 8, steps: 12 }, [0, 0, 0], color);
+  p.add({ kind: "tube", path: [v(bb), v(cl)], r: tube * 0.9, seg: 8, steps: 1 }, [0, 0, 0], color);
+  p.add({ kind: "tube", path: [v(htBot), v(htTop)], r: tube * 1.1, seg: 8, steps: 1 }, [0, 0, 0], color);
+  for (const s of [-1, 1]) {
+    const z = s * 0.04;
+    p.add({ kind: "tube", path: [[xr, R, z], [bb[0], bb[1], s * 0.025]], r: tube * 0.6, seg: 5, steps: 1 }, [0, 0, 0], color);
+    p.add({ kind: "tube", path: [[xr, R, z], [cl[0], cl[1] - 0.03, s * 0.015]], r: tube * 0.55, seg: 5, steps: 1 }, [0, 0, 0], color);
+    p.add({ kind: "tube", path: [[htBot[0], htBot[1], s * 0.02], [(htBot[0] + xf) / 2 + 0.015, (htBot[1] + R) / 2, s * 0.035], [xf, R, z]], r: tube * 0.6, seg: 5, steps: 6 }, [0, 0, 0], color);
+  }
+  if (electric) {
+    // battery along the main tube, motor in the rear hub
+    const bx = bb[0] + L * 0.16;
+    const by = bb[1] + R * 0.24;
+    p.add({ kind: "rbox", size: [L * 0.26, tube * 2.4, tube * 2.6], r: tube * 0.6, seg: 2 }, [bx, by, 0], SHARE_DARK, { rot: [0, 0, 0.32] });
+    p.cylZ(xr, R, -0.05, 0.05, R * 0.24, R * 0.24, SHARE_DARK, { seg: 14 });
+  }
+  // seat post + saddle
+  p.add({ kind: "tube", path: [v(cl), [sadX, sadY - 0.02, 0]], r: tube * 0.6, seg: 6, steps: 1 }, [0, 0, 0], palette.steel);
+  const sl = clamp(R * 0.42, 0.07, 0.16);
+  p.add({ kind: "sphere", r: 1, seg: 12 }, [sadX + sl * 0.1, sadTop - 0.025, 0], palette.ink, { scale: [sl, 0.025, clamp(d * 0.2, 0.04, 0.09)] });
+
+  // stem + upright bar spanning the depth, grips at the ends
+  const hr = clamp(tube * 0.6, 0.008, 0.016);
+  const hb: V2 = [htTop[0] - L * 0.06, Math.min(h * 0.9, sadTop - hr - 0.01)];
+  p.add({ kind: "tube", path: [v(htTop), v(hb)], r: tube * 0.8, seg: 6, steps: 1 }, [0, 0, 0], color);
+  const zb = d / 2;
+  p.cylZ(hb[0], hb[1], -zb, zb, hr, hr, palette.charcoal, { seg: 8 });
+  for (const s of [-1, 1]) p.cylZ(hb[0], hb[1], s > 0 ? zb - 0.1 : -zb, s > 0 ? zb : -zb + 0.1, hr * 1.4, hr * 1.4, palette.ink, { seg: 8 });
+
+  // front rack over the front wheel, on struts from the head tube
+  const rackY = Math.min(htTop[1] - 0.02, R * 2 + 0.06);
+  const rackW = clamp(R * 1.1, 0.12, 0.38);
+  const rackZ = clamp(d * 0.5, 0.06, 0.3);
+  p.rbox([htTop[0] + 0.03, rackY - 0.02, -rackZ / 2], [htTop[0] + 0.03 + rackW, rackY + 0.02, rackZ / 2], SHARE_DARK, 0.01, { seg: 1 });
+  p.add({ kind: "tube", path: [[htTop[0] + 0.05, rackY - 0.02, 0], [xf, R + R * 0.25, 0]], r: tube * 0.4, seg: 5, steps: 1 }, [0, 0, 0], SHARE_DARK);
+
+  // drivetrain: chain guard over the chainring, crank + pedals
+  const cr = clamp(R * 0.26, 0.05, 0.11);
+  p.add({ kind: "prism", pts: [[0, -cr], [cr * 1.3, -cr * 0.6], [cr * 1.3, cr * 0.6], [0, cr], [-(bb[0] - xr), cr * 0.35], [-(bb[0] - xr), -cr * 0.35]], depth: 0.02 }, [bb[0], bb[1], 0.06], SHARE_DARK);
+  const ca = clamp(R * 0.45, 0.06, 0.16);
+  const pz = Math.min(0.1, d / 2 - 0.02);
+  for (const s of [-1, 1]) {
+    const ang = s > 0 ? -1.2 : 1.94;
+    const ex = bb[0] + Math.cos(ang) * ca;
+    const ey = bb[1] + Math.sin(ang) * ca;
+    p.add({ kind: "box", size: [ca, 0.016, 0.01] }, [(bb[0] + ex) / 2, (bb[1] + ey) / 2, s * 0.075], palette.charcoal, { rot: [0, 0, ang] });
+    p.box([ex - 0.04, ey - 0.008, s * 0.075 - (s > 0 ? -0.004 : 0.03)], [ex + 0.04, ey + 0.008, s * 0.075 + (s > 0 ? Math.max(0.03, pz - 0.075) : 0.004)], palette.ink);
+  }
+  return p;
+}
+
+export const citiBike: Build = (c) => shareBike(c, false);
+export const citiEBike: Build = (c) => shareBike(c, true);
+
+/**
+ * Bike-share dock post, front = +Z: a slanted grey column with a dark head and a status light
+ * (`attributes.light`: "green" | "red" | "off", default "green").
+ */
+export const bikeDock: Build = (c) => {
+  const p = new Parts();
+  const { w, h, d, color } = c;
+  if (w < 0.08 || h < 0.2 || d < 0.08) return tiny(p, w, h, d, color);
+  const baseH = Math.min(0.05, h * 0.08);
+  p.rbox([-w / 2, 0, -d / 2], [w / 2, baseH, d / 2], darken(color, 0.25), 0.01, { seg: 1 });
+  // column leaning towards the front, as a side profile extruded across X
+  const t = d * 0.42;
+  const lean = d - t;
+  const headH = clamp(h * 0.22, 0.06, 0.2);
+  const col: V2[] = [[-d / 2, baseH], [-d / 2 + t, baseH], [-d / 2 + t + lean, h - headH], [-d / 2 + lean, h - headH]];
+  p.add({ kind: "prism", pts: col, depth: w * 0.8 }, [0, 0, 0], color, { rot: [0, -Math.PI / 2, 0] });
+  // head: darker block on top, its front face carries the light
+  p.rbox([-w / 2, h - headH, d / 2 - t - 0.01], [w / 2, h, d / 2], darken(color, 0.45), 0.012, { seg: 1 });
+  const light = c.attrs.light ?? "green";
+  if (light !== "off")
+    p.box([-w * 0.18, h - headH * 0.55, d / 2 - 0.004], [w * 0.18, h - headH * 0.35, d / 2], light === "red" ? "#ef4444" : "#4ade80", { role: "glow" });
   return p;
 };
 

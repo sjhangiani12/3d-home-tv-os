@@ -13,21 +13,21 @@ struct UnsupportedDeviceView: View {
                 .foregroundStyle(Theme.slate)
                 .padding(28)
                 .background(Theme.slate.opacity(0.12), in: Circle())
-            Text("Appareil non compatible")
+            Text("Device not supported")
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(Theme.ink)
-            Text("Le scan de pièces utilise RoomPlan et le capteur LiDAR, disponibles sur les iPhone Pro (12 Pro et suivants) et iPad Pro récents. Il ne fonctionne pas dans le simulateur.")
+            Text("Room scanning uses RoomPlan and the LiDAR sensor, available on iPhone Pro (12 Pro and later) and recent iPad Pro models. It does not work in the Simulator.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.inkSoft)
             Spacer()
             if let onDemo {
                 Button(action: onDemo) {
-                    Label("Essayer le mode démo", systemImage: "sparkles")
+                    Label("Try demo mode", systemImage: "sparkles")
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
-            Button("Fermer") { dismiss() }
+            Button("Close") { dismiss() }
                 .buttonStyle(SecondaryButtonStyle())
         }
         .padding(24)

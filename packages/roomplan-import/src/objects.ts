@@ -103,7 +103,7 @@ export function buildItems(objects: ParsedObject[], rooms: Room[], frame: PlanFr
     const room = rooms.find((r) => pointInPolygon(d.position, r.floor));
     if (d.src.confidence === "low") lowConfidence++;
     let label = ITEM_LABEL[category];
-    if (category === "sink" && room && (room.kind === "bathroom" || room.kind === "toilet")) label = "Lavabo";
+    if (category === "sink" && room && (room.kind === "bathroom" || room.kind === "toilet")) label = "Bathroom sink";
     const item: Item = {
       id: nextId(),
       category,

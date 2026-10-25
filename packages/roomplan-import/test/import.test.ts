@@ -138,17 +138,17 @@ describe("single room (7° off-axis, noisy)", () => {
   });
   it("labels, confidence, room and warnings", () => {
     expect(scene.rooms).toHaveLength(1);
-    expect(scene.rooms[0]).toMatchObject({ name: "Séjour", kind: "living", floorMaterial: "wood" });
+    expect(scene.rooms[0]).toMatchObject({ name: "Living room", kind: "living", floorMaterial: "wood" });
     expect(polygonArea(scene.rooms[0]!.floor)).toBeGreaterThan(19);
     expect(scene.items.every((i) => i.roomId === scene.rooms[0]!.id && i.source === "scan")).toBe(true);
-    expect(byCat(scene, "armchair")[0]).toMatchObject({ confidence: 0.3, label: "Fauteuil" });
-    expect(byCat(scene, "wardrobe")[0]).toMatchObject({ confidence: 0.6, label: "Armoire" });
-    expect(byCat(scene, "bed")[0]).toMatchObject({ confidence: 0.9, label: "Lit" });
-    expect(warnings).toContain("1 objet à faible confiance (à vérifier).");
+    expect(byCat(scene, "armchair")[0]).toMatchObject({ confidence: 0.3, label: "Armchair" });
+    expect(byCat(scene, "wardrobe")[0]).toMatchObject({ confidence: 0.6, label: "Wardrobe" });
+    expect(byCat(scene, "bed")[0]).toMatchObject({ confidence: 0.9, label: "Bed" });
+    expect(warnings).toContain("1 low-confidence object (check it).");
   });
   it("can disable squaring", () => {
     const r = importRoomPlan(single, { squareToleranceDeg: 0 });
-    expect(r.warnings.some((w) => w.includes("en biais"))).toBe(true);
+    expect(r.warnings.some((w) => w.includes("angled wall"))).toBe(true);
     expect(validateScene(r.scene)).toEqual([]);
   });
 });
@@ -158,9 +158,9 @@ describe("multi-room CapturedStructure", () => {
   const room = (kind: string) => scene.rooms.find((r) => r.kind === kind)!;
   it("builds three named rooms with the right floor materials", () => {
     expect(scene.rooms.map((r) => [r.name, r.kind, r.floorMaterial])).toEqual([
-      ["Séjour", "living", "wood"],
-      ["Chambre", "bedroom", "wood"],
-      ["Salle de bain", "bathroom", "tile"],
+      ["Living room", "living", "wood"],
+      ["Bedroom", "bedroom", "wood"],
+      ["Bathroom", "bathroom", "tile"],
     ]);
     expect(polygonArea(room("living").floor)).toBeCloseTo(21, 0);
     expect(polygonArea(room("bedroom").floor)).toBeCloseTo(9.1, 0);
@@ -181,7 +181,7 @@ describe("multi-room CapturedStructure", () => {
     const bathWin = windows.find((o) => o.sill > 1.4)!;
     expect(bathWin).toMatchObject({ width: 0.6, height: 0.6, sill: 1.5 });
     expect(scene.openings.some((o) => o.kind === "opening")).toBe(false);
-    expect(warnings).toContain("1 ouverture sans mur parent ignorée.");
+    expect(warnings).toContain("1 opening without a parent wall ignored.");
   });
   it("assigns items to rooms by point-in-polygon", () => {
     const roomOf = (c: Item["category"]) => scene.rooms.find((r) => r.id === byCat(scene, c)[0]!.roomId)?.kind;
@@ -194,7 +194,7 @@ describe("multi-room CapturedStructure", () => {
     expect(byCat(scene, "nightstand")).toHaveLength(2);
     expect(byCat(scene, "storage")).toHaveLength(1); // TV unit: low, not near a bed
     expect(byCat(scene, "chair")).toHaveLength(1);
-    expect(byCat(scene, "sink")[0]!.label).toBe("Lavabo");
+    expect(byCat(scene, "sink")[0]!.label).toBe("Bathroom sink");
     const tv = byCat(scene, "television")[0]!;
     expect(tv.position[1]).toBeCloseTo(0.5, 2);
     expect(angleDiff(tv.rotationY, 0)).toBeLessThan(1 * DEG);
@@ -204,9 +204,9 @@ describe("multi-room CapturedStructure", () => {
     delete env.roomNames;
     const r = importRoomPlan(env);
     expect(r.scene.rooms.map((x) => [x.name, x.kind])).toEqual([
-      ["Séjour", "living"],
-      ["Chambre", "bedroom"],
-      ["Salle de bain", "bathroom"],
+      ["Living room", "living"],
+      ["Bedroom", "bedroom"],
+      ["Bathroom", "bathroom"],
     ]);
   });
   it("roomNames option overrides the envelope", () => {
@@ -231,7 +231,7 @@ describe("iOS 16 CapturedRoom (no floors / sections)", () => {
   it("traces the L-shaped room from its walls", () => {
     expect(scene.walls).toHaveLength(6);
     expect(scene.rooms).toHaveLength(1);
-    expect(scene.rooms[0]).toMatchObject({ name: "Chambre", kind: "bedroom" });
+    expect(scene.rooms[0]).toMatchObject({ name: "Bedroom", kind: "bedroom" });
     expect(scene.rooms[0]!.floor).toHaveLength(6);
     expect(polygonArea(scene.rooms[0]!.floor)).toBeCloseTo(11.75, 0);
   });
@@ -242,7 +242,7 @@ describe("iOS 16 CapturedRoom (no floors / sections)", () => {
     expect(near(openingCenter(scene, win.id), [4.5, 1.5])).toBe(true);
     expect(byCat(scene, "wardrobe")).toHaveLength(1);
     expect(angleDiff(byCat(scene, "bed")[0]!.rotationY, 0)).toBeLessThan(2 * DEG);
-    expect(warnings).toContain("1 objet non reconnu ignoré.");
+    expect(warnings).toContain("1 unrecognized object ignored.");
   });
 });
 
@@ -320,6 +320,18 @@ describe("room names", () => {
     expect(kindFromName("Salle à manger")).toBe("dining");
     expect(kindFromName("Grenier")).toBeNull();
   });
+  it("maps English names to kinds", () => {
+    expect(kindFromName("Living room")).toBe("living");
+    expect(kindFromName("Bedroom 2")).toBe("bedroom");
+    expect(kindFromName("Kitchen")).toBe("kitchen");
+    expect(kindFromName("Bathroom")).toBe("bathroom");
+    expect(kindFromName("Toilet")).toBe("toilet");
+    expect(kindFromName("Hallway")).toBe("hallway");
+    expect(kindFromName("Office")).toBe("office");
+    expect(kindFromName("Dining room")).toBe("dining");
+    expect(kindFromName("Storage")).toBe("storage");
+    expect(kindFromName("Room")).toBeNull();
+  });
 });
 
 describe("malformed input", () => {
@@ -333,17 +345,17 @@ describe("malformed input", () => {
     }
     throw new Error("expected importRoomPlan to throw");
   };
-  it("rejects the malformed fixture with a clear French error", () => fails(malformed, /Aucun mur exploitable/));
-  it("rejects invalid JSON text", () => fails("{ pas du json", /pas du JSON valide/));
-  it("rejects non-objects", () => fails(42, /objet JSON/));
-  it("rejects other formats", () => fails({ format: "autre.chose" }, /Format de fichier non reconnu/));
-  it("rejects envelopes without rooms", () => fails({ format: "appart3d.roomplan", version: 1, structure: null, rooms: [] }, /aucune pièce/));
-  it("rejects unrelated objects", () => fails({ hello: "world" }, /champ « format » absent/));
+  it("rejects the malformed fixture with a clear error", () => fails(malformed, /No usable walls/));
+  it("rejects invalid JSON text", () => fails("{ not json", /not valid JSON/));
+  it("rejects non-objects", () => fails(42, /JSON object/));
+  it("rejects other formats", () => fails({ format: "something.else" }, /Unrecognized file format/));
+  it("rejects envelopes without rooms", () => fails({ format: "appart3d.roomplan", version: 1, structure: null, rooms: [] }, /no usable scanned room/));
+  it("rejects unrelated objects", () => fails({ hello: "world" }, /no "format" field/));
   it("reports unreadable elements as warnings when the rest is usable", () => {
     const env = clone(single) as { rooms: { objects: unknown[] }[] };
     env.rooms[0]!.objects.push({ category: { sofa: {} }, transform: "??" });
     const r = importRoomPlan(env);
-    expect(r.warnings.some((w) => w.startsWith("1 élément du scan illisible"))).toBe(true);
+    expect(r.warnings.some((w) => w.startsWith("1 unreadable scan element"))).toBe(true);
   });
 });
 
