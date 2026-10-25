@@ -845,8 +845,12 @@ function sign(html, at, cls) { const el = document.createElement("div"); el.clas
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
 const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
-// What the speakers play: a sign over the home's far end, and notes rising off the roof while it plays.
+// What the speakers play. The card is pinned to the left margin under the clock rather than floating over
+// the roofs: it is the widest sign on screen and it changes with every track, so hanging it over the middle
+// of the block covered the block. The tie to the house is the notes rising off the roof instead.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
+musicSign.pinned = true;
+musicSign.el.classList.add("pinned");
 const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [46.5, HOME.floors * FH + 1, 12], "notes");
 const roomSigns = ROOMS.map((r) => { const s = sign(r.name, [HOUSE.x + r.label[0], 1.8, HOUSE.z + r.label[2]], "room"); s.city = false; return s; });
 function mins(s) { return s <= 30 ? "Now" : `${Math.ceil(s / 60)} min`; }
@@ -873,6 +877,8 @@ const v3 = new THREE.Vector3();
 function projectSigns() {
   for (const s of signs) {
     const show = !s.off && (mode === "home" ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
+    // A pinned card sits where the CSS puts it; the camera has no say, so don't write a transform over it.
+    if (s.pinned) { s.el.style.opacity = show ? "1" : "0"; continue; }
     v3.copy(s.at).project(camera);
     const vis = show && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05;
     s.el.style.opacity = vis ? "1" : "0";

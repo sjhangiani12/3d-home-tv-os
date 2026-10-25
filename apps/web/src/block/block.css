@@ -33,6 +33,12 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
 .sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
 .sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
+/* Pinned to the left margin under the clock instead of to a point on the map, so no tail and no transform —
+   the loop leaves `transform` alone for these, and `left/top` here are the whole of their placement. */
+.sign.pinned { left: 64px; top: 268px; transform: none; max-width: 420px; }
+.sign.pinned::after { display: none; }
+/* Track titles are arbitrary length; the card holds its width and cuts the text rather than growing. */
+.sign.pinned .t, .sign.pinned .s { overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
 .sign .row { display: flex; align-items: center; gap: 10px; }
 .sign .t { font-size: 22px; font-weight: 600; line-height: 1.1; }
 .sign .s { font-size: 19px; color: var(--muted); line-height: 1.25; }
