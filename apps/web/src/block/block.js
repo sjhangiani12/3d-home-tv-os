@@ -89,7 +89,12 @@ const STS = [
 ];
 const AREA = { x0: -260, x1: 460, z0: -290, z1: 290 };
 const SW = 4.5, CURB = 0.18, FH = 3.3, CW = 3.4;
-const HOME = { x0: 40, x1: 53, z0: 12.5, z1: 37, floors: 6, floor: 4 };
+// Our lot, on the north side of the fourth street. It sits well into the block rather than near the corner,
+// the way a walk-up on a long Manhattan side street does: there is a good stretch of neighbours either side
+// of it before you reach an avenue. Everything that points at the house reads its centre off HX, so the lot
+// can be slid along the block without a dozen magic numbers going stale.
+const HOME = { x0: 66, x1: 79, z0: 12.5, z1: 37, floors: 6, floor: 4 };
+const HX = (HOME.x0 + HOME.x1) / 2;
 const TRENCH = { x0: -92, x1: -68, z0: -72, z1: -8, y: -7 };
 
 function spans(lines, key, lo, hi) {
@@ -245,12 +250,16 @@ for (const av of AVES) for (const st of STS) {
 // ---------- blocks: sidewalk slab, backyards, buildings along every frontage
 const trees = [], lamps = [], towers = [];
 const ourBlock = (bx0, bz0) => Math.abs(bx0 - 14) < 0.1 && Math.abs(bz0 - 8) < 0.1;
+// The block opposite is not a solid wall of walk-ups: a playground faces the house across the street, so
+// the view out of the front windows is a hard court and some trees. Its lot is a gap in that block's row.
+const PARK = { x0: HX - 25, x1: HX + 1, z0: -37, z1: -12.5 };
+const acrossBlock = (bx0, bz0) => Math.abs(bx0 - 14) < 0.1 && Math.abs(bz0 + 72) < 0.1;
 function floorsMid() { const r = rng(); return r < 0.76 ? RI(4, 6) : r < 0.94 ? RI(7, 10) : RI(12, 18); }
 function floorsAve() { const r = rng(); return r < 0.45 ? RI(5, 8) : r < 0.8 ? RI(9, 16) : RI(18, 30); }
 // Keep the view open (as an illustrator would): low buildings in front of the station and of home.
 const CAPS = [
   [-179, -94, -72, 72, 5], [-66, -14, 8, 72, 6], [-66, -14, -72, -8, 7],
-  [25, 75, 37, 72, 4], [28, 66, 12, 37, 6], [20, 75, -40, -8, 5],
+  [51, 101, 37, 72, 4], [54, 92, 12, 37, 6], [46, 101, -40, -8, 5],
 ];
 function capAt(x0, x1, z0, z1) {
   let cap = 99;
@@ -294,17 +303,30 @@ function fillBlock(bx0, bx1, bz0, bz1) {
         building(a, b, side === "n" ? z0 : z1 - dd, side === "n" ? z0 + dd : z1, floorsMid(), false);
       };
       if (side === "n" && ourBlock(bx0, bz0)) { row(mx0, HOME.x0, 0, 0, mk); row(HOME.x1, mx1, 0, 0, mk); }
+      else if (side === "s" && acrossBlock(bx0, bz0)) { row(mx0, PARK.x0, 0, 0, mk); row(PARK.x1, mx1, 0, 0, mk); }
       else row(mx0, mx1, 0, 0, mk);
     }
   }
   // street trees on the side-street sidewalks; a few on the avenues
-  for (const tz of [bz0 + 1.4, bz1 - 1.4]) for (let x = bx0 + 9; x < bx1 - 9; x += R(8, 11)) if (rng() < 0.82 && !(ourBlock(bx0, bz0) && tz < bz0 + 3 && x > 43 && x < 50)) trees.push([x, tz]);
+  for (const tz of [bz0 + 1.4, bz1 - 1.4]) for (let x = bx0 + 9; x < bx1 - 9; x += R(8, 11)) if (rng() < 0.82 && !(ourBlock(bx0, bz0) && tz < bz0 + 3 && x > HX - 3.5 && x < HX + 3.5)) trees.push([x, tz]);
   for (const tx of [bx0 + 1.4, bx1 - 1.4]) for (let z = bz0 + 10; z < bz1 - 10; z += R(13, 17)) if (rng() < 0.45) trees.push([tx, z]);
   // street lights at the corners and along the curbs
   for (const [lx, lz] of [[bx0 + 0.6, bz0 + 0.6], [bx1 - 0.6, bz0 + 0.6], [bx0 + 0.6, bz1 - 0.6], [bx1 - 0.6, bz1 - 0.6]]) lamps.push([lx, lz]);
   for (let x = bx0 + 30; x < bx1 - 20; x += 32) { lamps.push([x, bz0 + 0.6]); lamps.push([x, bz1 - 0.6]); }
 }
 for (const [bx0, bx1] of xSpans) for (const [bz0, bz1] of zSpans) fillBlock(bx0, bx1, bz0, bz1);
+
+// The playground itself: grass, a hard court painted on it, a chain-link line along the street and a few
+// trees at the back. No building, which is the point — it is the gap in the block the house looks into.
+{
+  const p = PARK, court = new Acc();
+  flat(A.yard, p.x0, p.x1, p.z0, p.z1, CURB + 0.02);
+  flat(court, p.x0 + 2.5, p.x1 - 2.5, p.z0 + 3.5, p.z1 - 3, CURB + 0.04);
+  court.mesh(lam("#4a7a5c"));
+  for (let x = p.x0; x < p.x1 + 0.01; x += 2.4) box(A.pole, x - 0.07, x + 0.07, CURB, CURB + 1.7, p.z1 - 0.07, p.z1 + 0.07);
+  box(A.pole, p.x0 - 0.07, p.x1 + 0.07, CURB + 1.6, CURB + 1.7, p.z1 - 0.05, p.z1 + 0.05);
+  for (const tx of [p.x0 + 2, HX - 12, p.x1 - 2]) trees.push([tx, p.z0 + 1.8]);
+}
 
 // Subway entrances: stair kiosks with the green globes, at both ends of the station.
 const kiosks = [[-97.5, -74], [-62.5, -74], [-97.5, -14], [-62.5, -14]];
@@ -323,7 +345,7 @@ const homeRoofMat = lam("#c0643f");
 const homeRoof = homeRoofAcc.mesh(homeRoofMat, { cast: true });
 // stoop and door on the street
 {
-  const sx = 46.5, z = HOME.z0;
+  const sx = HX, z = HOME.z0;
   const st = new Acc();
   for (let i = 0; i < 4; i++) box(st, sx - 1.5, sx + 1.5, CURB, CURB + 0.3 * (i + 1), z - 2.4 + i * 0.6, z);
   st.mesh(M.stoop, { cast: true });
@@ -338,8 +360,8 @@ const homeWin = [];
     m.position.set(x, (y0 + y1) / 2, z); if (facing < 0) m.rotation.y = Math.PI;
     scene.add(m); homeWin.push({ m, room });
   };
-  for (const [x, room] of [[42, "bed1"], [44.8, "bed1"], [48.3, "bed2"], [51.1, "bed2"]]) mk(x, HOME.z1 + 0.04, room, 1);
-  for (const x of [42.3, 46.5, 50.7]) mk(x, HOME.z0 - 0.04, "living", -1);
+  for (const [dx, room] of [[-4.5, "bed1"], [-1.7, "bed1"], [1.8, "bed2"], [4.6, "bed2"]]) mk(HX + dx, HOME.z1 + 0.04, room, 1);
+  for (const dx of [-4.2, 0, 4.2]) mk(HX + dx, HOME.z0 - 0.04, "living", -1);
 }
 
 // meshes from the accumulators
@@ -855,14 +877,14 @@ const signs = [];
 function sign(html, at, cls) { const el = document.createElement("div"); el.className = cls || "sign"; el.innerHTML = html; labels.appendChild(el); const s = { el, at: new THREE.Vector3(...at), city: cls !== "room" }; signs.push(s); return s; }
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
-const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
+const homeSign = sign("", [HX, HOME.floors * FH + 6, 25]);
 // What the speakers play. The card is pinned to the top-right corner rather than floating over the roofs:
 // it is the widest sign on screen and it changes with every track, so hanging it over the middle of the
 // block covered the block. The tie to the house is the notes rising off the roof instead.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
 musicSign.pinned = true;
 musicSign.el.classList.add("pinned");
-const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [46.5, HOME.floors * FH + 1, 12], "notes");
+const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [HX, HOME.floors * FH + 1, 12], "notes");
 const roomSigns = ROOMS.map((r) => { const s = sign(r.name, [HOUSE.x + r.label[0], 1.8, HOUSE.z + r.label[2]], "room"); s.city = false; return s; });
 function mins(s) { return s <= 30 ? "Now" : `${Math.ceil(s / 60)} min`; }
 function shown(tr, now) { const s = tr.next - now; return s >= -DWELL ? s : tr.queued != null ? tr.queued - now : s; }
@@ -904,9 +926,9 @@ const dirOf = (az, el) => new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.s
 // screen-right in this isometric, so this is one sideways step, no change of angle.
 const PAN = new THREE.Vector3(20.5, 0, 15.9);
 const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 12 };
-const HIGH = { pos: new THREE.Vector3(46.5, 70, -62), target: new THREE.Vector3(46.5, 6, 12.5), fov: 32 };
-const STREET = { pos: new THREE.Vector3(46.5, 1.8, -5), target: new THREE.Vector3(46.5, 5.2, 12.5), fov: 58 };
-const DOOR = { pos: new THREE.Vector3(46.5, 1.9, 9.4), target: new THREE.Vector3(46.5, 1.9, 14), fov: 72 };
+const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX, 6, 12.5), fov: 32 };
+const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
+const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
 const INSIDE = { pos: HOUSE.clone().add(IN_C).add(IN_OFF), target: HOUSE.clone().add(IN_C), fov: 41 };
 // Where the apartment is revealed from, coming out of the black. It used to be an eye-level pose just inside
@@ -1067,7 +1089,7 @@ const POIS = [
   // can see which one you are on before you press OK.
   ...[...document.querySelectorAll(".lk")].map((el) => ({ id: `look-${el.dataset.tod}`, el, tod: el.dataset.tod, hud: true })),
   { id: "home", el: homeSign.el },
-  { id: "music", el: musicSign.el, target: new THREE.Vector3(46.5, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
+  { id: "music", el: musicSign.el, target: new THREE.Vector3(HX, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
   { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(-47, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
