@@ -11,7 +11,10 @@ NODE="$(command -v node || true)"
 
 if [ -z "$NODE" ]; then echo "node introuvable dans le PATH" >&2; exit 1; fi
 MAJOR="$("$NODE" -p 'process.versions.node.split(".")[0]')"
-if [ "$MAJOR" -lt 24 ]; then echo "Node >= 24 requis (trouvé $("$NODE" -v))" >&2; exit 1; fi
+# Node 22 suffit : la passerelle tourne depuis les sources TS, et le type-stripping natif existe
+# depuis 22.18. C'est ce qui permet de l'héberger sur un Mac bloqué en macOS 12, où
+# Node >= 23 ne s'installe pas.
+if [ "$MAJOR" -lt 22 ]; then echo "Node >= 22 requis (trouvé $("$NODE" -v))" >&2; exit 1; fi
 
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 cat > "$PLIST" <<PLIST
