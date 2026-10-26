@@ -681,7 +681,7 @@ class MainActivity : Activity() {
         val focusedPkg = currentFocus?.tag as? String
         dock.removeAllViews()
         val tileW = dp(TILE_W)
-        val tileH = dp(TILE_H)
+        val tileH = tileW * 9 / 16   // the tiles carry 16:9 banners, so they are cut to the artwork
         val tiles = catalog.load().map { app ->
             tile(app.pkg, app.label, app.banner, app.icon, tileW, tileH) { launch(app.pkg) }
         } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileH, tileH) {
@@ -799,13 +799,14 @@ class MainActivity : Activity() {
     }
 
     /**
-     * One dock tile, as glass over the block rather than a card pasted on it.
+     * One dock tile: the app's own artwork, under glass.
      *
-     * The app's own banner artwork is deliberately ignored, even where the publisher ships one. A row of
-     * banners is a row of billboards: every one a different shape, brightness and colour, each shouting
-     * over the block behind it and over its neighbours. The icon on glass gives every app one silhouette,
-     * one weight, and lets the street show through — which is the whole point of the background being a
-     * live 3D block. `banner` stays in the signature as the fallback for an app with no icon at all.
+     * The publisher's banner stays — it is what makes a tile findable at ten feet, and no generic
+     * treatment beats a logo someone already knows. What changes is that it is no longer an opaque card
+     * pasted over the street: the artwork is held back to [ART_REST] so the block shows through it, with
+     * only a faint wash behind it to keep dark logos off a dark sky, and the sheen and rim drawn *on top*
+     * so the glass reads as a pane over the logo rather than a slab beside it. Focus brings the artwork
+     * to full and lights the rim, so the one tile you are on is the one that is solid.
      */
     private fun tile(tag: String, label: String, banner: android.graphics.drawable.Drawable?, icon: android.graphics.drawable.Drawable?, width: Int, height: Int, onClick: () -> Unit): View {
         val r = dp(18).toFloat()
@@ -813,18 +814,31 @@ class MainActivity : Activity() {
             override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, r)
         }
         val card = FrameLayout(this).apply {
-            background = Glass(r, dp(1).toFloat(), fillTop = 0x30FFFFFF, fillBottom = 0x14FFFFFF, sheen = 0x2EFFFFFF, rimTop = 0x66FFFFFF, rimBottom = 0x14FFFFFF)
+            // Backing wash only — no rim and no sheen here, those go above the artwork.
+            background = Glass(r, 0f, fillTop = 0x1FFFFFFF, fillBottom = 0x0EFFFFFF, sheen = 0, rimTop = 0, rimBottom = 0)
             outlineProvider = rounded
+            clipToOutline = true   // the banner fills the tile, so it has to be cut to the same corners
             elevation = dp(5).toFloat()
         }
-        val size = minOf(width, height) * 62 / 100
-        card.addView(ImageView(this).apply {
-            setImageDrawable(icon ?: banner)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
-        // Focused: the same glass, lit — a brighter pour and a bright rim all the way round (tvOS look).
+        val art = ImageView(this).apply { alpha = ART_REST }
+        if (banner != null) {
+            art.setImageDrawable(banner)
+            art.scaleType = ImageView.ScaleType.CENTER_CROP
+            card.addView(art, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else {
+            // No banner (the drawer and settings tiles, and the odd app): the square icon, centred.
+            art.setImageDrawable(icon)
+            art.scaleType = ImageView.ScaleType.FIT_CENTER
+            val size = minOf(width, height) * 62 / 100
+            card.addView(art, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+        }
+        // The pane itself, over the artwork: no fill, just the corner sheen and the lit edge.
+        card.addView(View(this).apply {
+            background = Glass(r, dp(1).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x20FFFFFF, rimTop = 0x59FFFFFF, rimBottom = 0x12FFFFFF)
+        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // Focused: the same pane, lit — a brighter catch and a bright rim all the way round (tvOS look).
         val shine = View(this).apply {
-            background = Glass(r, dp(2).toFloat(), fillTop = 0x3DFFFFFF, fillBottom = 0x1FFFFFFF, sheen = 0x40FFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x40FFFFFF)
+            background = Glass(r, dp(2).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x3AFFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x40FFFFFF)
             alpha = 0f
         }
         card.addView(shine, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -842,6 +856,7 @@ class MainActivity : Activity() {
                 val scale = if (focused) 1.15f else 1f
                 card.animate().scaleX(scale).scaleY(scale).translationZ(if (focused) dp(18).toFloat() else 0f).setDuration(180).start()
                 shine.animate().alpha(if (focused) 1f else 0f).setDuration(180).start()
+                art.animate().alpha(if (focused) 1f else ART_REST).setDuration(180).start()
             }
         }
     }
@@ -973,12 +988,12 @@ class MainActivity : Activity() {
         private const val SIDE = 40
         private const val GAP = 18
         /**
-         * Dock tile size (dp). Smaller than a banner row, and the same shape for every app, because the
-         * tiles carry icons on glass now rather than publisher artwork. Every dp off the height is a dp
-         * the block gets back at the bottom of the frame, where its lowest signs sit.
+         * Dock tile width (dp), 16:9 banners. Smaller than it was: every dp off the height is a dp the
+         * block gets back at the bottom of the frame, where its lowest signs sit.
          */
-        private const val TILE_W = 104
-        private const val TILE_H = 68
+        private const val TILE_W = 118
+        /** How far the artwork is held back when the tile is not the one you are on. */
+        private const val ART_REST = 0.72f
         /** Top margin of the All apps title (dp). */
         private const val TOP = 22
         private const val DRAWER_COLS = 6
