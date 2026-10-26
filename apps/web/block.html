@@ -7,7 +7,7 @@
     <title>The Block</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Nunito+Sans:wght@400;600;700&display=swap" />
     <link rel="stylesheet" href="/src/block/block.css" />
   </head>
   <body>
@@ -18,24 +18,20 @@
 
     <div id="clock" aria-live="off">
       <div class="time"><span id="hhmm">11:16</span><small id="ampm">PM</small></div>
-      <div class="line" id="wxline">SAT OCT 24 · 45°F · CLEAR</div>
+      <div class="line" id="wxline">SAT OCT 24 · NIGHT · CLEAR 45°</div>
       <div class="place">YOUR BLOCK</div>
     </div>
 
-    <div id="panel" aria-label="Controls">
-      <button id="chip" type="button" aria-label="Lights: open the home's light controls">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
-        <span id="chiptxt">Lights · 2 on</span>
-        <span class="dots" id="chipdots"></span>
-      </button>
-      <div class="look" role="group" aria-label="Time of day">
-        <span class="lbl" id="lookLbl">Auto</span>
-        <button type="button" class="lk" data-tod="auto" aria-pressed="true" aria-label="Auto: follow the clock">A</button>
-        <button type="button" class="lk" data-tod="day" aria-pressed="false" aria-label="Day">☀</button>
-        <button type="button" class="lk" data-tod="dusk" aria-pressed="false" aria-label="Dusk">◐</button>
-        <button type="button" class="lk" data-tod="night" aria-pressed="false" aria-label="Night">☾</button>
-      </div>
-    </div>
+    <!-- The sky and the weather, as marks. The dateline above already says them in words, so these rows
+         carry no label of their own; each row is one stop on the remote and OK walks its set. -->
+    <button id="looks" class="marks" type="button" aria-label="Sky"></button>
+    <button id="wxmarks" class="marks" type="button" aria-label="Weather"></button>
+
+    <button id="chip" type="button" aria-label="Lights: open the home's light controls">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+      <span id="chiptxt">Lights · 2 on</span>
+      <span class="dots" id="chipdots"></span>
+    </button>
 
     <div id="dock" role="toolbar" aria-label="Apps">
       <button class="app" type="button">Netflix</button>

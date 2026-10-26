@@ -742,15 +742,6 @@ const LOOKS = P.LOOKS;
 let look = null, todMode = "auto", wx = "clear", snowCover = 0;
 function nycHour() { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()); return parseInt(p, 10); }
 function currentTod() { if (todMode !== "auto") return todMode; const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night"; }
-/** Pin the block to an hour, or let it follow New York again. Kept in memory on purpose: the screen is a
- *  window on the street first, so a reload — or the TV waking up tomorrow — comes back to the real sky. */
-function setTod(m) {
-  todMode = m;
-  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.tod === m)));
-  const lbl = document.getElementById("lookLbl");
-  if (lbl) lbl.textContent = m === "auto" ? "Auto" : m[0].toUpperCase() + m.slice(1);
-  applyLook();
-}
 const target = new THREE.Vector3(38, 0, 0);
 function applyLook() {
   const tod = currentTod(), L = LOOKS[tod];
@@ -878,9 +869,9 @@ function sign(html, at, cls) { const el = document.createElement("div"); el.clas
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
 const homeSign = sign("", [HX, HOME.floors * FH + 6, 25]);
-// What the speakers play. The card is pinned to the top-right corner rather than floating over the roofs:
-// it is the widest sign on screen and it changes with every track, so hanging it over the middle of the
-// block covered the block. The tie to the house is the notes rising off the roof instead.
+// What the speakers play. The card is pinned to the left margin, on the bottom edge, rather than floating
+// over the roofs: it is the widest sign on screen and it changes with every track, so hanging it over the
+// middle of the block covered the block. The tie to the house is the notes rising off the roof instead.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
 musicSign.pinned = true;
 musicSign.el.classList.add("pinned");
@@ -961,7 +952,7 @@ const setPose = (p) => { cam.pos.copy(p.pos); cam.target.copy(p.target); cam.fov
 const fadeEl = document.getElementById("fade");
 const fade = (v) => new Promise((res) => { fadeEl.style.opacity = v; setTimeout(res, 300); });
 let mode = "city", flying = false, wantClose = false;
-const cityHud = ["panel", "dock", "mock"].map((id) => document.getElementById(id));
+const cityHud = ["chip", "looks", "wxmarks", "dock", "mock"].map((id) => document.getElementById(id));
 async function openHome() {
   if (flying || mode !== "city") return;
   flying = true; cityHud.forEach((e) => e.classList.add("hide"));
@@ -1084,22 +1075,23 @@ detailHost.id = "detail"; detailHost.className = "detail hide";
 stage.appendChild(detailHost);
 const POIS = [
   { id: "lights", el: chip, hud: true },
-  // The look buttons are four ordinary stops in the ring rather than one stop with a cycle inside it:
-  // a row of four is exactly what Left/Right already does, so the remote needs no special case and you
-  // can see which one you are on before you press OK.
-  ...[...document.querySelectorAll(".lk")].map((el) => ({ id: `look-${el.dataset.tod}`, el, tod: el.dataset.tod, hud: true })),
   { id: "home", el: homeSign.el },
   { id: "music", el: musicSign.el, target: new THREE.Vector3(HX, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
   { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(-47, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
+  // The two mark rows sit in the ring like anything else: the row is the stop, OK walks its set in place
+  // without flying the camera anywhere.
+  { id: "sky", el: document.getElementById("looks") },
+  { id: "wx", el: document.getElementById("wxmarks") },
   // The dock tiles sit in the same ring as the signs, so Down off the block lands on them and Up comes
   // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
   ...apps.map((el, i) => ({ id: `app${i}`, el, app: true })),
 ];
 const homePoi = POIS.find((p) => p.id === "home");
 let sel = null, poi = null, lastSel = null;
-// The panel's own rows take `.focus` (they live in a card already); the map signs take `.sel`.
+// The Lights chip lifts, so it takes `.focus`; everything else — the map signs and the mark rows — says
+// "selected" in place and takes `.sel`.
 function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.hud ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
 function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 /** On screen and reachable: not hidden by the TV, not faded out with the rest of the HUD. */
@@ -1123,9 +1115,10 @@ const poseFor = (p) => ({ pos: p.target.clone().add(dirOf(0.68, p.elev).multiply
 async function enter(p) {
   if (!p || flying) return;
   if (p.app) return; // the dock tiles are a mock; selecting one is all they do
-  if (p.tod) { setTod(p.tod); return; }
   if (p.id === "lights") { if (TV) toNative({ type: "openLights" }); else openHome(); return; }
   if (p.id === "home") { if (TV) toNative({ type: "viewHome" }); else openHome(); return; }
+  if (p.id === "sky") { cycleTod(); return; }
+  if (p.id === "wx") { cycleWx(); return; }
   flying = true; mode = "poi"; poi = p;
   glassMesh.visible = p.id !== "train";
   toNative({ type: "poi", on: true });
@@ -1194,22 +1187,74 @@ for (const p of POIS) {
 // mock controls
 document.getElementById("mock").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.wx) { wx = b.dataset.wx; wxForced = true; wxTemp = null; wxLabel = null; document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x === b)); applyLook(); }
-  if (b.dataset.tod) setTod(b.dataset.tod);
+  if (b.dataset.wx) { wx = b.dataset.wx; wxForced = true; wxTemp = null; wxLabel = null; syncMock(); applyLook(); tickClock(); }
+  if (b.dataset.tod) { todMode = b.dataset.tod; syncMock(); applyLook(); tickClock(); }
 });
 document.getElementById("trainNow").addEventListener("click", () => { trains.down.next = clockS + APPROACH; });
 
 // clock + weather line
 const WX_TEXT = { clear: "CLEAR", rain: "RAIN", snow: "SNOW", wind: "WINDY" };
 const WX_TEMP = { clear: 45, rain: 43, snow: 29, wind: 41 };
+const TOD_TEXT = { day: "DAY", dusk: "DUSK", night: "NIGHT" };
+const TODS = ["day", "dusk", "night"], WXS = ["clear", "rain", "snow", "wind"];
+let lastLine = "";
 function tickClock() {
   const d = new Date();
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", weekday: "short", month: "short", day: "numeric" }).formatToParts(d);
   const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
   document.getElementById("hhmm").textContent = `${get("hour")}:${get("minute")}`;
   document.getElementById("ampm").textContent = get("dayPeriod");
-  document.getElementById("wxline").textContent = `${get("weekday")} ${get("month")} ${get("day")} · ${wxTemp ?? WX_TEMP[wx]}°F · ${wxLabel ?? WX_TEXT[wx]}`.toUpperCase();
   if (todMode === "auto" && look !== LOOKS[currentTod()]) applyLook();
+  // The look is named here rather than on the marks: one line carries the date, the sky and the weather,
+  // and it never says "auto" — it says what the block is actually showing. A dot means you pinned it.
+  // innerHTML, so the two values that come off the weather bridge go through `esc` (declared below, but
+  // this only ever runs from the timer at the foot of the file).
+  const sep = '<span class="sep">·</span>', pin = '<span class="pin"></span>';
+  const line = esc(`${get("weekday")} ${get("month")} ${get("day")}`.toUpperCase()) + sep
+    + TOD_TEXT[currentTod()] + (todMode === "auto" ? "" : pin) + sep
+    + esc(String(wxLabel ?? WX_TEXT[wx]).toUpperCase()) + " " + esc(String(wxTemp ?? WX_TEMP[wx])) + "\u00B0"
+    + (wxForced ? pin : "");
+  if (line !== lastLine) { lastLine = line; document.getElementById("wxline").innerHTML = line; }
+  renderMarks();
+}
+
+// ---------- the sky and weather marks
+// Two rows under the dateline. They carry no label of their own, because the line above is already
+// saying the words; these are only the marks, and the place the remote changes them from.
+const MARK = {
+  day: '<circle cx="12" cy="12" r="4"/><g stroke-linecap="round"><path d="M12 2.8v2.3M12 18.9v2.3M21.2 12h-2.3M5.1 12H2.8M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6M18.5 18.5l-1.6-1.6M7.1 7.1 5.5 5.5"/></g>',
+  dusk: '<path d="M6.9 16.4a5.1 5.1 0 0 1 10.2 0"/><g stroke-linecap="round"><path d="M12 3.6v2.1M19.6 8.1l-1.5 1.5M4.4 8.1l1.5 1.5"/><path d="M2.6 16.4h2.6M18.8 16.4h2.6"/><path d="M3.4 20.2h5.2M11.2 20.2h3.4M17.2 20.2h3.4" opacity=".5"/></g>',
+  night: '<path d="M20.1 14.8A8.3 8.3 0 0 1 9.4 4.1a8.6 8.6 0 1 0 10.7 10.7z"/>',
+  clear: '<circle cx="12" cy="12" r="5.6"/>',
+  rain: '<path d="M7.6 14.6a3.7 3.7 0 0 1 .5-7.4 5.4 5.4 0 0 1 10.2 1.6 3.1 3.1 0 0 1-.6 5.8"/><g stroke-linecap="round"><path d="M9.2 17.6 8.1 20.4M13 17.6l-1.1 2.8M16.8 17.6l-1.1 2.8"/></g>',
+  snow: '<g stroke-linecap="round"><path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/><path d="M9.5 4.6 12 7.1l2.5-2.5M9.5 19.4 12 16.9l2.5 2.5M3.4 10.6l.6 3.4 3.3-.9M20.6 13.4l-.6-3.4-3.3.9"/></g>',
+  wind: '<g stroke-linecap="round"><path d="M2.8 8.6h10.6a2.7 2.7 0 1 0-2.7-2.7"/><path d="M2.8 13.4h13.4a2.7 2.7 0 1 1-2.7 2.7"/><path d="M2.8 18.2h6.6"/></g>',
+};
+const looksEl = document.getElementById("looks"), wxMarksEl = document.getElementById("wxmarks");
+function markRow(el, keys, active, held, text) {
+  const next = keys[(keys.indexOf(active) + 1) % keys.length];
+  el.classList.toggle("held", held);
+  el.innerHTML = keys.map((k) => `<span class="m${k === active ? " on" : ""}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${k === active ? 1.9 : 1.55}" stroke-linejoin="round">${MARK[k]}</svg><i></i></span>`).join("")
+    + `<span class="hint">OK \u2192 ${text[next]}</span>`;
+}
+let markKey = "";
+function renderMarks() {
+  // Seven small SVGs; rebuild them only when something they show has actually changed, not every second.
+  const tod = currentTod(), key = `${tod}|${todMode}|${wx}|${wxForced}`;
+  if (key === markKey) return;
+  markKey = key;
+  markRow(looksEl, TODS, tod, todMode !== "auto", TOD_TEXT);
+  markRow(wxMarksEl, WXS, wx, wxForced, WX_TEXT);
+}
+// OK walks the set and wraps. Pinning lasts the session on purpose — the screen is a window on the street
+// first, so a reload, or the TV waking up tomorrow, comes back to the real sky. There is nothing here to
+// put it back on auto, which is why the dateline grows a dot the moment you pin it.
+function cycleTod() { todMode = TODS[(TODS.indexOf(currentTod()) + 1) % TODS.length]; syncMock(); applyLook(); tickClock(); }
+function cycleWx() { wx = WXS[(WXS.indexOf(wx) + 1) % WXS.length]; wxForced = true; wxTemp = null; wxLabel = null; syncMock(); applyLook(); tickClock(); }
+/** The mock panel is a second face on the same state; keep its pressed buttons honest. */
+function syncMock() {
+  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
+  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
 }
 
 // occasional Citi Bike comings and goings
@@ -1363,9 +1408,9 @@ let clockS = 0, last = performance.now(), lastSigns = 0;
 const UP = new THREE.Vector3(0, 1, 0);
 {
   const h = (location.hash || "").slice(1).toLowerCase();
+  if (LOOKS[h]) todMode = h;
   if (WX_TEXT[h]) { wx = h; wxForced = true; }
-  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
-  setTod(LOOKS[h] ? h : "auto");
+  syncMock();
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
   if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }

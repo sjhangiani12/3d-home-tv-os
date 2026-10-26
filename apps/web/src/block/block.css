@@ -1,5 +1,5 @@
 /* Layout: a fixed 1920x1080 TV frame scaled to fit the window; the block is a WebGL canvas filling it,
-   and HTML cards float over it like SimCity info boxes — painted, not pixelled: a serif face, soft
+   and HTML cards float over it like SimCity info boxes — painted, not pixelled: a humanist face, soft
    corners, warm paper and shadows that fall instead of offsetting. */
 :root {
   --night: #1a1b24;
@@ -14,7 +14,10 @@
   --card: linear-gradient(180deg, #fffdf4, #f4e9d2);
   --card-sel: linear-gradient(180deg, #ffeeb6, #f7d98a);
   --lift: 0 12px 26px rgba(48, 36, 22, 0.3);
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  /* Frutiger's Avenir, 1988: humanist geometric, warm, and wide enough to hold up at ten feet. It is a
+     system face on the Mac but not on Fire OS, so Nunito Sans is loaded as the web stand-in and sits in
+     the chain ahead of system-ui — otherwise the TV would quietly fall back to Roboto. */
+  --font-display: "Avenir Next", Avenir, "Nunito Sans", system-ui, sans-serif;
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -33,10 +36,11 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
 .sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
 .sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
-/* Pinned under the control panel instead of to a point on the map, so no tail and no transform — the loop
-   leaves `transform` alone for these, and `left/top/right` here are the whole of their placement. The width
-   is fixed rather than fitted so the panel above it keeps its width whatever the track is called. */
-.sign.pinned { left: auto; right: 64px; top: 212px; transform: none; width: 430px; box-sizing: border-box; }
+/* Pinned to the left margin instead of to a point on the map, so no tail and no transform — the loop
+   leaves `transform` alone for these, and `left/bottom` here are the whole of their placement. It sits on
+   the bottom edge rather than under the clock: that is where the marks live now, and down here it is the
+   last thing on its side, clear of every map sign and 183px above the dock. */
+.sign.pinned { left: 64px; top: auto; bottom: 288px; transform: none; max-width: 420px; }
 .sign.pinned::after { display: none; }
 /* Track titles are arbitrary length; the card holds its width and cuts the text rather than growing. */
 .sign.pinned .t, .sign.pinned .s { overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
@@ -54,26 +58,62 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 #clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-display); text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
 #clock .time { font-size: 104px; font-weight: 600; line-height: 0.9; }
 #clock .time small { font-size: 44px; margin-left: 10px; }
-#clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; }
+#clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; white-space: nowrap; }
+#clock .line .sep { opacity: 0.45; margin: 0 11px; }
+/* A filled dot after a word: you pinned this, it is not what the sky is doing. The pin lasts the session
+   and there is nothing to undo it with, so this dot is the only thing that tells "pinned to night" apart
+   from "it is night". */
+#clock .line .pin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.85; margin-left: 9px; vertical-align: 0.1em; }
 #clock .place { font-size: 20px; margin-top: 6px; opacity: 0.85; letter-spacing: 0.08em; }
 
-/* Control panel: one card in the corner holding the things you can change — the lights, and the hour the
-   block is painted at. The now-playing card sits under it and is deliberately not part of it: a control
-   reads as a control, what's playing reads as content. Same width as that card so the two stack flush. */
-#panel { position: absolute; right: 64px; top: 48px; width: 430px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px; transition: opacity 300ms ease; }
-/* The rows are flat inside the card and only light up when chosen, so the card reads as one object. */
-#panel > * { border: 2px solid transparent; border-radius: 11px; }
-#chip { display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); color: var(--ink); background: transparent; box-shadow: none; padding: 12px 12px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease; }
+/* The sky and weather marks: two short rows set under the dateline, saying in pictures what it says in
+   words. Each row is one stop in the remote ring, so the row — not the individual mark — takes focus and
+   OK walks its set. Inactive marks dim but keep their box: nothing may reach opacity 0, because
+   `reachable()` drops an element at opacity 0 and the stop would silently leave the ring. */
+.marks { position: absolute; top: 240px; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; color: var(--paper); cursor: pointer; text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
+#looks { left: 64px; }
+#wxmarks { left: 246px; }
+.marks .m { width: 46px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 12px; opacity: 0.42; transition: opacity 160ms ease; }
+.marks .m.on { opacity: 1; }
+/* The rule under the live mark: dotted while the block follows the real sky, solid once you pin it. */
+.marks .m i { display: block; width: 26px; height: 0; border-top: 2px dotted transparent; }
+.marks .m.on i { border-top-color: currentColor; }
+.marks.held .m.on i { border-top-style: solid; }
+.marks:focus-visible, .marks.sel, .marks.focus { outline: none; }
+.marks:focus-visible .m.on, .marks.sel .m.on, .marks.focus .m.on { background: rgba(255, 224, 138, 0.2); box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.75); }
+/* The hint is absolutely placed under the row, so showing it moves no mark: the row keeps its size and
+   `navigate()` keeps aiming at the same centre whether or not this stop is focused. */
+.marks .hint { position: absolute; left: 0; top: 50px; white-space: nowrap; font: 400 17px/1 var(--font-display); opacity: 0; transition: opacity 160ms ease; }
+.marks:focus-visible .hint, .marks.sel .hint, .marks.focus .hint { opacity: 0.62; }
+
+#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); border-radius: 16px; padding: 15px 19px; cursor: pointer; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
 #chip svg { width: 30px; height: 30px; }
-#chip .dots { display: flex; gap: 6px; margin-left: auto; }
-#chip:focus-visible, #chip.focus { outline: none; background: var(--card-sel); border-color: var(--ink); }
-/* Day / dusk / night, plus Auto — the one that follows the real clock, and the one it falls back to on
-   every reload: the pin is for right now, not a setting. The label says which of them is in force. */
-#panel .look { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
-#panel .look .lbl { font: 500 20px/1 var(--font-display); color: var(--muted); margin-right: auto; }
-.lk { width: 46px; height: 42px; font: 600 22px/1 var(--font-display); color: var(--ink); background: transparent; border: 2px solid transparent; border-radius: 11px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease; }
-.lk[aria-pressed="true"] { background: var(--paper-2); border-color: rgba(59, 51, 40, 0.3); }
-.lk:focus-visible, .lk.focus { outline: none; background: var(--card-sel); border-color: var(--ink); }
+#chip .dots { display: flex; gap: 6px; }
+
+/* Lights and Now playing read as glass over the block rather than as paper cards pasted onto it: a thin
+   dark scrim UNDER a cream wash. The scrim is load-bearing, not decoration — cream alone disappears
+   against a Day sky, which is the brightest thing either of these two ever sits on. */
+#chip, .sign.pinned {
+  color: var(--paper);
+  background: linear-gradient(rgba(20, 14, 8, 0.22), rgba(20, 14, 8, 0.22)), rgba(253, 247, 232, 0.1);
+  border: 1px solid rgba(253, 247, 232, 0.26);
+  box-shadow: 0 10px 26px rgba(26, 18, 10, 0.3);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  text-shadow: 0 2px 10px rgba(24, 16, 8, 0.5);
+}
+.sign.pinned .s { color: rgba(253, 247, 232, 0.66); }
+.sign.pinned .art { border-color: rgba(253, 247, 232, 0.3); background: rgba(253, 247, 232, 0.12); }
+#chip .dot { box-shadow: 0 0 0 2px rgba(20, 14, 8, 0.45); }
+/* `.sign.pinned.sel` outranks `.sign.sel`, so the pinned card keeps glass when selected instead of
+   flipping back to paper. */
+#chip:focus-visible, #chip.focus, .sign.pinned.sel {
+  outline: none; color: #fffaf0;
+  background: rgba(255, 224, 138, 0.24);
+  border-color: rgba(255, 224, 138, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.22), 0 14px 30px rgba(26, 18, 10, 0.34);
+}
+#chip:focus-visible, #chip.focus { transform: translateY(-4px) scale(1.04); }
 
 /* Dock: glass tiles hovering over the block, lit from the top edge, blurring whatever is behind them.
    They answer the remote exactly like the map cards — same lift, same warm fill when selected. */
@@ -130,10 +170,19 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 #mock button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
 #mock .title { font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; font-size: 13px; text-transform: uppercase; }
 .hide { opacity: 0 !important; }
-@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .lk, .sign { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .sign { transition: none; } }
 
 /* Inside the TV launcher the app draws the dock, the Lights button and its drawer. */
 .tv #dock, .tv #drawer, .tv #mock { display: none; }
+/* `backdrop-filter` is a full-frame GPU pass, and unlike the dock tiles (which the TV hides) these two
+   are on screen every frame. The box is a 1.78 GB Fire TV already running the block at ~32 fps, so drop
+   the blur there and buy the same legibility with a flatter, more opaque wash. This doubles as the
+   fallback for any WebView that does not implement backdrop-filter at all. */
+.tv #chip, .tv .sign.pinned { backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* `:not()` rather than a blanket override, so the warm selected fill still wins when the remote is on it. */
+.tv #chip:not(.focus), .tv .sign.pinned:not(.sel) {
+  background: linear-gradient(rgba(20, 14, 8, 0.42), rgba(20, 14, 8, 0.42)), rgba(253, 247, 232, 0.14);
+}
 
 /* The selected sign (remote focus). It cannot lift the way the dock tiles do — the sign's transform is
    written every frame from its world position — so it says "selected" with the same warm fill, a white
