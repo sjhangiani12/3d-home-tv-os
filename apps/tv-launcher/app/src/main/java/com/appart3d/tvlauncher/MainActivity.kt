@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.graphics.Outline
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -479,7 +480,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(SIDE), dp(20), dp(SIDE), dp(20))
+            setPadding(dp(SIDE), dp(14), dp(SIDE), dp(14))
         }
         dockScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -680,11 +681,12 @@ class MainActivity : Activity() {
         val focusedPkg = currentFocus?.tag as? String
         dock.removeAllViews()
         val tileW = dp(TILE_W)
+        val tileH = dp(TILE_H)
         val tiles = catalog.load().map { app ->
-            tile(app.pkg, app.label, app.banner, app.icon, tileW, tileW * 9 / 16) { launch(app.pkg) }
-        } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileW * 9 / 16, tileW * 9 / 16) {
+            tile(app.pkg, app.label, app.banner, app.icon, tileW, tileH) { launch(app.pkg) }
+        } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileH, tileH) {
             showDrawer()
-        } + tile(SETTINGS_TAG, getString(R.string.settings), null, getDrawable(android.R.drawable.ic_menu_preferences), tileW * 9 / 16, tileW * 9 / 16) {
+        } + tile(SETTINGS_TAG, getString(R.string.settings), null, getDrawable(android.R.drawable.ic_menu_preferences), tileH, tileH) {
             start(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         tiles.forEachIndexed { i, t ->
@@ -796,32 +798,33 @@ class MainActivity : Activity() {
         dock.findViewWithTag<View>(ALL_APPS_TAG)?.requestFocus()
     }
 
+    /**
+     * One dock tile, as glass over the block rather than a card pasted on it.
+     *
+     * The app's own banner artwork is deliberately ignored, even where the publisher ships one. A row of
+     * banners is a row of billboards: every one a different shape, brightness and colour, each shouting
+     * over the block behind it and over its neighbours. The icon on glass gives every app one silhouette,
+     * one weight, and lets the street show through — which is the whole point of the background being a
+     * live 3D block. `banner` stays in the signature as the fallback for an app with no icon at all.
+     */
     private fun tile(tag: String, label: String, banner: android.graphics.drawable.Drawable?, icon: android.graphics.drawable.Drawable?, width: Int, height: Int, onClick: () -> Unit): View {
+        val r = dp(18).toFloat()
+        val rounded = object : ViewOutlineProvider() {
+            override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, r)
+        }
         val card = FrameLayout(this).apply {
-            background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(0xFF2A2F38.toInt())
-            }
-            outlineProvider = ViewOutlineProvider.BACKGROUND
-            clipToOutline = true
-            elevation = dp(6).toFloat()
+            background = Glass(r, dp(1).toFloat(), fillTop = 0x30FFFFFF, fillBottom = 0x14FFFFFF, sheen = 0x2EFFFFFF, rimTop = 0x66FFFFFF, rimBottom = 0x14FFFFFF)
+            outlineProvider = rounded
+            elevation = dp(5).toFloat()
         }
-        if (banner != null) {
-            card.addView(ImageView(this).apply {
-                setImageDrawable(banner)
-                scaleType = ImageView.ScaleType.CENTER_CROP
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        } else {
-            val size = minOf(width, height) / 2
-            card.addView(ImageView(this).apply {
-                setImageDrawable(icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                alpha = 0.8f
-            }, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
-        }
-        // Glass sheen + bright rim on the focused app (tvOS look).
+        val size = minOf(width, height) * 62 / 100
+        card.addView(ImageView(this).apply {
+            setImageDrawable(icon ?: banner)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+        // Focused: the same glass, lit — a brighter pour and a bright rim all the way round (tvOS look).
         val shine = View(this).apply {
-            background = Glass(dp(14).toFloat(), dp(2).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x40FFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x26FFFFFF)
+            background = Glass(r, dp(2).toFloat(), fillTop = 0x3DFFFFFF, fillBottom = 0x1FFFFFFF, sheen = 0x40FFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x40FFFFFF)
             alpha = 0f
         }
         card.addView(shine, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -968,9 +971,14 @@ class MainActivity : Activity() {
         private const val ALL_APPS_TAG = "__all_apps"
         private const val INPUT_TAG = "__inputs"
         private const val SIDE = 40
-        private const val GAP = 24
-        /** Dock tile width (dp), 16:9 banners. */
-        private const val TILE_W = 140
+        private const val GAP = 18
+        /**
+         * Dock tile size (dp). Smaller than a banner row, and the same shape for every app, because the
+         * tiles carry icons on glass now rather than publisher artwork. Every dp off the height is a dp
+         * the block gets back at the bottom of the frame, where its lowest signs sit.
+         */
+        private const val TILE_W = 104
+        private const val TILE_H = 68
         /** Top margin of the All apps title (dp). */
         private const val TOP = 22
         private const val DRAWER_COLS = 6
