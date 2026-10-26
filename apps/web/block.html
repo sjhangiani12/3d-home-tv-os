@@ -23,9 +23,11 @@
     </div>
 
     <!-- The sky and the weather, as marks. The dateline above already says them in words, so these rows
-         carry no label of their own; each row is one stop on the remote and OK walks its set. -->
-    <button id="looks" class="marks" type="button" aria-label="Sky"></button>
-    <button id="wxmarks" class="marks" type="button" aria-label="Weather"></button>
+         carry no label of their own. Every mark is its own stop on the remote: you scroll onto the one
+         you want and press OK, rather than landing on the row and cycling it. The rows are groups, not
+         buttons, because the marks inside them are the buttons. -->
+    <div id="looks" class="marks" role="group" aria-label="Sky"></div>
+    <div id="wxmarks" class="marks" role="group" aria-label="Weather"></div>
 
     <button id="chip" type="button" aria-label="Lights: open the home's light controls">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>

@@ -66,17 +66,25 @@ renderer.shadowMap.enabled = SHADOWS;
 renderer.shadowMap.type = THREE.BasicShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(12, W / H, 100, 3000);
+// The TV draws its own app dock over the bottom ~280px of the frame and the web page cannot resize it,
+// so the block is framed for the 800px above it instead: the frustum is shifted down by LIFT, which
+// raises everything on screen by that many pixels without touching the scale or the perspective.
+// `project()` reads the same matrix, so the signs ride up with the things they point at.
+const LIFT = 128;
+camera.setViewOffset(W, H, 0, LIFT, W, H);
 
 // ---------- the map (meters; x east, z south). Distances are squeezed so the station's avenue fits beside
 // the home's (the second avenue); home sits on the fourth street, two docks on the fifth and on the fourth avenue.
 // The roads carry no names: the geometry is a squeezed invention, so any name hung on it would be a lie — and
 // the three things worth naming (the station, the two docks) name themselves on their own signs.
+// `lanes` is how many travel lanes the one-way avenues carry: enough to cover the roadbed from the
+// parking lane to the bike lane, so no avenue reads as half-empty asphalt.
 const AVES = [
-  { x: -190, w: 22, dir: -1 },
+  { x: -190, w: 22, dir: -1, lanes: 4 },
   { x: -80, w: 28, two: true },
-  { x: 0, w: 28, dir: -1 },
-  { x: 200, w: 28, dir: 1, bike: true },
-  { x: 380, w: 30, dir: -1 },
+  { x: 0, w: 28, dir: -1, lanes: 6, bike: true },
+  { x: 200, w: 28, dir: 1, lanes: 6, bike: true },
+  { x: 380, w: 30, dir: -1, lanes: 5 },
 ];
 const STS = [
   { z: -240, w: 16, dir: -1 },
@@ -229,7 +237,7 @@ function between(spansList, fn) { for (const [a, b] of spansList) fn(a, b); }
 for (const av of AVES) {
   between(zSpans, (a, b) => {
     if (av.two) { flat(A.yellow, av.x - 0.35, av.x - 0.15, a, b, 0.03); flat(A.yellow, av.x + 0.15, av.x + 0.35, a, b, 0.03); }
-    else for (let i = 1; i < 4; i++) dashes("z", av.x - av.w / 2 + 2.4 + i * 3.5 + (av.bike ? 0 : 0), a, b, A.mark, 3, 6, 0.18);
+    else for (let i = 1; i < av.lanes; i++) dashes("z", av.x - av.w / 2 + 2.4 + i * 3.5, a, b, A.mark, 3, 6, 0.18);
     if (av.bike) flat(A.bike, av.x + av.w / 2 - 2.4, av.x + av.w / 2 - 0.4, a, b, 0.025);
   });
 }
@@ -442,7 +450,7 @@ function addLane(axis, fixed, dir, avenue, ref) {
 }
 for (const av of AVES) {
   if (av.two) { for (const i of [0, 1]) { addLane("z", av.x - 1.9 - i * 3.5, 1, true); addLane("z", av.x + 1.9 + i * 3.5, -1, true); } }
-  else { const n = av.bike ? 3 : 4; for (let i = 0; i < n; i++) addLane("z", av.x - av.w / 2 + 4.2 + i * 3.5, av.dir, true); }
+  else { for (let i = 0; i < av.lanes; i++) addLane("z", av.x - av.w / 2 + 4.2 + i * 3.5, av.dir, true); }
 }
 for (const st of STS) {
   if (st.two) { for (const i of [0, 1]) { addLane("x", st.z - 1.9 - i * 3.5, -1, false); addLane("x", st.z + 1.9 + i * 3.5, 1, false); } }
@@ -551,8 +559,13 @@ for (const [bx0, bx1] of xSpans) for (const [bz0, bz1] of zSpans) {
   const n = Math.round(near * L / 400);
   for (let i = 0; i < n; i++) walkers.push({ loop, L, s: R(0, L), dir: rng() < 0.5 ? 1 : -1, v: R(1.1, 1.6), off: R(-0.9, 0.9), ph: R(0, 6.3), umb: rng() < 0.72 });
 }
+// Every avenue with a bike lane gets riders in it, going the way the avenue goes.
 const riders = [];
-for (let i = 0; i < 7; i++) riders.push({ s: R(0, AREA.z1 - AREA.z0), v: R(4.5, 6.5), e: rng() < 0.45 });
+for (const av of AVES) {
+  if (!av.bike) continue;
+  const x = av.x + av.w / 2 - 1.4;
+  for (let i = 0; i < 8; i++) riders.push({ x, dir: av.dir, s: R(0, AREA.z1 - AREA.z0), v: R(4.5, 6.5), e: rng() < 0.45 });
+}
 const NP = walkers.length + riders.length;
 const bodyP = inst(new THREE.BoxGeometry(0.55, 1.0, 0.38).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: "#fff" }), NP, true);
 const headP = inst(new THREE.BoxGeometry(0.34, 0.34, 0.34), new THREE.MeshLambertMaterial({ color: "#fff" }), NP, false);
@@ -641,15 +654,15 @@ function updatePeople(dt, t, wx) {
     const u = rain && w.umb ? 1 : 0.0001;
     dummy.position.set(wp.x, CURB + 2.05 + bob, wp.z); dummy.scale.set(u, u, u); dummy.updateMatrix(); umbP.setMatrixAt(i, dummy.matrix);
   });
-  const lane = AVES[3], x = lane.x + lane.w / 2 - 1.4;
+  const RUN = AREA.z1 - AREA.z0;
   riders.forEach((r, k) => {
-    r.s += r.v * speed * dt; if (r.s > AREA.z1 - AREA.z0) r.s -= AREA.z1 - AREA.z0;
-    const z = AREA.z0 + r.s, i = walkers.length + k;
-    dummy.rotation.set(0, -Math.PI / 2, 0); dummy.scale.set(1, 1, 1);
-    placeBikeAt(bikeFrames.length + k, x, 0, z, -Math.PI / 2, 1);
-    dummy.rotation.set(0, -Math.PI / 2, 0); dummy.scale.set(1, 1, 1);
-    dummy.position.set(x, 0.55, z - 0.1); dummy.scale.set(1, 0.85, 1); dummy.updateMatrix(); bodyP.setMatrixAt(i, dummy.matrix);
-    dummy.scale.set(1, 1, 1); dummy.position.set(x, 1.6, z - 0.1); dummy.updateMatrix(); headP.setMatrixAt(i, dummy.matrix);
+    r.s += r.v * speed * dt; if (r.s > RUN) r.s -= RUN;
+    const z = r.dir > 0 ? AREA.z0 + r.s : AREA.z1 - r.s, i = walkers.length + k;
+    const yaw = r.dir > 0 ? -Math.PI / 2 : Math.PI / 2, back = z - 0.1 * r.dir, x = r.x;
+    placeBikeAt(bikeFrames.length + k, x, 0, z, yaw, 1);
+    dummy.rotation.set(0, yaw, 0);
+    dummy.position.set(x, 0.55, back); dummy.scale.set(1, 0.85, 1); dummy.updateMatrix(); bodyP.setMatrixAt(i, dummy.matrix);
+    dummy.scale.set(1, 1, 1); dummy.position.set(x, 1.6, back); dummy.updateMatrix(); headP.setMatrixAt(i, dummy.matrix);
     dummy.scale.set(0.0001, 0.0001, 0.0001); dummy.updateMatrix(); umbP.setMatrixAt(i, dummy.matrix);
   });
   bodyP.instanceMatrix.needsUpdate = headP.instanceMatrix.needsUpdate = umbP.instanceMatrix.needsUpdate = true;
@@ -916,7 +929,7 @@ const dirOf = (az, el) => new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.s
 // left in frame and the station's sign sits near the edge rather than a third of the way in. `+x, +z` reads as
 // screen-right in this isometric, so this is one sideways step, no change of angle.
 const PAN = new THREE.Vector3(20.5, 0, 15.9);
-const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 12 };
+const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 13.3 };
 const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX, 6, 12.5), fov: 32 };
 const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
 const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
@@ -1069,6 +1082,83 @@ addEventListener("keydown", (e) => {
   else if (k === "Enter" || k === " ") { if (sel) { e.preventDefault(); enter(sel); } }
 });
 
+// clock + weather line
+const WX_TEXT = { clear: "CLEAR", rain: "RAIN", snow: "SNOW", wind: "WINDY" };
+const WX_TEMP = { clear: 45, rain: 43, snow: 29, wind: 41 };
+const TOD_TEXT = { day: "DAY", dusk: "DUSK", night: "NIGHT" };
+const TODS = ["day", "dusk", "night"], WXS = ["clear", "rain", "snow", "wind"];
+let lastLine = "";
+function tickClock() {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", weekday: "short", month: "short", day: "numeric" }).formatToParts(d);
+  const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
+  document.getElementById("hhmm").textContent = `${get("hour")}:${get("minute")}`;
+  document.getElementById("ampm").textContent = get("dayPeriod");
+  if (todMode === "auto" && look !== LOOKS[currentTod()]) applyLook();
+  // The look is named here rather than on the marks: one line carries the date, the sky and the weather,
+  // and it never says "auto" — it says what the block is actually showing. A dot means you pinned it.
+  // innerHTML, so the two values that come off the weather bridge go through `esc` (declared below, but
+  // this only ever runs from the timer at the foot of the file).
+  const sep = '<span class="sep">·</span>', pin = '<span class="pin"></span>';
+  const line = esc(`${get("weekday")} ${get("month")} ${get("day")}`.toUpperCase()) + sep
+    + TOD_TEXT[currentTod()] + (todMode === "auto" ? "" : pin) + sep
+    + esc(String(wxLabel ?? WX_TEXT[wx]).toUpperCase()) + " " + esc(String(wxTemp ?? WX_TEMP[wx])) + "\u00B0"
+    + (wxForced ? pin : "");
+  if (line !== lastLine) { lastLine = line; document.getElementById("wxline").innerHTML = line; }
+  renderMarks();
+}
+
+// ---------- the sky and weather marks
+// Two rows under the dateline. They carry no label of their own, because the line above is already
+// saying the words; these are only the marks, and the place the remote changes them from.
+const MARK = {
+  day: '<circle cx="12" cy="12" r="4"/><g stroke-linecap="round"><path d="M12 2.8v2.3M12 18.9v2.3M21.2 12h-2.3M5.1 12H2.8M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6M18.5 18.5l-1.6-1.6M7.1 7.1 5.5 5.5"/></g>',
+  dusk: '<path d="M6.9 16.4a5.1 5.1 0 0 1 10.2 0"/><g stroke-linecap="round"><path d="M12 3.6v2.1M19.6 8.1l-1.5 1.5M4.4 8.1l1.5 1.5"/><path d="M2.6 16.4h2.6M18.8 16.4h2.6"/><path d="M3.4 20.2h5.2M11.2 20.2h3.4M17.2 20.2h3.4" opacity=".5"/></g>',
+  night: '<path d="M20.1 14.8A8.3 8.3 0 0 1 9.4 4.1a8.6 8.6 0 1 0 10.7 10.7z"/>',
+  clear: '<circle cx="12" cy="12" r="5.6"/>',
+  rain: '<path d="M7.6 14.6a3.7 3.7 0 0 1 .5-7.4 5.4 5.4 0 0 1 10.2 1.6 3.1 3.1 0 0 1-.6 5.8"/><g stroke-linecap="round"><path d="M9.2 17.6 8.1 20.4M13 17.6l-1.1 2.8M16.8 17.6l-1.1 2.8"/></g>',
+  snow: '<g stroke-linecap="round"><path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/><path d="M9.5 4.6 12 7.1l2.5-2.5M9.5 19.4 12 16.9l2.5 2.5M3.4 10.6l.6 3.4 3.3-.9M20.6 13.4l-.6-3.4-3.3.9"/></g>',
+  wind: '<g stroke-linecap="round"><path d="M2.8 8.6h10.6a2.7 2.7 0 1 0-2.7-2.7"/><path d="M2.8 13.4h13.4a2.7 2.7 0 1 1-2.7 2.7"/><path d="M2.8 18.2h6.6"/></g>',
+};
+const looksEl = document.getElementById("looks"), wxMarksEl = document.getElementById("wxmarks");
+/**
+ * A row of marks, built once and then only re-styled: each mark is its own button, so the remote scrolls
+ * onto the sky it wants and presses OK there, instead of landing on the row and cycling through it.
+ * The nodes have to survive, because they are what the ring holds on to.
+ */
+function buildRow(el, keys, text) {
+  return keys.map((k) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "m"; b.setAttribute("aria-label", text[k]);
+    b.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round">${MARK[k]}</svg><i></i><b>${text[k]}</b>`;
+    el.appendChild(b);
+    return { id: `mark-${k}`, el: b, mark: { key: k, keys } };
+  });
+}
+const MARKS = [...buildRow(looksEl, TODS, TOD_TEXT), ...buildRow(wxMarksEl, WXS, WX_TEXT)];
+let markKey = "";
+function renderMarks() {
+  // Seven small SVGs; restyle them only when something they show has actually changed, not every second.
+  const tod = currentTod(), key = `${tod}|${todMode}|${wx}|${wxForced}`;
+  if (key === markKey) return;
+  markKey = key;
+  looksEl.classList.toggle("held", todMode !== "auto");
+  wxMarksEl.classList.toggle("held", wxForced);
+  for (const m of MARKS) m.el.classList.toggle("on", m.mark.key === (m.mark.keys === TODS ? tod : wx));
+}
+// Picking a mark pins it. Pinning lasts the session; there is nothing here to put the sky back on auto,
+// which is why the dateline grows a dot the moment you do it.
+function setMark({ key, keys }) {
+  if (keys === TODS) todMode = key;
+  else { wx = key; wxForced = true; wxTemp = null; wxLabel = null; }
+  syncMock(); applyLook(); tickClock();
+}
+/** The mock panel is a second face on the same state; keep its pressed buttons honest. */
+function syncMock() {
+  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
+  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
+}
+
 // ---------- points of interest
 const detailHost = document.createElement("div");
 detailHost.id = "detail"; detailHost.className = "detail hide";
@@ -1080,10 +1170,9 @@ const POIS = [
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
   { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(-47, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
-  // The two mark rows sit in the ring like anything else: the row is the stop, OK walks its set in place
-  // without flying the camera anywhere.
-  { id: "sky", el: document.getElementById("looks") },
-  { id: "wx", el: document.getElementById("wxmarks") },
+  // Every sky and weather mark is its own stop: you scroll along the rows and press OK on the one you
+  // want, and the camera stays where it is. Appended after the signs so POIS[1] stays the house.
+  ...MARKS,
   // The dock tiles sit in the same ring as the signs, so Down off the block lands on them and Up comes
   // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
   ...apps.map((el, i) => ({ id: `app${i}`, el, app: true })),
@@ -1117,8 +1206,7 @@ async function enter(p) {
   if (p.app) return; // the dock tiles are a mock; selecting one is all they do
   if (p.id === "lights") { if (TV) toNative({ type: "openLights" }); else openHome(); return; }
   if (p.id === "home") { if (TV) toNative({ type: "viewHome" }); else openHome(); return; }
-  if (p.id === "sky") { cycleTod(); return; }
-  if (p.id === "wx") { cycleWx(); return; }
+  if (p.mark) { setMark(p.mark); return; }
   flying = true; mode = "poi"; poi = p;
   glassMesh.visible = p.id !== "train";
   toNative({ type: "poi", on: true });
@@ -1191,71 +1279,6 @@ document.getElementById("mock").addEventListener("click", (e) => {
   if (b.dataset.tod) { todMode = b.dataset.tod; syncMock(); applyLook(); tickClock(); }
 });
 document.getElementById("trainNow").addEventListener("click", () => { trains.down.next = clockS + APPROACH; });
-
-// clock + weather line
-const WX_TEXT = { clear: "CLEAR", rain: "RAIN", snow: "SNOW", wind: "WINDY" };
-const WX_TEMP = { clear: 45, rain: 43, snow: 29, wind: 41 };
-const TOD_TEXT = { day: "DAY", dusk: "DUSK", night: "NIGHT" };
-const TODS = ["day", "dusk", "night"], WXS = ["clear", "rain", "snow", "wind"];
-let lastLine = "";
-function tickClock() {
-  const d = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", weekday: "short", month: "short", day: "numeric" }).formatToParts(d);
-  const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
-  document.getElementById("hhmm").textContent = `${get("hour")}:${get("minute")}`;
-  document.getElementById("ampm").textContent = get("dayPeriod");
-  if (todMode === "auto" && look !== LOOKS[currentTod()]) applyLook();
-  // The look is named here rather than on the marks: one line carries the date, the sky and the weather,
-  // and it never says "auto" — it says what the block is actually showing. A dot means you pinned it.
-  // innerHTML, so the two values that come off the weather bridge go through `esc` (declared below, but
-  // this only ever runs from the timer at the foot of the file).
-  const sep = '<span class="sep">·</span>', pin = '<span class="pin"></span>';
-  const line = esc(`${get("weekday")} ${get("month")} ${get("day")}`.toUpperCase()) + sep
-    + TOD_TEXT[currentTod()] + (todMode === "auto" ? "" : pin) + sep
-    + esc(String(wxLabel ?? WX_TEXT[wx]).toUpperCase()) + " " + esc(String(wxTemp ?? WX_TEMP[wx])) + "\u00B0"
-    + (wxForced ? pin : "");
-  if (line !== lastLine) { lastLine = line; document.getElementById("wxline").innerHTML = line; }
-  renderMarks();
-}
-
-// ---------- the sky and weather marks
-// Two rows under the dateline. They carry no label of their own, because the line above is already
-// saying the words; these are only the marks, and the place the remote changes them from.
-const MARK = {
-  day: '<circle cx="12" cy="12" r="4"/><g stroke-linecap="round"><path d="M12 2.8v2.3M12 18.9v2.3M21.2 12h-2.3M5.1 12H2.8M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6M18.5 18.5l-1.6-1.6M7.1 7.1 5.5 5.5"/></g>',
-  dusk: '<path d="M6.9 16.4a5.1 5.1 0 0 1 10.2 0"/><g stroke-linecap="round"><path d="M12 3.6v2.1M19.6 8.1l-1.5 1.5M4.4 8.1l1.5 1.5"/><path d="M2.6 16.4h2.6M18.8 16.4h2.6"/><path d="M3.4 20.2h5.2M11.2 20.2h3.4M17.2 20.2h3.4" opacity=".5"/></g>',
-  night: '<path d="M20.1 14.8A8.3 8.3 0 0 1 9.4 4.1a8.6 8.6 0 1 0 10.7 10.7z"/>',
-  clear: '<circle cx="12" cy="12" r="5.6"/>',
-  rain: '<path d="M7.6 14.6a3.7 3.7 0 0 1 .5-7.4 5.4 5.4 0 0 1 10.2 1.6 3.1 3.1 0 0 1-.6 5.8"/><g stroke-linecap="round"><path d="M9.2 17.6 8.1 20.4M13 17.6l-1.1 2.8M16.8 17.6l-1.1 2.8"/></g>',
-  snow: '<g stroke-linecap="round"><path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/><path d="M9.5 4.6 12 7.1l2.5-2.5M9.5 19.4 12 16.9l2.5 2.5M3.4 10.6l.6 3.4 3.3-.9M20.6 13.4l-.6-3.4-3.3.9"/></g>',
-  wind: '<g stroke-linecap="round"><path d="M2.8 8.6h10.6a2.7 2.7 0 1 0-2.7-2.7"/><path d="M2.8 13.4h13.4a2.7 2.7 0 1 1-2.7 2.7"/><path d="M2.8 18.2h6.6"/></g>',
-};
-const looksEl = document.getElementById("looks"), wxMarksEl = document.getElementById("wxmarks");
-function markRow(el, keys, active, held, text) {
-  const next = keys[(keys.indexOf(active) + 1) % keys.length];
-  el.classList.toggle("held", held);
-  el.innerHTML = keys.map((k) => `<span class="m${k === active ? " on" : ""}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${k === active ? 1.9 : 1.55}" stroke-linejoin="round">${MARK[k]}</svg><i></i></span>`).join("")
-    + `<span class="hint">OK \u2192 ${text[next]}</span>`;
-}
-let markKey = "";
-function renderMarks() {
-  // Seven small SVGs; rebuild them only when something they show has actually changed, not every second.
-  const tod = currentTod(), key = `${tod}|${todMode}|${wx}|${wxForced}`;
-  if (key === markKey) return;
-  markKey = key;
-  markRow(looksEl, TODS, tod, todMode !== "auto", TOD_TEXT);
-  markRow(wxMarksEl, WXS, wx, wxForced, WX_TEXT);
-}
-// OK walks the set and wraps. Pinning lasts the session on purpose — the screen is a window on the street
-// first, so a reload, or the TV waking up tomorrow, comes back to the real sky. There is nothing here to
-// put it back on auto, which is why the dateline grows a dot the moment you pin it.
-function cycleTod() { todMode = TODS[(TODS.indexOf(currentTod()) + 1) % TODS.length]; syncMock(); applyLook(); tickClock(); }
-function cycleWx() { wx = WXS[(WXS.indexOf(wx) + 1) % WXS.length]; wxForced = true; wxTemp = null; wxLabel = null; syncMock(); applyLook(); tickClock(); }
-/** The mock panel is a second face on the same state; keep its pressed buttons honest. */
-function syncMock() {
-  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
-  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
-}
 
 // occasional Citi Bike comings and goings
 function bikeEvent() {

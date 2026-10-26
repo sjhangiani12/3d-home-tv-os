@@ -18,10 +18,13 @@ export const BASE = {
 };
 
 export const LOOKS = {
-  // Golden hour, not noon: a low sun still doing real work, so the roofs and brick keep their colour.
-  day: { sky: "#f2b183", hemiSky: "#ffd6ab", hemiGround: "#5d4a63", hemiI: 0.78, sun: "#ffb070", sunI: 0.95, az: 250, el: 12, win: 0.5, lamp: 0.55 },
-  // Later and hotter: the sun has dropped into the haze, the fill has gone violet, more windows are lit.
-  dusk: { sky: "#e9a27a", hemiSky: "#f5b48c", hemiGround: "#3e2f48", hemiI: 0.5, sun: "#ff9b5a", sunI: 0.75, az: 250, el: 14, win: 0.55, lamp: 0.5 },
+  // Afternoon, painted rather than photographed: a muted, light palette with almost no contrast. The sun
+  // is high enough that shadows stay short, and weak enough that the sky does most of the lighting — that
+  // soft fill, not the sun, is what keeps a hand-painted day from looking like a rendered noon.
+  day: { sky: "#ead9bb", hemiSky: "#f4ecd6", hemiGround: "#937f62", hemiI: 1, sun: "#ffe7bd", sunI: 0.62, az: 244, el: 30, win: 0.3, lamp: 0 },
+  // NYC sunset: the sun on the deck, raking the length of the avenues, with the windows and the street
+  // lamps already coming up. The violet overhead is what makes the orange at the horizon read as heat.
+  dusk: { sky: "#f0a06a", hemiSky: "#ffc08e", hemiGround: "#4a3050", hemiI: 0.74, sun: "#ff8a4a", sunI: 1.05, az: 252, el: 14, win: 0.72, lamp: 0.72 },
   // Cold and blue, so the only warm things left on screen are the lit windows and the street lamps.
   night: { sky: "#1a2142", hemiSky: "#6274b8", hemiGround: "#251d3a", hemiI: 0.78, sun: "#a9bcff", sunI: 0.34, az: 160, el: 50, win: 1, lamp: 1 },
 };
@@ -66,7 +69,7 @@ export function grain(g, size, n) {
 }
 
 // [overhead, horizon]; the horizon end is each look's `sky`, the overhead end a deeper version of it.
-const GRAD = { day: ["#6a5796", "#ffc48d"], dusk: ["#5d4a7e", "#e9a27a"], night: ["#0f1838", "#2b3763"] };
+const GRAD = { day: ["#9bbcd0", "#ead9bb"], dusk: ["#4e3f7a", "#ff9d63"], night: ["#0f1838", "#2b3763"] };
 const skyCache = new Map();
 /** A washed sky: deep overhead, pale at the horizon, greyed when it rains or snows. */
 export function skyTexture(tod, wet) {
