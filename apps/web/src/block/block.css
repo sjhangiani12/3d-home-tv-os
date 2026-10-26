@@ -14,8 +14,8 @@
   /* The map cards let the block through a little — enough that they sit in the scene rather than on it,
      far short of the glass of the lights chip and the music card, because they carry ink-coloured text
      and plain alpha is all the TV can afford here (no backdrop-filter, see the note further down). */
-  --card: linear-gradient(180deg, rgba(255, 253, 244, 0.8), rgba(244, 233, 210, 0.78));
-  --card-tail: rgba(244, 233, 210, 0.78);
+  --card: linear-gradient(180deg, rgba(255, 253, 244, 0.68), rgba(244, 233, 210, 0.66));
+  --card-tail: rgba(244, 233, 210, 0.66);
   --card-sel: linear-gradient(180deg, #ffeeb6, #f7d98a);
   --lift: 0 12px 26px rgba(48, 36, 22, 0.3);
   /* Frutiger's Avenir, 1988: humanist geometric, warm, and wide enough to hold up at ten feet. It is a
