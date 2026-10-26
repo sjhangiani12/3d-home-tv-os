@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Passerelle maison Appart3D : Hue + Home Assistant + robot StackChan, API et appli web sur le réseau local.",
-  "engines": { "node": ">=24" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "start": "node src/main.ts",
     "dev": "node --watch src/main.ts",
