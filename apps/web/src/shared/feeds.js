@@ -55,17 +55,43 @@ function weatherKind(code, wind) {
   return wind >= 18 ? "wind" : "clear";
 }
 
-/** Open-Meteo, straight from the browser: { kind, temp, label } or null. */
-export async function fetchWeather(loc) {
+/** The bridge's cached reading (GET /weather.json): one fetch for the whole house. Null when it is not there. */
+async function fromBridge() {
+  try {
+    const d = await getJson("/weather.json");
+    const w = d.weather;
+    // The sun is arithmetic, so it comes back even when Open-Meteo did not: a screen can still paint the
+    // right sky over the last temperature it knew.
+    return { weather: w ? { tempF: w.tempF, code: w.code, windMph: w.windMph, isDay: w.isDay } : null, sun: d.sun || null };
+  } catch { return null; }
+}
+
+/** Open-Meteo straight from the browser: the fallback for a page opened without the bridge. */
+async function fromOpenMeteo(loc) {
   if (!loc) return null;
   try {
     const u = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
-      + `&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit`
-      + `&wind_speed_unit=mph&timezone=America%2FNew_York`;
+      + `&current=temperature_2m,weather_code,wind_speed_10m,is_day&temperature_unit=fahrenheit`
+      + `&wind_speed_unit=mph&timezone=auto`;
     const c = (await getJson(u)).current;
-    const kind = weatherKind(c.weather_code, c.wind_speed_10m);
-    return { kind, temp: Math.round(c.temperature_2m), label: kind === "wind" ? "Windy" : WMO(c.weather_code) };
+    return { weather: { tempF: c.temperature_2m, code: c.weather_code, windMph: c.wind_speed_10m, isDay: c.is_day === 1 }, sun: null };
   } catch { return null; }
+}
+
+/**
+ * Current weather: { kind, temp, label, isDay, sun } or null.
+ *
+ * `sun` is { elevation, isDay, … } when the bridge answered — that is what lets a screen put dusk where
+ * the sun actually is instead of at a fixed hour. It is null on the Open-Meteo fallback, and a screen
+ * goes back to the clock there.
+ */
+export async function fetchWeather(loc) {
+  const d = (await fromBridge()) || (await fromOpenMeteo(loc));
+  if (!d) return null;
+  if (!d.weather) return d.sun ? { sun: d.sun } : null;
+  const w = d.weather;
+  const kind = weatherKind(w.code, w.windMph);
+  return { kind, temp: Math.round(w.tempF), label: kind === "wind" ? "Windy" : WMO(w.code), isDay: w.isDay, sun: d.sun };
 }
 
 /** The bridge's event stream: a snapshot, then one event per change. onDevice gets each device. */

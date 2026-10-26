@@ -13,6 +13,7 @@ import { SSE_PING, SSE_RETRY, sseFrame } from "./sse.ts";
 import { serveStatic } from "./static.ts";
 import { openInputs } from "./tvInputs.ts";
 import { HttpError } from "./types.ts";
+import { weatherNow } from "./weather.ts";
 
 const log = logger("http");
 
@@ -315,6 +316,11 @@ export function createBridgeServer(hub: Hub, state: ServerState): Server {
         const cfg = state.config;
         const stations = await bikeStations({ ids: cfg.citibikeStations, home: cfg.location });
         return json(res, 200, { updatedAt: new Date().toISOString(), stations }, { "cache-control": "no-store" });
+      }
+      // The weather and the sun over the home, fetched once for every screen. No home details: a
+      // temperature and a sun angle, with the coordinates kept on this side.
+      if (path === "/weather.json") {
+        return json(res, 200, await weatherNow(state.config.location, hub.sun()), { "cache-control": "no-store" });
       }
       // Public transit data too: the next trains at one subway station (?stop=<GTFS parent stop id>) for the block page.
       if (path === "/mta.json") {
