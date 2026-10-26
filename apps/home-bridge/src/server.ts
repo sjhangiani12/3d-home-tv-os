@@ -11,6 +11,7 @@ import type { Hub } from "./hub.ts";
 import { errMsg, logger } from "./log.ts";
 import { SSE_PING, SSE_RETRY, sseFrame } from "./sse.ts";
 import { serveStatic } from "./static.ts";
+import { openInputs } from "./tvInputs.ts";
 import { HttpError } from "./types.ts";
 
 const log = logger("http");
@@ -274,6 +275,17 @@ export function createBridgeServer(hub: Hub, state: ServerState): Server {
       }, state.configPath);
       log.info(`ordre des tuiles : ${order.join(", ")}`);
       return json(res, 200, hub.setConfigAndPush(state.config));
+    }
+    // The TV launcher owns the Home button, so Fire OS's inputs row is out of reach from the TV
+    // itself: the launcher asks here instead, and the key press comes back over ADB.
+    if (path === "/api/tv/inputs" && method === "POST") {
+      try {
+        await openInputs(state.config.tvAdb);
+      } catch (e) {
+        throw new HttpError(503, `impossible d'ouvrir les entrées de la TV : ${errMsg(e)}`);
+      }
+      log.info("entrées TV ouvertes");
+      return json(res, 200, { ok: true });
     }
     m = /^\/api\/home\/devices\/([^/]+)\/link$/.exec(path);
     if (m && method === "PUT") {
