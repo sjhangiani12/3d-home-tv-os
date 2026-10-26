@@ -1,40 +1,37 @@
 /**
- * The block, live: an isometric pixel-art diorama of the streets around home (the TV's home screen). Traffic,
+ * The block, live: a hand-painted isometric diorama of the streets around home (the TV's home screen). Traffic,
  * people, the subway station (bridge /mta.json), two Citi Bike docks (bridge /citibike.json), the weather
  * (Open-Meteo), and the home's lamps (bridge SSE) lighting its windows and the dollhouse.
  *
- * Privacy: the code draws a generic block. The real names (streets, station, docks, address, rooms, lamps),
+ * Privacy: the code draws a generic block. The real names (station, docks, address, rooms, lamps),
  * coordinates and layout seed come from /shared/block-home.json, which stays out of git like the apartment
  * model beside it. See README "Your block".
  *
  * Query: ?tv=1 (inside the TV launcher: no page dock, chip, drawer or mock controls; the native app drives it
- * through window.appart3dEmbed.post), ?pix=2|3 (pixel size), ?shadows=0, ?mock=1 (weather/time buttons).
+ * through window.appart3dEmbed.post), ?pix=2|3 (render at 1/n and scale up, for a slow TV), ?shadows=0,
+ * ?mock=1 (weather/time buttons).
  * Hash: #day #dusk #night #rain #snow #wind (forced look), #home #inside #street (start view).
  * Plain JS on purpose: a port of the approved mock, kept close to it while the design settles.
  */
 import * as THREE from "three";
+import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
+import * as P from "./paint.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
 const Q = new URLSearchParams(location.search);
 const TV = Q.has("tv"), MOCK = Q.has("mock"), SHADOWS = Q.get("shadows") !== "0";
-const W = 1920, H = 1080, PIX = Math.min(4, Math.max(1, Number(Q.get("pix")) || 2));
-// The home's own names and place (not in git); the demo block otherwise.
-async function loadHomeConfig() {
-  try { const r = await fetch("/shared/block-home.json", { cache: "no-store" }); if (r.ok) return await r.json(); } catch { /* demo */ }
-  return {};
-}
+const W = 1920, H = 1080, PIX = Math.min(4, Math.max(1, Number(Q.get("pix")) || 1));
 const CFG = await loadHomeConfig();
-const loc = CFG.location || null;
-const LOC = Q.get("lat") ? { lat: Number(Q.get("lat")), lon: Number(Q.get("lon")) } : loc ? { lat: loc.latitude, lon: loc.longitude } : null;
+const LOC = resolveLocation(CFG, Q);
 const NAMES = {
   place: CFG.place || "YOUR BLOCK",
   address: CFG.address || "Home",
   homeLabel: CFG.homeLabel || "Home",
-  avenues: CFG.avenues || ["5 AV", "4 AV", "3 AV", "2 AV", "1 AV"],
-  streets: CFG.streets || ["N 3 ST", "N 2 ST", "N 1 ST", "MAIN ST", "S 1 ST", "S 2 ST", "S 3 ST"],
   station: Object.assign({ name: "Station", line: "", stop: null }, CFG.station || {}),
-  docks: CFG.docks || [{ name: "West dock", side: "← WEST" }, { name: "East dock", side: "EAST →" }],
+  // Each dock says what it is and which avenue it stands on; the near one is a block over, the far one
+  // across the avenue. `side` is the line on the sign, `name` the heading of its panel.
+  docks: CFG.docks || [{ name: "Citi Bike", side: "3 AV" }, { name: "Citi Bike", side: "2 AV" }],
   rooms: CFG.rooms || [],
 };
 const PI = Math.PI;
@@ -72,25 +69,32 @@ const camera = new THREE.PerspectiveCamera(12, W / H, 100, 3000);
 
 // ---------- the map (meters; x east, z south). Distances are squeezed so the station's avenue fits beside
 // the home's (the second avenue); home sits on the fourth street, two docks on the fifth and on the fourth avenue.
+// The roads carry no names: the geometry is a squeezed invention, so any name hung on it would be a lie — and
+// the three things worth naming (the station, the two docks) name themselves on their own signs.
 const AVES = [
-  { x: -190, w: 22, name: NAMES.avenues[0], dir: -1 },
-  { x: -80, w: 28, name: NAMES.avenues[1], two: true },
-  { x: 0, w: 28, name: NAMES.avenues[2], dir: -1 },
-  { x: 200, w: 28, name: NAMES.avenues[3], dir: 1, bike: true },
-  { x: 380, w: 30, name: NAMES.avenues[4], dir: -1 },
+  { x: -190, w: 22, dir: -1 },
+  { x: -80, w: 28, two: true },
+  { x: 0, w: 28, dir: -1 },
+  { x: 200, w: 28, dir: 1, bike: true },
+  { x: 380, w: 30, dir: -1 },
 ];
 const STS = [
-  { z: -240, w: 16, name: NAMES.streets[0], dir: -1 },
-  { z: -160, w: 26, name: NAMES.streets[1], two: true },
-  { z: -80, w: 16, name: NAMES.streets[2], dir: -1 },
-  { z: 0, w: 16, name: NAMES.streets[3], dir: 1 },
-  { z: 80, w: 16, name: NAMES.streets[4], dir: -1 },
-  { z: 160, w: 16, name: NAMES.streets[5], dir: 1 },
-  { z: 240, w: 16, name: NAMES.streets[6], dir: -1 },
+  { z: -240, w: 16, dir: -1 },
+  { z: -160, w: 26, two: true },
+  { z: -80, w: 16, dir: -1 },
+  { z: 0, w: 16, dir: 1 },
+  { z: 80, w: 16, dir: -1 },
+  { z: 160, w: 16, dir: 1 },
+  { z: 240, w: 16, dir: -1 },
 ];
 const AREA = { x0: -260, x1: 460, z0: -290, z1: 290 };
 const SW = 4.5, CURB = 0.18, FH = 3.3, CW = 3.4;
-const HOME = { x0: 40, x1: 53, z0: 12.5, z1: 37, floors: 6, floor: 4 };
+// Our lot, on the north side of the fourth street. It sits well into the block rather than near the corner,
+// the way a walk-up on a long Manhattan side street does: there is a good stretch of neighbours either side
+// of it before you reach an avenue. Everything that points at the house reads its centre off HX, so the lot
+// can be slid along the block without a dozen magic numbers going stale.
+const HOME = { x0: 66, x1: 79, z0: 12.5, z1: 37, floors: 6, floor: 4 };
+const HX = (HOME.x0 + HOME.x1) / 2;
 const TRENCH = { x0: -92, x1: -68, z0: -72, z1: -8, y: -7 };
 
 function spans(lines, key, lo, hi) {
@@ -103,20 +107,22 @@ const xSpans = spans(AVES, "x", AREA.x0, AREA.x1), zSpans = spans(STS, "z", AREA
 
 // ---------- textures: one window cell per 16x16 px, 16x16 cells, so a facade repeats it at world scale
 function windowTextures() {
-  const mk = () => { const c = document.createElement("canvas"); c.width = c.height = 256; return c; };
+  // One window per 16 world px, painted at 4x so that up close — on the stoop, in the doorway — a
+  // softened edge stays an edge and not a smear.
+  const SC = 4, S = 256 * SC;
+  const mk = () => { const c = document.createElement("canvas"); c.width = c.height = S; return c; };
   const d = mk(), e = mk(), g = d.getContext("2d"), h = e.getContext("2d");
-  g.fillStyle = "#e2ded6"; g.fillRect(0, 0, 256, 256);
-  h.fillStyle = "#000"; h.fillRect(0, 0, 256, 256);
-  const lit = ["#ffd27f", "#ffe3a6", "#ffc566", "#ffd9a0", "#bcd4ff"];
-  for (let cy = 0; cy < 16; cy++) for (let cx = 0; cx < 16; cx++) {
-    const x = cx * 16, y = cy * 16;
-    g.fillStyle = "#cfcac0"; g.fillRect(x, y, 16, 1);
-    g.fillStyle = "#3b4553"; g.fillRect(x + 4, y + 3, 8, 9);
-    g.fillStyle = "#64758a"; g.fillRect(x + 4, y + 3, 8, 2);
-    g.fillStyle = "#ffffff"; g.fillRect(x + 3, y + 12, 10, 1);
-    if (rng() < 0.17) { h.fillStyle = pick(lit); h.fillRect(x + 4, y + 3, 8, 9); }
-  }
-  const tex = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapNearestFilter; return t; };
+  g.fillStyle = "#efe3cd"; g.fillRect(0, 0, S, S);
+  h.fillStyle = "#000"; h.fillRect(0, 0, S, S);
+  g.scale(SC, SC); h.scale(SC, SC);
+  for (let cy = 0; cy < 16; cy++) for (let cx = 0; cx < 16; cx++) P.paintWindowCell(g, h, cx * 16, cy * 16, rng, pick);
+  g.setTransform(1, 0, 0, 1, 0, 0); P.grain(g, S, 40_000);
+  // The edges want to blur into the facade, so filter rather than point-sample.
+  const tex = (c) => {
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+    return t;
+  };
   return { map: tex(d), lit: tex(e) };
 }
 const WT = windowTextures();
@@ -130,13 +136,10 @@ function glowTexture() {
 
 // ---------- materials
 const lam = (color, extra) => new THREE.MeshLambertMaterial(Object.assign({ color }, extra || {}));
-const FAC = ["#a3563d", "#8c4433", "#b46b4b", "#7b4536", "#c6a47c", "#d9cba9", "#a59e91", "#cdc1a2", "#6f5c4e", "#938d86", "#b98c63", "#71899a", "#9aa7ad", "#c9b48e"];
+const FAC = P.FAC;
 const TOWER_FAC = [6, 9, 11, 12, 7, 5];
 const facMats = FAC.map((c) => lam(c, { map: WT.map, emissive: 0xffffff, emissiveMap: WT.lit, emissiveIntensity: 0 }));
-const BASE = {
-  asphalt: "#4a4a52", sidewalk: "#bcb4a3", yard: "#8a8b6b", roof: "#5d5953", roof2: "#77726a",
-  mark: "#e9e5da", yellow: "#d9b84a", bikeLane: "#3d8a58", trunk: "#5a4030", canopy: "#ffffff",
-};
+const BASE = P.BASE;
 const M = {
   asphalt: lam(BASE.asphalt), glass: new THREE.MeshLambertMaterial({ color: "#7fb3c4", transparent: true, opacity: 0.16, depthWrite: false }),
   sidewalk: lam(BASE.sidewalk), yard: lam(BASE.yard), roof: lam(BASE.roof), roof2: lam(BASE.roof2),
@@ -146,6 +149,7 @@ const M = {
   pole: lam("#3b3d44"), lampHead: new THREE.MeshBasicMaterial({ color: "#fff0c4" }),
   globe: new THREE.MeshBasicMaterial({ color: "#3fd37a" }), awning: ["#2f6e4f", "#a33a32", "#24486e", "#c08a2c", "#5b3e6e"].map((c) => lam(c)),
 };
+P.repaint(M);
 
 // ---------- geometry builder: plain arrays merged into a few big meshes (few draw calls)
 class Acc {
@@ -246,12 +250,16 @@ for (const av of AVES) for (const st of STS) {
 // ---------- blocks: sidewalk slab, backyards, buildings along every frontage
 const trees = [], lamps = [], towers = [];
 const ourBlock = (bx0, bz0) => Math.abs(bx0 - 14) < 0.1 && Math.abs(bz0 - 8) < 0.1;
+// The block opposite is not a solid wall of walk-ups: a playground faces the house across the street, so
+// the view out of the front windows is a hard court and some trees. Its lot is a gap in that block's row.
+const PARK = { x0: HX - 25, x1: HX + 1, z0: -37, z1: -12.5 };
+const acrossBlock = (bx0, bz0) => Math.abs(bx0 - 14) < 0.1 && Math.abs(bz0 + 72) < 0.1;
 function floorsMid() { const r = rng(); return r < 0.76 ? RI(4, 6) : r < 0.94 ? RI(7, 10) : RI(12, 18); }
 function floorsAve() { const r = rng(); return r < 0.45 ? RI(5, 8) : r < 0.8 ? RI(9, 16) : RI(18, 30); }
 // Keep the view open (as an illustrator would): low buildings in front of the station and of home.
 const CAPS = [
   [-179, -94, -72, 72, 5], [-66, -14, 8, 72, 6], [-66, -14, -72, -8, 7],
-  [25, 75, 37, 72, 4], [28, 66, 12, 37, 6], [20, 75, -40, -8, 5],
+  [51, 101, 37, 72, 4], [54, 92, 12, 37, 6], [46, 101, -40, -8, 5],
 ];
 function capAt(x0, x1, z0, z1) {
   let cap = 99;
@@ -295,17 +303,30 @@ function fillBlock(bx0, bx1, bz0, bz1) {
         building(a, b, side === "n" ? z0 : z1 - dd, side === "n" ? z0 + dd : z1, floorsMid(), false);
       };
       if (side === "n" && ourBlock(bx0, bz0)) { row(mx0, HOME.x0, 0, 0, mk); row(HOME.x1, mx1, 0, 0, mk); }
+      else if (side === "s" && acrossBlock(bx0, bz0)) { row(mx0, PARK.x0, 0, 0, mk); row(PARK.x1, mx1, 0, 0, mk); }
       else row(mx0, mx1, 0, 0, mk);
     }
   }
   // street trees on the side-street sidewalks; a few on the avenues
-  for (const tz of [bz0 + 1.4, bz1 - 1.4]) for (let x = bx0 + 9; x < bx1 - 9; x += R(8, 11)) if (rng() < 0.82 && !(ourBlock(bx0, bz0) && tz < bz0 + 3 && x > 43 && x < 50)) trees.push([x, tz]);
+  for (const tz of [bz0 + 1.4, bz1 - 1.4]) for (let x = bx0 + 9; x < bx1 - 9; x += R(8, 11)) if (rng() < 0.82 && !(ourBlock(bx0, bz0) && tz < bz0 + 3 && x > HX - 3.5 && x < HX + 3.5)) trees.push([x, tz]);
   for (const tx of [bx0 + 1.4, bx1 - 1.4]) for (let z = bz0 + 10; z < bz1 - 10; z += R(13, 17)) if (rng() < 0.45) trees.push([tx, z]);
   // street lights at the corners and along the curbs
   for (const [lx, lz] of [[bx0 + 0.6, bz0 + 0.6], [bx1 - 0.6, bz0 + 0.6], [bx0 + 0.6, bz1 - 0.6], [bx1 - 0.6, bz1 - 0.6]]) lamps.push([lx, lz]);
   for (let x = bx0 + 30; x < bx1 - 20; x += 32) { lamps.push([x, bz0 + 0.6]); lamps.push([x, bz1 - 0.6]); }
 }
 for (const [bx0, bx1] of xSpans) for (const [bz0, bz1] of zSpans) fillBlock(bx0, bx1, bz0, bz1);
+
+// The playground itself: grass, a hard court painted on it, a chain-link line along the street and a few
+// trees at the back. No building, which is the point — it is the gap in the block the house looks into.
+{
+  const p = PARK, court = new Acc();
+  flat(A.yard, p.x0, p.x1, p.z0, p.z1, CURB + 0.02);
+  flat(court, p.x0 + 2.5, p.x1 - 2.5, p.z0 + 3.5, p.z1 - 3, CURB + 0.04);
+  court.mesh(lam("#4a7a5c"));
+  for (let x = p.x0; x < p.x1 + 0.01; x += 2.4) box(A.pole, x - 0.07, x + 0.07, CURB, CURB + 1.7, p.z1 - 0.07, p.z1 + 0.07);
+  box(A.pole, p.x0 - 0.07, p.x1 + 0.07, CURB + 1.6, CURB + 1.7, p.z1 - 0.05, p.z1 + 0.05);
+  for (const tx of [p.x0 + 2, HX - 12, p.x1 - 2]) trees.push([tx, p.z0 + 1.8]);
+}
 
 // Subway entrances: stair kiosks with the green globes, at both ends of the station.
 const kiosks = [[-97.5, -74], [-62.5, -74], [-97.5, -14], [-62.5, -14]];
@@ -324,7 +345,7 @@ const homeRoofMat = lam("#c0643f");
 const homeRoof = homeRoofAcc.mesh(homeRoofMat, { cast: true });
 // stoop and door on the street
 {
-  const sx = 46.5, z = HOME.z0;
+  const sx = HX, z = HOME.z0;
   const st = new Acc();
   for (let i = 0; i < 4; i++) box(st, sx - 1.5, sx + 1.5, CURB, CURB + 0.3 * (i + 1), z - 2.4 + i * 0.6, z);
   st.mesh(M.stoop, { cast: true });
@@ -339,8 +360,8 @@ const homeWin = [];
     m.position.set(x, (y0 + y1) / 2, z); if (facing < 0) m.rotation.y = Math.PI;
     scene.add(m); homeWin.push({ m, room });
   };
-  for (const [x, room] of [[42, "bed1"], [44.8, "bed1"], [48.3, "bed2"], [51.1, "bed2"]]) mk(x, HOME.z1 + 0.04, room, 1);
-  for (const x of [42.3, 46.5, 50.7]) mk(x, HOME.z0 - 0.04, "living", -1);
+  for (const [dx, room] of [[-4.5, "bed1"], [-1.7, "bed1"], [1.8, "bed2"], [4.6, "bed2"]]) mk(HX + dx, HOME.z1 + 0.04, room, 1);
+  for (const dx of [-4.2, 0, 4.2]) mk(HX + dx, HOME.z0 - 0.04, "living", -1);
 }
 
 // meshes from the accumulators
@@ -543,9 +564,11 @@ for (let i = 0; i < NP; i++) { bodyP.setColorAt(i, tmpC.set(pick(COATS))); headP
 riders.forEach((r, k) => bodyP.setColorAt(walkers.length + k, tmpC.set(pick(COATS))));
 bodyP.instanceColor.needsUpdate = headP.instanceColor.needsUpdate = umbP.instanceColor.needsUpdate = true;
 
-// Citi Bike docks (west, on the street south of home; east, on the next avenue) and the bikes in them.
+// Citi Bike docks and the bikes in them. The west one stands in the parking lane of the street south of
+// home, a block further west than the house — one avenue over, where the real one is. The east one is on
+// the next avenue. Both sit inside the kerb, in the roadbed, the way the city actually docks them.
 const DOCKS = [
-  { name: NAMES.docks[0].name, side: NAMES.docks[0].side, slots: 26, ebikes: 10, classic: 12, axis: "x", x0: 19.5, fixed: 74.2, anchor: [33, 4, 74] },
+  { name: NAMES.docks[0].name, side: NAMES.docks[0].side, slots: 26, ebikes: 10, classic: 12, axis: "x", x0: -60.5, fixed: 74.2, anchor: [-47, 22, 74] },
   { name: NAMES.docks[1].name, side: NAMES.docks[1].side, slots: 26, ebikes: 10, classic: 1, axis: "z", x0: 44.5, fixed: 187.6, anchor: [188, 4, 58] },
 ];
 const bikeFrames = [];
@@ -676,6 +699,7 @@ const leafPos = new Float32Array(LEAF_N * 3), leafGeo = new THREE.BufferGeometry
 leafGeo.setAttribute("position", new THREE.BufferAttribute(leafPos, 3));
 const leaves = new THREE.Points(leafGeo, new THREE.PointsMaterial({ color: "#c97a2e", size: 2, sizeAttenuation: false }));
 wxGroup.add(rain, snow, leaves);
+const scenery = P.createScenery(scene, AREA);
 const BOX = { x0: -140, x1: 260, z0: -160, z1: 190, y: 90 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 for (let i = 0; i < RAIN_N; i++) { const x = rnd(BOX.x0, BOX.x1), y = rnd(0, BOX.y), z = rnd(BOX.z0, BOX.z1); rainPos.set([x, y, z, x + 0.4, y + 2.2, z - 0.2], i * 6); }
@@ -714,20 +738,16 @@ sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 10, far: 1400 });
 sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
-const LOOKS = {
-  day: { sky: "#9fc6df", hemiSky: "#d6ebff", hemiGround: "#6f604c", hemiI: 0.66, sun: "#fff2d8", sunI: 0.9, az: 205, el: 48, win: 0, lamp: 0 },
-  dusk: { sky: "#e9a27a", hemiSky: "#f5b48c", hemiGround: "#3e2f48", hemiI: 0.5, sun: "#ff9b5a", sunI: 0.75, az: 250, el: 14, win: 0.55, lamp: 0.5 },
-  night: { sky: "#1a2142", hemiSky: "#6274b8", hemiGround: "#251d3a", hemiI: 0.78, sun: "#a9bcff", sunI: 0.34, az: 160, el: 50, win: 1, lamp: 1 },
-};
+const LOOKS = P.LOOKS;
 let look = null, todMode = "auto", wx = "clear", snowCover = 0;
 function nycHour() { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()); return parseInt(p, 10); }
 function currentTod() { if (todMode !== "auto") return todMode; const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night"; }
 const target = new THREE.Vector3(38, 0, 0);
 function applyLook() {
-  const L = LOOKS[currentTod()];
+  const tod = currentTod(), L = LOOKS[tod];
   const wet = wx === "rain" || wx === "snow";
   const dim = wet ? 0.72 : 1;
-  scene.background = new THREE.Color(L.sky).lerp(new THREE.Color("#7d8794"), wet ? 0.45 : 0);
+  scene.background = P.skyTexture(tod, wet);
   hemi.color.set(L.hemiSky); hemi.groundColor.set(L.hemiGround); hemi.intensity = L.hemiI * (wet ? 0.92 : 1) * PI;
   sun.color.set(L.sun); sun.intensity = L.sunI * (wet ? 0.35 : 1) * dim * PI;
   const az = L.az * Math.PI / 180, el = L.el * Math.PI / 180;
@@ -848,12 +868,14 @@ const signs = [];
 function sign(html, at, cls) { const el = document.createElement("div"); el.className = cls || "sign"; el.innerHTML = html; labels.appendChild(el); const s = { el, at: new THREE.Vector3(...at), city: cls !== "room" }; signs.push(s); return s; }
 const trainSign = sign("", [-52, 10, -58]);
 const dockSigns = DOCKS.map((d) => sign("", d.anchor));
-const homeSign = sign("", [46.5, HOME.floors * FH + 6, 25]);
-// What the speakers play: a sign over the home's far end, and notes rising off the roof while it plays.
+const homeSign = sign("", [HX, HOME.floors * FH + 6, 25]);
+// What the speakers play. The card is pinned to the left margin, on the bottom edge, rather than floating
+// over the roofs: it is the widest sign on screen and it changes with every track, so hanging it over the
+// middle of the block covered the block. The tie to the house is the notes rising off the roof instead.
 const musicSign = sign("", [8, HOME.floors * FH + 2, 30]);
-const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [46.5, HOME.floors * FH + 1, 12], "notes");
-for (const av of AVES) sign(av.name, [av.x, 0.5, 120], "street");
-for (const st of STS) if (Math.abs(st.z) <= 160) sign(st.name, [100, 0.5, st.z], "street").el.style.fontSize = "14px";
+musicSign.pinned = true;
+musicSign.el.classList.add("pinned");
+const notesSign = sign(`<i>♪</i><i>♫</i><i>♪</i>`, [HX, HOME.floors * FH + 1, 12], "notes");
 const roomSigns = ROOMS.map((r) => { const s = sign(r.name, [HOUSE.x + r.label[0], 1.8, HOUSE.z + r.label[2]], "room"); s.city = false; return s; });
 function mins(s) { return s <= 30 ? "Now" : `${Math.ceil(s / 60)} min`; }
 function shown(tr, now) { const s = tr.next - now; return s >= -DWELL ? s : tr.queued != null ? tr.queued - now : s; }
@@ -865,7 +887,7 @@ function renderSigns(now) {
   const row = (label, tr, s) => `<div class="row" style="justify-content:space-between;gap:18px;margin-top:6px"><span class="s">${label}</span>${s < -DWELL || s > 5400 ? `<span class="t">–</span>` : `<span class="row" style="gap:8px">${bullet(routeOf(tr, now), true)}<span class="t">${mins(Math.max(0, s))}</span></span>`}</div>`;
   trainSign.el.innerHTML = `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`;
   DOCKS.forEach((dk, i) => {
-    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.side}</div>
+    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
       <div class="row" style="gap:14px;margin-top:4px"><span class="big"><span class="bolt">⚡</span>${dk.ebikes}</span><span class="big" style="color:${BIKE_BLUE}">${dk.classic}</span></div>
       <div class="s" style="font-size:15px">e-bikes · classic</div>`;
   });
@@ -879,6 +901,8 @@ const v3 = new THREE.Vector3();
 function projectSigns() {
   for (const s of signs) {
     const show = !s.off && (mode === "home" ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
+    // A pinned card sits where the CSS puts it; the camera has no say, so don't write a transform over it.
+    if (s.pinned) { s.el.style.opacity = show ? "1" : "0"; continue; }
     v3.copy(s.at).project(camera);
     const vis = show && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05;
     s.el.style.opacity = vis ? "1" : "0";
@@ -888,13 +912,22 @@ function projectSigns() {
 
 // ---------- camera poses and the fly-in
 const dirOf = (az, el) => new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-const OVERVIEW = { pos: target.clone().add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone(), fov: 12 };
-const HIGH = { pos: new THREE.Vector3(46.5, 70, -62), target: new THREE.Vector3(46.5, 6, 12.5), fov: 32 };
-const STREET = { pos: new THREE.Vector3(46.5, 1.8, -5), target: new THREE.Vector3(46.5, 5.2, 12.5), fov: 58 };
-const DOOR = { pos: new THREE.Vector3(46.5, 1.9, 9.4), target: new THREE.Vector3(46.5, 1.9, 14), fov: 72 };
+// The overview is panned, not re-aimed: camera and target move together along the ground so the block slides
+// left in frame and the station's sign sits near the edge rather than a third of the way in. `+x, +z` reads as
+// screen-right in this isometric, so this is one sideways step, no change of angle.
+const PAN = new THREE.Vector3(20.5, 0, 15.9);
+const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 12 };
+const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX, 6, 12.5), fov: 32 };
+const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
+const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
 const INSIDE = { pos: HOUSE.clone().add(IN_C).add(IN_OFF), target: HOUSE.clone().add(IN_C), fov: 41 };
-const INSIDE_IN = { pos: HOUSE.clone().add(new THREE.Vector3(6.5, 3, -6)), target: HOUSE.clone().add(new THREE.Vector3(6.5, 1, 8)), fov: 70 };
+// Where the apartment is revealed from, coming out of the black. It used to be an eye-level pose just inside
+// the door, which continued the walk in — but the apartment is a cutaway with no ceiling, so from down there
+// it read as an edge-on slab hanging in an empty sky, and the room labels piled up on one line. So: the same
+// angle as the settled view, just closer and wider. The reveal is a step back, and the first frame is already
+// the apartment rather than something that looks broken.
+const INSIDE_IN = { pos: HOUSE.clone().add(IN_C).add(IN_OFF.clone().multiplyScalar(0.52)), target: HOUSE.clone().add(IN_C), fov: 58 };
 const cam = { pos: OVERVIEW.pos.clone(), target: OVERVIEW.target.clone(), fov: OVERVIEW.fov };
 function applyCam() {
   camera.position.copy(cam.pos); camera.lookAt(cam.target); camera.fov = cam.fov;
@@ -919,7 +952,7 @@ const setPose = (p) => { cam.pos.copy(p.pos); cam.target.copy(p.target); cam.fov
 const fadeEl = document.getElementById("fade");
 const fade = (v) => new Promise((res) => { fadeEl.style.opacity = v; setTimeout(res, 300); });
 let mode = "city", flying = false, wantClose = false;
-const cityHud = ["chip", "dock", "mock"].map((id) => document.getElementById(id));
+const cityHud = ["chip", "looks", "wxmarks", "dock", "mock"].map((id) => document.getElementById(id));
 async function openHome() {
   if (flying || mode !== "city") return;
   flying = true; cityHud.forEach((e) => e.classList.add("hide"));
@@ -937,8 +970,13 @@ async function openHome() {
   await fade(1);
   house.visible = true; houseAmb.intensity = 0.55 * PI; mode = "home";
   setPose(INSIDE_IN);
+  // Compile the apartment's materials while the screen is still black: the first frame that draws it would
+  // otherwise cost a few hundred milliseconds on the TV, and that hitch would land in plain sight.
+  renderer.compile(scene, camera);
+  // The step back starts under the black and the black lifts into it, so nothing is ever shown standing still.
+  const settle = tween(INSIDE, 1100);
   await fade(0);
-  await tween(INSIDE, 1100);
+  await settle;
   flying = false;
   focusDrawer(0);
   if (wantClose) { wantClose = false; closeHome(); }
@@ -1004,7 +1042,7 @@ addEventListener("keydown", (e) => {
     e.preventDefault();
     if (mode === "poi") { if (k === "Escape" || k === "Backspace") zoomOut(); return; }
     if (mode !== "city" || flying) return;
-    if (k.startsWith("Arrow")) { if (!sel) select(lastSel || POIS[1]); else navigate(k); }
+    if (k.startsWith("Arrow")) { if (!sel) select(lastSel || homePoi); else navigate(k); }
     else if (k === "Enter" || k === " ") enter(sel);
     return;
   }
@@ -1024,11 +1062,11 @@ addEventListener("keydown", (e) => {
     }
     return;
   }
+  if (mode === "poi") { if (k === "Escape" || k === "Backspace") { e.preventDefault(); zoomOut(); } return; }
   if (mode !== "city" || flying) return;
-  const a = document.activeElement, ai = apps.indexOf(a);
-  if (k === "ArrowUp") { e.preventDefault(); chip.focus(); }
-  else if (k === "ArrowDown") { e.preventDefault(); if (ai < 0) apps[0].focus(); }
-  else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); if (ai >= 0) apps[clamp(ai + (k === "ArrowRight" ? 1 : -1), 0, apps.length - 1)].focus(); else apps[0].focus(); }
+  // Same ring as the TV: the signs, the Lights chip and the dock tiles are one plane of buttons.
+  if (k.startsWith("Arrow")) { e.preventDefault(); if (!sel) select(lastSel || homePoi); else navigate(k); }
+  else if (k === "Enter" || k === " ") { if (sel) { e.preventDefault(); enter(sel); } }
 });
 
 // ---------- points of interest
@@ -1036,22 +1074,34 @@ const detailHost = document.createElement("div");
 detailHost.id = "detail"; detailHost.className = "detail hide";
 stage.appendChild(detailHost);
 const POIS = [
-  { id: "lights", el: chip },
+  { id: "lights", el: chip, hud: true },
   { id: "home", el: homeSign.el },
-  { id: "music", el: musicSign.el, target: new THREE.Vector3(46.5, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
+  { id: "music", el: musicSign.el, target: new THREE.Vector3(HX, HOME.floors * FH, 30), dist: 150, elev: 0.75 },
   { id: "train", el: trainSign.el, target: new THREE.Vector3(-80, -5, -40), dist: 84, elev: 0.86 },
-  { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(33, 0, 74.2), dist: 40, elev: 1.25 },
+  { id: "bikesW", el: dockSigns[0].el, dock: DOCKS[0], target: new THREE.Vector3(-47, 0, 74.2), dist: 40, elev: 1.25 },
   { id: "bikesE", el: dockSigns[1].el, dock: DOCKS[1], target: new THREE.Vector3(187.6, 0, 58), dist: 40, elev: 1.25 },
+  // The two mark rows sit in the ring like anything else: the row is the stop, OK walks its set in place
+  // without flying the camera anywhere.
+  { id: "sky", el: document.getElementById("looks") },
+  { id: "wx", el: document.getElementById("wxmarks") },
+  // The dock tiles sit in the same ring as the signs, so Down off the block lands on them and Up comes
+  // back. Inside the TV app they are display:none and `reachable` drops them; the native dock takes over.
+  ...apps.map((el, i) => ({ id: `app${i}`, el, app: true })),
 ];
+const homePoi = POIS.find((p) => p.id === "home");
 let sel = null, poi = null, lastSel = null;
-function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.id === "lights" ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
+// The Lights chip lifts, so it takes `.focus`; everything else — the map signs and the mark rows — says
+// "selected" in place and takes `.sel`.
+function select(p) { POIS.forEach((x) => x.el.classList.toggle(x.hud ? "focus" : "sel", x === p)); sel = p; if (p) lastSel = p; }
 function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
-/** Spatial move: the nearest sign in that direction (off-axis distance counts double). */
+/** On screen and reachable: not hidden by the TV, not faded out with the rest of the HUD. */
+const reachable = (el) => el.offsetParent !== null && el.style.opacity !== "0" && !el.closest(".hide");
+/** Spatial move: the nearest button in that direction (off-axis distance counts double). */
 function navigate(dir) {
   const from = centerOf(sel.el);
   let best = null, bestD = Infinity;
   for (const p of POIS) {
-    if (p === sel || p.el.style.opacity === "0") continue;
+    if (p === sel || !reachable(p.el)) continue;
     const c = centerOf(p.el), dx = c.x - from.x, dy = c.y - from.y;
     const main = dir === "ArrowRight" ? dx : dir === "ArrowLeft" ? -dx : dir === "ArrowDown" ? dy : -dy;
     if (main <= 8) continue;
@@ -1064,8 +1114,11 @@ function navigate(dir) {
 const poseFor = (p) => ({ pos: p.target.clone().add(dirOf(0.68, p.elev).multiplyScalar(p.dist)), target: p.target.clone(), fov: 30 });
 async function enter(p) {
   if (!p || flying) return;
+  if (p.app) return; // the dock tiles are a mock; selecting one is all they do
   if (p.id === "lights") { if (TV) toNative({ type: "openLights" }); else openHome(); return; }
   if (p.id === "home") { if (TV) toNative({ type: "viewHome" }); else openHome(); return; }
+  if (p.id === "sky") { cycleTod(); return; }
+  if (p.id === "wx") { cycleWx(); return; }
   flying = true; mode = "poi"; poi = p;
   glassMesh.visible = p.id !== "train";
   toNative({ type: "poi", on: true });
@@ -1119,33 +1172,89 @@ function renderDetail(now) {
 }
 // Commands from the TV app (focus in/out of the block, Back, Home)
 function command(type) {
-  if (type === "focusIn") { if (mode === "city") select(lastSel || POIS[1]); return true; }
+  if (type === "focusIn") { if (mode === "city") select(lastSel || homePoi); return true; }
   if (type === "focusOut") { select(null); return true; }
   if (type === "back") { if (mode === "poi") zoomOut(); else if (mode === "city") { select(null); toNative({ type: "focusDock" }); } return true; }
   if (type === "reset") { select(null); if (mode === "poi") zoomOut(); return true; }
   return false;
 }
-for (const p of POIS) { p.el.style.pointerEvents = "auto"; p.el.style.cursor = "pointer"; if (p.id !== "lights") p.el.addEventListener("click", () => enter(p)); }
+// The mouse agrees with the remote: clicking a button selects it, then does whatever it does.
+for (const p of POIS) {
+  p.el.style.pointerEvents = "auto"; p.el.style.cursor = "pointer";
+  if (p.id !== "lights") p.el.addEventListener("click", () => { select(p); enter(p); });
+}
 
 // mock controls
 document.getElementById("mock").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.wx) { wx = b.dataset.wx; wxForced = true; wxTemp = null; wxLabel = null; document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x === b)); applyLook(); }
-  if (b.dataset.tod) { todMode = b.dataset.tod; document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x === b)); applyLook(); }
+  if (b.dataset.wx) { wx = b.dataset.wx; wxForced = true; wxTemp = null; wxLabel = null; syncMock(); applyLook(); tickClock(); }
+  if (b.dataset.tod) { todMode = b.dataset.tod; syncMock(); applyLook(); tickClock(); }
 });
 document.getElementById("trainNow").addEventListener("click", () => { trains.down.next = clockS + APPROACH; });
 
 // clock + weather line
 const WX_TEXT = { clear: "CLEAR", rain: "RAIN", snow: "SNOW", wind: "WINDY" };
 const WX_TEMP = { clear: 45, rain: 43, snow: 29, wind: 41 };
+const TOD_TEXT = { day: "DAY", dusk: "DUSK", night: "NIGHT" };
+const TODS = ["day", "dusk", "night"], WXS = ["clear", "rain", "snow", "wind"];
+let lastLine = "";
 function tickClock() {
   const d = new Date();
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", weekday: "short", month: "short", day: "numeric" }).formatToParts(d);
   const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
   document.getElementById("hhmm").textContent = `${get("hour")}:${get("minute")}`;
   document.getElementById("ampm").textContent = get("dayPeriod");
-  document.getElementById("wxline").textContent = `${get("weekday")} ${get("month")} ${get("day")} · ${wxTemp ?? WX_TEMP[wx]}°F · ${wxLabel ?? WX_TEXT[wx]}`.toUpperCase();
   if (todMode === "auto" && look !== LOOKS[currentTod()]) applyLook();
+  // The look is named here rather than on the marks: one line carries the date, the sky and the weather,
+  // and it never says "auto" — it says what the block is actually showing. A dot means you pinned it.
+  // innerHTML, so the two values that come off the weather bridge go through `esc` (declared below, but
+  // this only ever runs from the timer at the foot of the file).
+  const sep = '<span class="sep">·</span>', pin = '<span class="pin"></span>';
+  const line = esc(`${get("weekday")} ${get("month")} ${get("day")}`.toUpperCase()) + sep
+    + TOD_TEXT[currentTod()] + (todMode === "auto" ? "" : pin) + sep
+    + esc(String(wxLabel ?? WX_TEXT[wx]).toUpperCase()) + " " + esc(String(wxTemp ?? WX_TEMP[wx])) + "\u00B0"
+    + (wxForced ? pin : "");
+  if (line !== lastLine) { lastLine = line; document.getElementById("wxline").innerHTML = line; }
+  renderMarks();
+}
+
+// ---------- the sky and weather marks
+// Two rows under the dateline. They carry no label of their own, because the line above is already
+// saying the words; these are only the marks, and the place the remote changes them from.
+const MARK = {
+  day: '<circle cx="12" cy="12" r="4"/><g stroke-linecap="round"><path d="M12 2.8v2.3M12 18.9v2.3M21.2 12h-2.3M5.1 12H2.8M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6M18.5 18.5l-1.6-1.6M7.1 7.1 5.5 5.5"/></g>',
+  dusk: '<path d="M6.9 16.4a5.1 5.1 0 0 1 10.2 0"/><g stroke-linecap="round"><path d="M12 3.6v2.1M19.6 8.1l-1.5 1.5M4.4 8.1l1.5 1.5"/><path d="M2.6 16.4h2.6M18.8 16.4h2.6"/><path d="M3.4 20.2h5.2M11.2 20.2h3.4M17.2 20.2h3.4" opacity=".5"/></g>',
+  night: '<path d="M20.1 14.8A8.3 8.3 0 0 1 9.4 4.1a8.6 8.6 0 1 0 10.7 10.7z"/>',
+  clear: '<circle cx="12" cy="12" r="5.6"/>',
+  rain: '<path d="M7.6 14.6a3.7 3.7 0 0 1 .5-7.4 5.4 5.4 0 0 1 10.2 1.6 3.1 3.1 0 0 1-.6 5.8"/><g stroke-linecap="round"><path d="M9.2 17.6 8.1 20.4M13 17.6l-1.1 2.8M16.8 17.6l-1.1 2.8"/></g>',
+  snow: '<g stroke-linecap="round"><path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/><path d="M9.5 4.6 12 7.1l2.5-2.5M9.5 19.4 12 16.9l2.5 2.5M3.4 10.6l.6 3.4 3.3-.9M20.6 13.4l-.6-3.4-3.3.9"/></g>',
+  wind: '<g stroke-linecap="round"><path d="M2.8 8.6h10.6a2.7 2.7 0 1 0-2.7-2.7"/><path d="M2.8 13.4h13.4a2.7 2.7 0 1 1-2.7 2.7"/><path d="M2.8 18.2h6.6"/></g>',
+};
+const looksEl = document.getElementById("looks"), wxMarksEl = document.getElementById("wxmarks");
+function markRow(el, keys, active, held, text) {
+  const next = keys[(keys.indexOf(active) + 1) % keys.length];
+  el.classList.toggle("held", held);
+  el.innerHTML = keys.map((k) => `<span class="m${k === active ? " on" : ""}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${k === active ? 1.9 : 1.55}" stroke-linejoin="round">${MARK[k]}</svg><i></i></span>`).join("")
+    + `<span class="hint">OK \u2192 ${text[next]}</span>`;
+}
+let markKey = "";
+function renderMarks() {
+  // Seven small SVGs; rebuild them only when something they show has actually changed, not every second.
+  const tod = currentTod(), key = `${tod}|${todMode}|${wx}|${wxForced}`;
+  if (key === markKey) return;
+  markKey = key;
+  markRow(looksEl, TODS, tod, todMode !== "auto", TOD_TEXT);
+  markRow(wxMarksEl, WXS, wx, wxForced, WX_TEXT);
+}
+// OK walks the set and wraps. Pinning lasts the session on purpose — the screen is a window on the street
+// first, so a reload, or the TV waking up tomorrow, comes back to the real sky. There is nothing here to
+// put it back on auto, which is why the dateline grows a dot the moment you pin it.
+function cycleTod() { todMode = TODS[(TODS.indexOf(currentTod()) + 1) % TODS.length]; syncMock(); applyLook(); tickClock(); }
+function cycleWx() { wx = WXS[(WXS.indexOf(wx) + 1) % WXS.length]; wxForced = true; wxTemp = null; wxLabel = null; syncMock(); applyLook(); tickClock(); }
+/** The mock panel is a second face on the same state; keep its pressed buttons honest. */
+function syncMock() {
+  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
+  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
 }
 
 // occasional Citi Bike comings and goings
@@ -1161,59 +1270,48 @@ setInterval(bikeEvent, 9000);
 
 // ---------- live data
 let liveTrains = false, liveBikes = false, wxForced = false, wxTemp = null, wxLabel = null;
-async function getJson(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.json(); }
 async function pollTrains() {
-  try {
-    if (!NAMES.station.stop) return;
-    const d = await getJson(`/mta.json?stop=${encodeURIComponent(NAMES.station.stop)}`);
-    const nowS = Date.now() / 1000;
-    for (const [k, list] of [["down", d.downtown], ["up", d.uptown]]) {
-      const tr = trains[k];
-      const next = list.find((a) => a.at > nowS - DWELL);
-      const at = next ? clockS + (next.at - nowS) : clockS + 9999;
-      const cur = tr.next - clockS;
-      // A train at the platform or pulling out finishes its run; the next one waits its turn.
-      if (liveTrains && cur <= 0 && cur > -(DWELL + 30) && (!next || next.at - nowS > 30)) { tr.queued = at; tr.queuedRoute = next ? next.route : ""; }
-      else { tr.next = at; tr.route = next ? next.route : ""; tr.queued = null; }
-      tr.list = list.filter((a) => a.at > nowS - 30).slice(0, 4).map((a) => ({ route: a.route, at: clockS + (a.at - nowS) }));
-    }
-    liveTrains = true;
-  } catch { /* no bridge (plain preview): the sample schedule keeps running */ }
+  const d = await fetchTrains(NAMES.station.stop);
+  if (!d) return; // no bridge (plain preview): the sample schedule keeps running
+  const nowS = Date.now() / 1000;
+  for (const [k, list] of [["down", d.downtown], ["up", d.uptown]]) {
+    const tr = trains[k];
+    const next = list.find((a) => a.at > nowS - DWELL);
+    const at = next ? clockS + (next.at - nowS) : clockS + 9999;
+    const cur = tr.next - clockS;
+    // A train at the platform or pulling out finishes its run; the next one waits its turn.
+    if (liveTrains && cur <= 0 && cur > -(DWELL + 30) && (!next || next.at - nowS > 30)) { tr.queued = at; tr.queuedRoute = next ? next.route : ""; }
+    else { tr.next = at; tr.route = next ? next.route : ""; tr.queued = null; }
+    tr.list = list.filter((a) => a.at > nowS - 30).slice(0, 4).map((a) => ({ route: a.route, at: clockS + (a.at - nowS) }));
+  }
+  liveTrains = true;
 }
 async function pollBikes() {
-  try {
-    const d = await getJson("/citibike.json");
-    d.stations.forEach((st, i) => {
-      const dk = DOCKS.find((k) => k.name === st.name) || DOCKS[i];
-      if (!dk) return;
-      const before = dk.ebikes + dk.classic;
-      dk.ebikes = st.ebikes; dk.classic = st.classic; dk.free = st.docks; dk.capacity = st.capacity;
-      const after = dk.ebikes + dk.classic;
-      if (after !== before || !liveBikes) layoutDock(dk, after > before && liveBikes ? Math.min(after, dk.slots) - 1 : undefined);
-    });
-    liveBikes = true;
-  } catch { /* sample counts */ }
+  const d = await fetchBikes();
+  if (!d) return; // sample counts
+  d.stations.forEach((st, i) => {
+    const dk = DOCKS.find((k) => k.name === st.name) || DOCKS[i];
+    if (!dk) return;
+    const before = dk.ebikes + dk.classic;
+    dk.ebikes = st.ebikes; dk.classic = st.classic; dk.free = st.docks; dk.capacity = st.capacity;
+    const after = dk.ebikes + dk.classic;
+    if (after !== before || !liveBikes) layoutDock(dk, after > before && liveBikes ? Math.min(after, dk.slots) - 1 : undefined);
+  });
+  liveBikes = true;
 }
-const WMO = (c) => c === 0 ? "Clear" : c <= 2 ? "Partly cloudy" : c === 3 ? "Cloudy" : c <= 48 ? "Fog" : c <= 57 ? "Drizzle" : c <= 67 ? "Rain" : c <= 77 ? "Snow" : c <= 82 ? "Showers" : c <= 86 ? "Snow" : "Storm";
 async function pollWeather() {
   if (wxForced || !LOC) return;
-  try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${LOC.lat}&longitude=${LOC.lon}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York`;
-    const c = (await getJson(u)).current;
-    const code = c.weather_code;
-    const next = (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95 ? "rain" : (code >= 71 && code <= 77) || code === 85 || code === 86 ? "snow" : c.wind_speed_10m >= 18 ? "wind" : "clear";
-    wxTemp = Math.round(c.temperature_2m); wxLabel = next === "wind" ? "Windy" : WMO(code);
-    if (next !== wx) { wx = next; applyLook(); }
-    tickClock();
-  } catch { /* keep the last look */ }
+  const c = await fetchWeather(LOC);
+  if (!c) return; // keep the last look
+  wxTemp = c.temp; wxLabel = c.label;
+  if (c.kind !== wx) { wx = c.kind; applyLook(); }
+  tickClock();
 }
 // Remote control of the music panel: row 0 = the group's transport, rows 1… = a room's volume.
 let musicSel = 0, musicRooms = [];
 async function sonosAct(id, action) {
-  try {
-    const r = await fetch(`/api/home/devices/${encodeURIComponent(id)}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
-    if (r.ok) { const d = await r.json(); if (d && d.id) SPEAKERS.set(d.id, d); }
-  } catch { /* the next event brings the real state */ }
+  const d = await deviceAction(id, action);
+  if (d) SPEAKERS.set(d.id, d);
   lastSigns = 0;
 }
 function musicCmd(cmd) {
@@ -1287,18 +1385,8 @@ function applyDevice(d) {
   if (typeof d.state.brightness === "number") l.b = d.state.brightness;
   l.tone = null;
 }
-function connectHome() {
-  if (typeof EventSource === "undefined") return;
-  const es = new EventSource("/api/home/events");
-  es.onmessage = (e) => {
-    let ev; try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.type === "snapshot") (ev.snapshot && ev.snapshot.devices || []).forEach(applyDevice);
-    else if (ev.type === "device") applyDevice(ev.device);
-    else return;
-    updateLamps();
-  };
-}
-pollTrains(); pollBikes(); pollWeather(); connectHome();
+pollTrains(); pollBikes(); pollWeather();
+connectDevices((d) => { applyDevice(d); updateLamps(); });
 setInterval(pollTrains, 20_000); setInterval(pollBikes, 30_000); setInterval(pollWeather, 10 * 60_000);
 
 // The TV launcher drives the page: Lights opens the home (fly-in), Back closes it, the selected lamp glows.
@@ -1322,8 +1410,7 @@ const UP = new THREE.Vector3(0, 1, 0);
   const h = (location.hash || "").slice(1).toLowerCase();
   if (LOOKS[h]) todMode = h;
   if (WX_TEXT[h]) { wx = h; wxForced = true; }
-  document.querySelectorAll("[data-wx]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.wx === wx));
-  document.querySelectorAll("[data-tod]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.tod === todMode));
+  syncMock();
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
   if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
@@ -1336,6 +1423,7 @@ function frame(now) {
   updatePeople(dt, clockS, wx);
   updateWeather(dt, clockS, wx);
   updateSnowCover(dt);
+  scenery(dt, clockS, look.lamp);
   placeTrain(trains.down, clockS); placeTrain(trains.up, clockS);
   // trees sway (much more when it is windy)
   const amp = wx === "wind" ? 0.22 : 0.035;

@@ -67,9 +67,8 @@ beside your apartment model (all optional):
 {
   "title": "My Block", "place": "MY STREET", "address": "12 Main St", "homeLabel": "12 · Home",
   "seed": 1234, "location": { "latitude": 40.75, "longitude": -73.98 },
-  "avenues": ["…5 names, west to east…"], "streets": ["…7 names, north to south…"],
   "station": { "name": "Grand Central", "line": "Lexington Av line", "stop": "631" },
-  "docks": [{ "name": "West dock name", "side": "← WEST" }, { "name": "East dock name", "side": "EAST →" }],
+  "docks": [{ "name": "Citi Bike", "side": "3 AV" }, { "name": "Citi Bike", "side": "2 AV" }],
   "rooms": [{ "name": "Living room", "lamps": [{ "id": 4, "name": "Hue light 4's name" }] }]
 }
 ```

@@ -1,16 +1,23 @@
-/* Layout: a fixed 1920x1080 TV frame scaled to fit the window; the city is a WebGL canvas rendered at
-   1/PIX resolution and scaled up with hard pixels; HTML signs float over it like SimCity info boxes. */
+/* Layout: a fixed 1920x1080 TV frame scaled to fit the window; the block is a WebGL canvas filling it,
+   and HTML cards float over it like SimCity info boxes — painted, not pixelled: a humanist face, soft
+   corners, warm paper and shadows that fall instead of offsetting. */
 :root {
-  --night: #0c1022;
-  --ink: #1c1a24;
-  --paper: #fbf6ea;
-  --paper-2: #efe6d2;
-  --muted: #6a6170;
+  --night: #1a1b24;
+  --ink: #3b3328;
+  --paper: #fdf7e8;
+  --paper-2: #f2e7cd;
+  --muted: #7d6f5c;
   --mta-green: #00933c;
   --bike-blue: #1d64c4;
   --warm: #ffcf7a;
-  --focus: #ffd75e;
-  --font-pixel: "Pixelify Sans", "Silkscreen", ui-monospace, monospace;
+  --focus: #ffe08a;
+  --card: linear-gradient(180deg, #fffdf4, #f4e9d2);
+  --card-sel: linear-gradient(180deg, #ffeeb6, #f7d98a);
+  --lift: 0 12px 26px rgba(48, 36, 22, 0.3);
+  /* Frutiger's Avenir, 1988: humanist geometric, warm, and wide enough to hold up at ten feet. It is a
+     system face on the Mac but not on Fire OS, so Nunito Sans is loaded as the web stand-in and sits in
+     the chain ahead of system-ui — otherwise the TV would quietly fall back to Roboto. */
+  --font-display: "Avenir Next", Avenir, "Nunito Sans", system-ui, sans-serif;
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -18,55 +25,133 @@ html, body { height: 100%; }
 body { background: var(--night); color: var(--paper); overflow: hidden; }
 #wrap { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); }
 #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #22263a; font-family: var(--font-ui); }
-#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; image-rendering: pixelated; image-rendering: crisp-edges; }
+#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; }
 #fade { position: absolute; inset: 0; background: #07080f; opacity: 0; pointer-events: none; transition: opacity 280ms ease; }
+/* Paper tooth over the whole frame: a warm wash and a soft vignette, under the cards. */
+#stage::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(130% 105% at 50% 38%, rgba(255, 248, 228, 0.07) 0 52%, rgba(62, 48, 32, 0.3) 100%);
+}
 
-/* Pixel sign: paper box, 3px ink border, hard offset shadow. */
-.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); box-shadow: 5px 5px 0 rgba(10, 8, 20, 0.55); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease; }
-.sign::after { content: ""; position: absolute; left: 50%; bottom: -14px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid var(--ink); transform: translateX(-50%); }
+/* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
+.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
+.sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid #f4e9d2; transform: translateX(-50%); }
+/* Pinned to the left margin instead of to a point on the map, so no tail and no transform — the loop
+   leaves `transform` alone for these, and `left/bottom` here are the whole of their placement. It sits on
+   the bottom edge rather than under the clock: that is where the marks live now, and down here it is the
+   last thing on its side, clear of every map sign and 183px above the dock. */
+.sign.pinned { left: 64px; top: auto; bottom: 288px; transform: none; max-width: 420px; }
+.sign.pinned::after { display: none; }
+/* Track titles are arbitrary length; the card holds its width and cuts the text rather than growing. */
+.sign.pinned .t, .sign.pinned .s { overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
 .sign .row { display: flex; align-items: center; gap: 10px; }
 .sign .t { font-size: 22px; font-weight: 600; line-height: 1.1; }
-.sign .s { font-size: 18px; color: var(--muted); line-height: 1.25; }
+.sign .s { font-size: 19px; color: var(--muted); line-height: 1.25; }
 .sign .big { font-size: 30px; font-weight: 700; line-height: 1; }
 .bullet { width: 34px; height: 34px; border-radius: 50%; background: var(--mta-green); color: #fff; display: grid; place-items: center; font: 700 22px/1 var(--font-ui); flex: none; }
 .bolt { color: #2b7bd9; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--warm); box-shadow: 0 0 0 2px var(--ink); }
 .dot.off { background: #8b8496; }
-.street { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 15px/1 var(--font-pixel); letter-spacing: 0.08em; color: #fbf6ea; background: rgba(20, 20, 32, 0.72); padding: 4px 7px; transition: opacity 300ms ease; }
-.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
+.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
 
 /* HUD */
-#clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-pixel); text-shadow: 4px 4px 0 rgba(8, 6, 18, 0.6); transition: opacity 300ms ease; }
-#clock .time { font-size: 104px; font-weight: 700; line-height: 0.9; }
+#clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-display); text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
+#clock .time { font-size: 104px; font-weight: 600; line-height: 0.9; }
 #clock .time small { font-size: 44px; margin-left: 10px; }
-#clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; }
+#clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; white-space: nowrap; }
+#clock .line .sep { opacity: 0.45; margin: 0 11px; }
+/* A filled dot after a word: you pinned this, it is not what the sky is doing. The pin lasts the session
+   and there is nothing to undo it with, so this dot is the only thing that tells "pinned to night" apart
+   from "it is night". */
+#clock .line .pin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.85; margin-left: 9px; vertical-align: 0.1em; }
 #clock .place { font-size: 20px; margin-top: 6px; opacity: 0.85; letter-spacing: 0.08em; }
 
-#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-pixel); color: var(--ink); background: var(--paper); border: 3px solid var(--ink); box-shadow: 6px 6px 0 rgba(10, 8, 20, 0.55); padding: 14px 18px; cursor: pointer; transition: transform 140ms ease, background 140ms ease, opacity 300ms ease; }
+/* The sky and weather marks: two short rows set under the dateline, saying in pictures what it says in
+   words. Each row is one stop in the remote ring, so the row — not the individual mark — takes focus and
+   OK walks its set. Inactive marks dim but keep their box: nothing may reach opacity 0, because
+   `reachable()` drops an element at opacity 0 and the stop would silently leave the ring. */
+.marks { position: absolute; top: 240px; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; color: var(--paper); cursor: pointer; text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
+#looks { left: 64px; }
+#wxmarks { left: 246px; }
+.marks .m { width: 46px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 12px; opacity: 0.42; transition: opacity 160ms ease; }
+.marks .m.on { opacity: 1; }
+/* The rule under the live mark: dotted while the block follows the real sky, solid once you pin it. */
+.marks .m i { display: block; width: 26px; height: 0; border-top: 2px dotted transparent; }
+.marks .m.on i { border-top-color: currentColor; }
+.marks.held .m.on i { border-top-style: solid; }
+.marks:focus-visible, .marks.sel, .marks.focus { outline: none; }
+.marks:focus-visible .m.on, .marks.sel .m.on, .marks.focus .m.on { background: rgba(255, 224, 138, 0.2); box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.75); }
+/* The hint is absolutely placed under the row, so showing it moves no mark: the row keeps its size and
+   `navigate()` keeps aiming at the same centre whether or not this stop is focused. */
+.marks .hint { position: absolute; left: 0; top: 50px; white-space: nowrap; font: 400 17px/1 var(--font-display); opacity: 0; transition: opacity 160ms ease; }
+.marks:focus-visible .hint, .marks.sel .hint, .marks.focus .hint { opacity: 0.62; }
+
+#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); border-radius: 16px; padding: 15px 19px; cursor: pointer; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
 #chip svg { width: 30px; height: 30px; }
 #chip .dots { display: flex; gap: 6px; }
-#chip:focus-visible, #chip.focus { outline: none; background: var(--focus); transform: translate(-3px, -3px); box-shadow: 9px 9px 0 rgba(10, 8, 20, 0.55); }
 
-#dock { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 22px; transition: opacity 300ms ease, transform 300ms ease; }
-.app { width: 196px; height: 92px; display: grid; place-items: center; font: 600 24px/1 var(--font-pixel); color: var(--paper); background: rgba(22, 20, 34, 0.82); border: 3px solid rgba(251, 246, 234, 0.85); box-shadow: 5px 5px 0 rgba(8, 6, 18, 0.5); cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
-.app:focus-visible, .app.focus { outline: none; background: var(--paper); color: var(--ink); transform: translateY(-8px); }
+/* Lights and Now playing read as glass over the block rather than as paper cards pasted onto it: a thin
+   dark scrim UNDER a cream wash. The scrim is load-bearing, not decoration — cream alone disappears
+   against a Day sky, which is the brightest thing either of these two ever sits on. */
+#chip, .sign.pinned {
+  color: var(--paper);
+  background: linear-gradient(rgba(20, 14, 8, 0.22), rgba(20, 14, 8, 0.22)), rgba(253, 247, 232, 0.1);
+  border: 1px solid rgba(253, 247, 232, 0.26);
+  box-shadow: 0 10px 26px rgba(26, 18, 10, 0.3);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  text-shadow: 0 2px 10px rgba(24, 16, 8, 0.5);
+}
+.sign.pinned .s { color: rgba(253, 247, 232, 0.66); }
+.sign.pinned .art { border-color: rgba(253, 247, 232, 0.3); background: rgba(253, 247, 232, 0.12); }
+#chip .dot { box-shadow: 0 0 0 2px rgba(20, 14, 8, 0.45); }
+/* `.sign.pinned.sel` outranks `.sign.sel`, so the pinned card keeps glass when selected instead of
+   flipping back to paper. */
+#chip:focus-visible, #chip.focus, .sign.pinned.sel {
+  outline: none; color: #fffaf0;
+  background: rgba(255, 224, 138, 0.24);
+  border-color: rgba(255, 224, 138, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.22), 0 14px 30px rgba(26, 18, 10, 0.34);
+}
+#chip:focus-visible, #chip.focus { transform: translateY(-4px) scale(1.04); }
+
+/* Dock: glass tiles hovering over the block, lit from the top edge, blurring whatever is behind them.
+   They answer the remote exactly like the map cards — same lift, same warm fill when selected. */
+#dock { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; justify-content: center; gap: 17px; transition: opacity 300ms ease, transform 300ms ease; }
+.app {
+  width: 147px; height: 69px; display: grid; place-items: center;
+  font: 600 18px/1 var(--font-display); color: rgba(253, 247, 232, 0.94);
+  background: linear-gradient(165deg, rgba(255, 252, 244, 0.22), rgba(52, 42, 30, 0.3));
+  border: 1px solid rgba(255, 250, 238, 0.4); border-radius: 18px;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 10px 26px rgba(26, 18, 10, 0.34), inset 0 1px 0 rgba(255, 253, 246, 0.55);
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+.app:focus-visible, .app.focus, .app.sel {
+  outline: none; color: var(--ink); background: var(--card-sel);
+  border-color: rgba(255, 255, 255, 0.85);
+  transform: translateY(-10px) scale(1.06);
+  box-shadow: 0 18px 34px rgba(26, 18, 10, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
 
 /* Drawer: the home's controls slide in from the right while the camera flies in. */
-#drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 500px; background: var(--paper); color: var(--ink); border-left: 4px solid var(--ink); box-shadow: -10px 0 0 rgba(8, 6, 18, 0.35); transform: translateX(110%); transition: transform 520ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; padding: 48px 36px 32px; gap: 22px; font-family: var(--font-pixel); }
+#drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 500px; background: var(--paper); color: var(--ink); border-left: 2px solid var(--ink); box-shadow: -18px 0 36px rgba(40, 30, 18, 0.35); transform: translateX(110%); transition: transform 520ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; padding: 48px 36px 32px; gap: 22px; font-family: var(--font-display); }
 #drawer.open { transform: translateX(0); }
 #drawer h2 { margin: 0; font-size: 40px; line-height: 1; }
-#drawer .addr { font-size: 20px; color: var(--muted); margin-top: 8px; }
+#drawer .addr { font-size: 19px; color: var(--muted); margin-top: 8px; }
 .scenes { display: flex; gap: 12px; }
-.pill { font: 600 22px/1 var(--font-pixel); color: var(--ink); background: var(--paper-2); border: 3px solid var(--ink); padding: 12px 18px; cursor: pointer; }
+.pill { font: 600 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 12px 18px; cursor: pointer; }
 .pill:focus-visible, .pill.focus { outline: none; background: var(--focus); }
 .roomgrp { display: flex; flex-direction: column; gap: 8px; }
 .roomgrp h3 { margin: 0; font-size: 20px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-.lamp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 14px; text-align: left; font: 500 22px/1.1 var(--font-pixel); color: var(--ink); background: transparent; border: 3px solid transparent; padding: 10px 12px; cursor: pointer; }
+.lamp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 14px; text-align: left; font: 500 22px/1.1 var(--font-display); color: var(--ink); background: transparent; border: 3px solid transparent; border-radius: 10px; padding: 10px 12px; cursor: pointer; }
 .lamp:focus-visible, .lamp.focus { outline: none; background: var(--ink); color: var(--paper); }
 .lamp .bar { grid-column: 1 / -1; height: 6px; background: rgba(28, 26, 36, 0.15); }
 .lamp.focus .bar, .lamp:focus-visible .bar { background: rgba(251, 246, 234, 0.25); }
 .lamp .bar i { display: block; height: 100%; background: #e2a73a; }
-.sw { width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); position: relative; }
+.sw { width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); border-radius: 10px; position: relative; }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: var(--ink); transition: left 140ms ease; }
 .lamp.on .sw { background: #f0b542; }
 .lamp.on .sw::after { left: 27px; }
@@ -75,6 +160,9 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 
 /* Mock controls: outside the design, for trying weather and time. */
 #mock { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; font: 500 16px/1 var(--font-ui); color: var(--paper); background: rgba(14, 12, 24, 0.8); border: 2px dashed rgba(251, 246, 234, 0.5); padding: 12px 14px; transition: opacity 300ms ease; }
+/* `display: flex` on an id out-specifies the browser's `[hidden]` rule, so say it again here: without this
+   the panel JS hides with `hidden = true` stays on screen on every load. */
+#mock[hidden] { display: none; }
 #mock .grp { display: flex; align-items: center; gap: 6px; }
 #mock { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 18px; max-width: 1000px; }
 #mock .lbl { width: 70px; opacity: 0.75; }
@@ -86,11 +174,23 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 
 /* Inside the TV launcher the app draws the dock, the Lights button and its drawer. */
 .tv #dock, .tv #drawer, .tv #mock { display: none; }
+/* `backdrop-filter` is a full-frame GPU pass, and unlike the dock tiles (which the TV hides) these two
+   are on screen every frame. The box is a 1.78 GB Fire TV already running the block at ~32 fps, so drop
+   the blur there and buy the same legibility with a flatter, more opaque wash. This doubles as the
+   fallback for any WebView that does not implement backdrop-filter at all. */
+.tv #chip, .tv .sign.pinned { backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* `:not()` rather than a blanket override, so the warm selected fill still wins when the remote is on it. */
+.tv #chip:not(.focus), .tv .sign.pinned:not(.sel) {
+  background: linear-gradient(rgba(20, 14, 8, 0.42), rgba(20, 14, 8, 0.42)), rgba(253, 247, 232, 0.14);
+}
 
-/* The selected sign (remote focus) and the zoomed-in details. */
-.sign.sel { background: var(--focus); box-shadow: 8px 8px 0 rgba(10, 8, 20, 0.6); }
+/* The selected sign (remote focus). It cannot lift the way the dock tiles do — the sign's transform is
+   written every frame from its world position — so it says "selected" with the same warm fill, a white
+   rim and a deeper shadow instead. */
+.sign.sel { background: var(--card-sel); border-color: rgba(255, 255, 255, 0.85); box-shadow: 0 18px 34px rgba(48, 36, 22, 0.42), 0 0 0 3px rgba(255, 224, 138, 0.55); }
+.sign.sel::after { border-top-color: #f7d98a; }
 .bullet.sm { width: 28px; height: 28px; font-size: 18px; }
-.detail { position: absolute; left: 64px; bottom: 64px; min-width: 520px; font-family: var(--font-pixel); color: var(--ink); background: var(--paper); border: 4px solid var(--ink); box-shadow: 8px 8px 0 rgba(10, 8, 20, 0.55); padding: 22px 28px 20px; display: flex; flex-direction: column; gap: 14px; transition: opacity 300ms ease; }
+.detail { position: absolute; left: 64px; bottom: 64px; min-width: 520px; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 22px 28px 20px; display: flex; flex-direction: column; gap: 14px; transition: opacity 300ms ease; }
 .detail .dhead { display: flex; align-items: baseline; gap: 14px; }
 .detail .dhead .t { font-size: 36px; font-weight: 700; }
 .detail .dhead .s { font-size: 20px; color: var(--muted); }
@@ -101,12 +201,12 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .detail .drow.big small { font-size: 20px; font-weight: 500; color: var(--muted); margin-left: 8px; }
 .detail .dhint { font-size: 18px; color: var(--muted); }
 
-/* Now playing (Sonos): the cover as pixel art, the rooms with their volume. */
-.art { width: 64px; height: 64px; image-rendering: pixelated; border: 3px solid var(--ink); flex: none; display: grid; place-items: center; background: var(--paper-2); font-size: 30px; }
+/* Now playing (Sonos): the cover and the rooms with their volume. */
+.art { width: 64px; height: 64px; border: 2px solid var(--ink); border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--paper-2); font-size: 30px; }
 .art.big { width: 168px; height: 168px; font-size: 72px; }
-.sign .src { font-size: 15px; letter-spacing: 0.04em; }
+.sign .src { font-size: 16px; letter-spacing: 0.04em; }
 .notes { position: absolute; left: 0; top: 0; pointer-events: none; width: 120px; height: 160px; transition: opacity 300ms ease; }
-.notes i { position: absolute; bottom: 0; font: 700 34px/1 var(--font-pixel); font-style: normal; color: var(--paper); text-shadow: 3px 3px 0 rgba(10, 8, 20, 0.6); opacity: 0; animation: note 3.6s steps(12) infinite; }
+.notes i { position: absolute; bottom: 0; font: 700 34px/1 var(--font-display); font-style: normal; color: var(--paper); text-shadow: 0 4px 12px rgba(10, 8, 20, 0.6); opacity: 0; animation: note 3.6s ease-in-out infinite; }
 .notes i:nth-child(1) { left: 20px; }
 .notes i:nth-child(2) { left: 56px; animation-delay: 1.2s; color: var(--warm); }
 .notes i:nth-child(3) { left: 88px; animation-delay: 2.4s; }
@@ -117,16 +217,16 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .detail .np .src { font-size: 20px; margin-top: 12px; color: var(--ink); font-weight: 600; }
 .detail .np .src.spotify { color: #1db954; }
 .detail .spk { display: flex; flex-direction: column; gap: 8px; }
-.detail .spkrow { display: grid; grid-template-columns: 220px 160px 1fr; align-items: center; gap: 16px; font-size: 22px; color: var(--muted); }
+.detail .spkrow { display: grid; grid-template-columns: 220px 160px 1fr; align-items: center; gap: 16px; font-size: 22px; color: var(--muted); border-radius: 10px; }
 .detail .spkrow.on { color: var(--ink); }
 .detail .spkrow .vol { height: 10px; background: rgba(28, 26, 36, 0.15); border: 2px solid var(--ink); }
 .detail .spkrow .vol i { display: block; height: 100%; background: #e2a73a; }
 @media (prefers-reduced-motion: reduce) { .notes i { animation: none; opacity: 1; } }
 .notes { z-index: 0; } .sign { z-index: 1; }
 .detail { pointer-events: auto; }
-.detail .transport { display: flex; gap: 10px; margin-top: 14px; padding: 4px; border: 3px solid transparent; width: max-content; }
+.detail .transport { display: flex; gap: 10px; margin-top: 14px; padding: 4px; border: 3px solid transparent; border-radius: 10px; width: max-content; }
 .detail .transport.sel { border-color: var(--ink); background: var(--focus); }
-.detail .tbtn { font: 700 26px/1 var(--font-pixel); width: 64px; height: 48px; color: var(--paper); background: var(--ink); border: 3px solid var(--ink); cursor: pointer; }
+.detail .tbtn { font: 700 26px/1 var(--font-display); width: 64px; height: 48px; color: var(--paper); background: var(--ink); border: 3px solid var(--ink); border-radius: 10px; cursor: pointer; }
 .detail .tbtn.dis { opacity: 0.3; cursor: default; }
 .detail .spkrow { padding: 4px 8px; border: 3px solid transparent; cursor: pointer; }
 .detail .spkrow.sel { border-color: var(--ink); background: var(--focus); color: var(--ink); }
