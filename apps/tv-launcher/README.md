@@ -5,8 +5,8 @@ An Android app (Kotlin, framework views, no AndroidX) that replaces the TV home 
 - the live 3D apartment on top (the bridge's `?view=3d&lite=1&orbit=full&tilt=64&maxDpr=1.5`),
 - a glass **Lights** panel: selecting a lamp outlines it in the 3D; OK toggles it, ← / → dims it (or sets the ceiling fan speed 0–6),
   scene pills ("All off" + the scenes the bridge defines) — live state over SSE,
-- a dock with only the chosen apps, clock + weather (Open-Meteo, no key), a background that follows
-  the sun, and a screensaver (`MaisonDream`).
+- a dock with only the chosen apps, clock + weather (the bridge's `/weather.json`, Open-Meteo direct
+  as fallback), a background that follows the sun, and a screensaver (`MaisonDream`).
 
 **Full procedure, safety notes and pitfalls: [`playbook/04-tv-launcher.md`](../../playbook/04-tv-launcher.md),
 [`playbook/gotchas.md`](../../playbook/gotchas.md), [`playbook/recovery.md`](../../playbook/recovery.md).**
@@ -38,7 +38,7 @@ Build prerequisites: JDK 17, Android SDK platform 35 + build-tools 35, `local.pr
 | `LightsPanel.kt`, `Glass.kt`, `Ambient.kt` | The glass panel, the glass drawable, the sun-colored background |
 | `Home.kt`, `Bridge.kt` | Bridge client (SSE feed, actions, scenes), Bonjour discovery, pairing |
 | `Apps.kt` | Dock (labels set over ADB, aliases per region) |
-| `Weather.kt` | Open-Meteo + colored glyphs |
+| `Weather.kt` | Bridge `/weather.json` (Open-Meteo fallback) + colored glyphs |
 | `HomeButtonService.kt`, `HomeButtonGuard.kt` | Home key takeover + self-re-enable (gotchas G1, G2) |
 | `CrashGuard.kt` | Crash loop → the Home key goes back to the stock home (gotcha G16) |
 | `res/values*/strings.xml` | UI text: English default, French (`values-fr`); add a folder per language |

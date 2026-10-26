@@ -25,13 +25,13 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** Current weather at the configured place, straight from Open-Meteo (free, no key): works while the bridge sleeps. */
+/** Current weather over the home: the bridge's cached reading, or Open-Meteo direct while the bridge sleeps. */
 data class WeatherNow(val temperature: Int, val sky: Sky, val isDay: Boolean)
 
 enum class Sky { CLEAR, PARTLY, CLOUDY, FOG, RAIN, SNOW, STORM }
 
 object WeatherSource {
-    /** Where to read the weather: set once over ADB (`--ef lat 48.85 --ef lon 2.35`, see README); none = no weather. */
+    /** Fallback coordinates for when the bridge is away: set once over ADB (`--ef lat 48.85 --ef lon 2.35`, see README). */
     fun place(context: Context): Pair<Double, Double>? {
         val p = context.getSharedPreferences("weather", Context.MODE_PRIVATE)
         if (!p.contains("lat") || !p.contains("lon")) return null
@@ -61,8 +61,38 @@ object WeatherSource {
         else -> Sky.CLOUDY
     }
 
-    /** Blocking; null on any error (offline, API change). */
-    fun fetch(lat: Double, lon: Double): WeatherNow? = runCatching {
+    /**
+     * Blocking; null when nothing answers.
+     *
+     * The bridge first: it already holds a reading fetched once for the whole house and it knows where
+     * home is, so the TV spends a few hundred bytes on the LAN instead of a TLS handshake to the
+     * internet, and never shows a different temperature from the screens. Open-Meteo direct stays as
+     * the fallback — the launcher has to keep working when the bridge is off.
+     */
+    fun fetch(context: Context): WeatherNow? =
+        fromBridge(BridgeStore(context).url) ?: place(context)?.let { fromOpenMeteo(it.first, it.second) }
+
+    /** GET <bridge>/weather.json. Short timeouts: a sleeping bridge must not delay the fallback. */
+    private fun fromBridge(base: String?): WeatherNow? {
+        if (base == null) return null
+        return runCatching {
+            val c = URL("$base/weather.json").openConnection() as HttpURLConnection
+            try {
+                c.connectTimeout = 2000
+                c.readTimeout = 3000
+                val w = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONObject("weather")
+                // The bridge answers in °F, as the block's dateline shows it; convert where people read °C.
+                w?.let {
+                    val f = it.getDouble("tempF")
+                    WeatherNow((if (fahrenheit()) f else (f - 32) * 5 / 9).roundToInt(), skyOf(it.getInt("code")), it.optBoolean("isDay", true))
+                }
+            } finally {
+                c.disconnect()
+            }
+        }.getOrNull()
+    }
+
+    private fun fromOpenMeteo(lat: Double, lon: Double): WeatherNow? = runCatching {
         val c = URL(url(lat, lon)).openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 8000
@@ -189,9 +219,8 @@ class WeatherView(context: Context, textSize: Float) : LinearLayout(context) {
     private val main = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
-            val place = WeatherSource.place(context) ?: return
             io.execute {
-                val now = WeatherSource.fetch(place.first, place.second)
+                val now = WeatherSource.fetch(context)
                 main.post { now?.let(::show) }
             }
             main.postDelayed(this, if (icon.weather == null) 60_000L else 15 * 60_000L)
