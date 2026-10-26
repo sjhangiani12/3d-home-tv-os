@@ -66,6 +66,9 @@
     <string name="bike_west_station">E 31 St &amp; 3 Ave</string>
     <string name="bike_east_station">2 Ave &amp; E 31 St</string>
     <string name="all_apps">All apps</string>
+    <string name="inputs">Inputs</string>
+    <string name="inputs_failed">Could not open the TV inputs.</string>
+    <string name="apps">Apps</string>
     <string name="good_morning">Good morning</string>
     <string name="good_afternoon">Good afternoon</string>
     <string name="good_evening">Good evening</string>

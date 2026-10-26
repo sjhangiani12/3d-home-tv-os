@@ -371,6 +371,19 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * "Inputs": Fire OS keeps input switching to its own signed apps, so the bridge presses the TV's
+     * Inputs key over ADB and the TV draws its own picker over us.
+     */
+    private fun openInputs() {
+        val base = store.url ?: return
+        val token = store.token ?: return
+        io.execute {
+            val result = runCatching { HomeFeed.tvInputs(base, token) }
+            main.post { result.onFailure { toast(getString(R.string.inputs_failed)) } }
+        }
+    }
+
     /** "Tout éteindre": the lights only (the TV stays on, unlike the "Absent" scene). */
     private fun allOff() {
         lights.lamps().filter { it.on == true && it.reachable }.forEach(::toggle)
@@ -719,8 +732,33 @@ class MainActivity : Activity() {
         drawerGrid.removeAllViews()
         // As wide as fits DRAWER_COLS a row, with the zoom of the focused tile.
         val tileW = (resources.displayMetrics.widthPixels - dp(SIDE) * 2 - dp(GAP) * (DRAWER_COLS - 1)) / DRAWER_COLS * 10 / 11
+        // The TV's own inputs first: what is plugged into the HDMI ports has no app to be found under.
+        if (store.url != null && store.token != null) {
+            drawerGrid.addView(drawerHeading(getString(R.string.inputs)))
+            drawerRows(listOf(DrawerTile(INPUT_TAG, getString(R.string.inputs), getDrawable(R.drawable.ic_input)) {
+                hideDrawer()
+                openInputs()
+            }), tileW)
+            drawerGrid.addView(drawerHeading(getString(R.string.apps)))
+        }
+        drawerRows(catalog.all().map { app ->
+            DrawerTile(app.pkg, app.label, app.icon ?: app.banner) {
+                hideDrawer()
+                launch(app.pkg)
+            }
+        }, tileW)
+        drawer.visibility = View.VISIBLE
+        (0 until drawerGrid.childCount).asSequence()
+            .mapNotNull { (drawerGrid.getChildAt(it) as? ViewGroup)?.getChildAt(0) }
+            .firstOrNull()?.requestFocus()
+    }
+
+    private data class DrawerTile(val tag: String, val label: String, val icon: android.graphics.drawable.Drawable?, val onClick: () -> Unit)
+
+    /** Lays tiles out DRAWER_COLS a row, each with its name under it, and appends the rows to the drawer. */
+    private fun drawerRows(tiles: List<DrawerTile>, tileW: Int) {
         var row: LinearLayout? = null
-        catalog.all().forEachIndexed { i, app ->
+        tiles.forEachIndexed { i, item ->
             if (i % DRAWER_COLS == 0) {
                 row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -728,12 +766,9 @@ class MainActivity : Activity() {
                 }
                 drawerGrid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
             }
-            val t = tile(app.pkg, app.label, app.banner, app.icon, tileW, tileW * 9 / 16) {
-                hideDrawer()
-                launch(app.pkg)
-            } as LinearLayout
+            val t = tile(item.tag, item.label, null, item.icon, tileW, tileW * 9 / 16, item.onClick) as LinearLayout
             t.addView(TextView(this).apply {
-                text = app.label
+                text = item.label
                 setTextColor(0xCCFFFFFF.toInt())
                 textSize = 13f
                 maxLines = 1
@@ -744,9 +779,16 @@ class MainActivity : Activity() {
                 if (i % DRAWER_COLS > 0) leftMargin = dp(GAP)
             })
         }
-        drawer.visibility = View.VISIBLE
-        (drawerGrid.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.requestFocus()
     }
+
+    private fun drawerHeading(text: String): TextView = TextView(this).apply {
+        this.text = text
+        setTextColor(0x99FFFFFF.toInt())
+        textSize = 14f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        setPadding(0, 0, 0, dp(10))
+    }
+
 
     private fun hideDrawer() {
         drawer.visibility = View.GONE
@@ -924,6 +966,7 @@ class MainActivity : Activity() {
         /** The block's WebView id (stable across its re-creation), for the dock's ↑. */
         private val WEB_ID = View.generateViewId()
         private const val ALL_APPS_TAG = "__all_apps"
+        private const val INPUT_TAG = "__inputs"
         private const val SIDE = 40
         private const val GAP = 24
         /** Dock tile width (dp), 16:9 banners. */

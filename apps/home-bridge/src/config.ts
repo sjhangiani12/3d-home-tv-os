@@ -69,6 +69,11 @@ export interface BridgeConfig {
   homepod: { enabled: boolean; host: string; ip: string | null; id: string | null; name: string; room: string; python: string };
   /** Sonos speakers over their local API (read-only). `hosts` = speaker IPs to ask first; empty = SSDP discovery. */
   sonos: { enabled: boolean; hosts: string[]; pollMs: number };
+  /**
+   * ADB on the TV, for what the TV's own system reserves to itself — today only opening the inputs
+   * panel (POST /api/tv/inputs). `device` is the TV as `adb devices` names it.
+   */
+  tvAdb: { enabled: boolean; adbPath: string; device: string };
 }
 
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -145,6 +150,8 @@ export function defaultConfig(): BridgeConfig {
       python: "~/.config/appart3d/pyatv-venv/bin",
     },
     sonos: { enabled: true, hosts: [], pollMs: 3000 },
+    // Off until the person has adb on this machine and the TV has authorised it (see 04-tv-launcher).
+    tvAdb: { enabled: false, adbPath: "adb", device: "" },
   };
 }
 
@@ -158,7 +165,7 @@ export function mergeConfig(defaults: BridgeConfig, saved: unknown): BridgeConfi
   const out: Record<string, unknown> = { ...defaults };
   for (const [k, v] of Object.entries(saved)) {
     const d = (defaults as unknown as Record<string, unknown>)[k];
-    if (isObj(d) && isObj(v) && (k === "hue" || k === "homeAssistant" || k === "roles" || k === "location" || k === "homepod" || k === "sonos")) out[k] = { ...d, ...v };
+    if (isObj(d) && isObj(v) && (k === "hue" || k === "homeAssistant" || k === "roles" || k === "location" || k === "homepod" || k === "sonos" || k === "tvAdb")) out[k] = { ...d, ...v };
     else out[k] = v;
   }
   const cfg = out as unknown as BridgeConfig;

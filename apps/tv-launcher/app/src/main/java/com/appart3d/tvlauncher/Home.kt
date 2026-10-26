@@ -166,6 +166,14 @@ class HomeFeed(
             post(base, token, "/api/home/scenes/${URLEncoder.encode(id, "UTF-8")}", JSONObject())
         }
 
+        /**
+         * Asks the bridge to open the TV's own inputs panel. Fire OS reserves input switching to
+         * signed system apps, so the bridge presses KEYCODE_TV_INPUT over ADB instead. Throws on errors.
+         */
+        fun tvInputs(base: String, token: String) {
+            post(base, token, "/api/tv/inputs", JSONObject())
+        }
+
         private fun action(base: String, token: String, lamp: Lamp, action: JSONObject): Lamp? =
             Lamp.parse(post(base, token, "/api/home/devices/${URLEncoder.encode(lamp.id, "UTF-8")}/action", action))
 
