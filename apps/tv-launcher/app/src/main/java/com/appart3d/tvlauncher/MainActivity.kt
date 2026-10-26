@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
-import android.graphics.Outline
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -681,12 +680,11 @@ class MainActivity : Activity() {
         val focusedPkg = currentFocus?.tag as? String
         dock.removeAllViews()
         val tileW = dp(TILE_W)
-        val tileH = tileW * 9 / 16   // the tiles carry 16:9 banners, so they are cut to the artwork
         val tiles = catalog.load().map { app ->
-            tile(app.pkg, app.label, app.banner, app.icon, tileW, tileH) { launch(app.pkg) }
-        } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileH, tileH) {
+            tile(app.pkg, app.label, app.banner, app.icon, tileW, tileW * 9 / 16) { launch(app.pkg) }
+        } + tile(ALL_APPS_TAG, getString(R.string.all_apps), null, getDrawable(android.R.drawable.ic_dialog_dialer), tileW * 9 / 16, tileW * 9 / 16) {
             showDrawer()
-        } + tile(SETTINGS_TAG, getString(R.string.settings), null, getDrawable(android.R.drawable.ic_menu_preferences), tileH, tileH) {
+        } + tile(SETTINGS_TAG, getString(R.string.settings), null, getDrawable(android.R.drawable.ic_menu_preferences), tileW * 9 / 16, tileW * 9 / 16) {
             start(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         tiles.forEachIndexed { i, t ->
@@ -798,47 +796,32 @@ class MainActivity : Activity() {
         dock.findViewWithTag<View>(ALL_APPS_TAG)?.requestFocus()
     }
 
-    /**
-     * One dock tile: the app's own artwork, under glass.
-     *
-     * The publisher's banner stays — it is what makes a tile findable at ten feet, and no generic
-     * treatment beats a logo someone already knows. What changes is that it is no longer an opaque card
-     * pasted over the street: the artwork is held back to [ART_REST] so the block shows through it, with
-     * only a faint wash behind it to keep dark logos off a dark sky, and the sheen and rim drawn *on top*
-     * so the glass reads as a pane over the logo rather than a slab beside it. Focus brings the artwork
-     * to full and lights the rim, so the one tile you are on is the one that is solid.
-     */
     private fun tile(tag: String, label: String, banner: android.graphics.drawable.Drawable?, icon: android.graphics.drawable.Drawable?, width: Int, height: Int, onClick: () -> Unit): View {
-        val r = dp(18).toFloat()
-        val rounded = object : ViewOutlineProvider() {
-            override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, r)
-        }
         val card = FrameLayout(this).apply {
-            // Backing wash only — no rim and no sheen here, those go above the artwork.
-            background = Glass(r, 0f, fillTop = 0x1FFFFFFF, fillBottom = 0x0EFFFFFF, sheen = 0, rimTop = 0, rimBottom = 0)
-            outlineProvider = rounded
-            clipToOutline = true   // the banner fills the tile, so it has to be cut to the same corners
-            elevation = dp(5).toFloat()
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(0xFF2A2F38.toInt())
+            }
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
+            elevation = dp(6).toFloat()
         }
-        val art = ImageView(this).apply { alpha = ART_REST }
         if (banner != null) {
-            art.setImageDrawable(banner)
-            art.scaleType = ImageView.ScaleType.CENTER_CROP
-            card.addView(art, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            card.addView(ImageView(this).apply {
+                setImageDrawable(banner)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         } else {
-            // No banner (the drawer and settings tiles, and the odd app): the square icon, centred.
-            art.setImageDrawable(icon)
-            art.scaleType = ImageView.ScaleType.FIT_CENTER
-            val size = minOf(width, height) * 62 / 100
-            card.addView(art, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+            val size = minOf(width, height) / 2
+            card.addView(ImageView(this).apply {
+                setImageDrawable(icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                alpha = 0.8f
+            }, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
         }
-        // The pane itself, over the artwork: no fill, just the corner sheen and the lit edge.
-        card.addView(View(this).apply {
-            background = Glass(r, dp(1).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x20FFFFFF, rimTop = 0x59FFFFFF, rimBottom = 0x12FFFFFF)
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        // Focused: the same pane, lit — a brighter catch and a bright rim all the way round (tvOS look).
+        // Glass sheen + bright rim on the focused app (tvOS look).
         val shine = View(this).apply {
-            background = Glass(r, dp(2).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x3AFFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x40FFFFFF)
+            background = Glass(dp(14).toFloat(), dp(2).toFloat(), fillTop = 0, fillBottom = 0, sheen = 0x40FFFFFF, rimTop = 0xCCFFFFFF.toInt(), rimBottom = 0x26FFFFFF)
             alpha = 0f
         }
         card.addView(shine, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -856,7 +839,6 @@ class MainActivity : Activity() {
                 val scale = if (focused) 1.15f else 1f
                 card.animate().scaleX(scale).scaleY(scale).translationZ(if (focused) dp(18).toFloat() else 0f).setDuration(180).start()
                 shine.animate().alpha(if (focused) 1f else 0f).setDuration(180).start()
-                art.animate().alpha(if (focused) 1f else ART_REST).setDuration(180).start()
             }
         }
     }
@@ -986,14 +968,13 @@ class MainActivity : Activity() {
         private const val ALL_APPS_TAG = "__all_apps"
         private const val INPUT_TAG = "__inputs"
         private const val SIDE = 40
-        private const val GAP = 18
+        private const val GAP = 24
         /**
-         * Dock tile width (dp), 16:9 banners. Smaller than it was: every dp off the height is a dp the
-         * block gets back at the bottom of the frame, where its lowest signs sit.
+         * Dock tile width (dp), 16:9 banners. Kept a fifth smaller than it reads naturally, because the
+         * row sits over a live 3D block rather than a black bar: every dp off a tile is a dp of street
+         * back, and the block's lowest signs sit just above this row.
          */
-        private const val TILE_W = 118
-        /** How far the artwork is held back when the tile is not the one you are on. */
-        private const val ART_REST = 0.72f
+        private const val TILE_W = 112
         /** Top margin of the All apps title (dp). */
         private const val TOP = 22
         private const val DRAWER_COLS = 6
