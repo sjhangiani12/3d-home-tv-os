@@ -479,7 +479,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(SIDE), dp(20), dp(SIDE), dp(20))
+            setPadding(dp(SIDE), dp(14), dp(SIDE), dp(14))
         }
         dockScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -969,8 +969,12 @@ class MainActivity : Activity() {
         private const val INPUT_TAG = "__inputs"
         private const val SIDE = 40
         private const val GAP = 24
-        /** Dock tile width (dp), 16:9 banners. */
-        private const val TILE_W = 140
+        /**
+         * Dock tile width (dp), 16:9 banners. Kept a fifth smaller than it reads naturally, because the
+         * row sits over a live 3D block rather than a black bar: every dp off a tile is a dp of street
+         * back, and the block's lowest signs sit just above this row.
+         */
+        private const val TILE_W = 112
         /** Top margin of the All apps title (dp). */
         private const val TOP = 22
         private const val DRAWER_COLS = 6
