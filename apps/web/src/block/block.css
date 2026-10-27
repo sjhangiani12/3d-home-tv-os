@@ -56,11 +56,12 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .bolt { color: #2b7bd9; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--warm); box-shadow: 0 0 0 2px var(--ink); }
 .dot.off { background: #8b8496; }
-.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; font: 600 20px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 5px 9px; opacity: 0; transition: opacity 400ms ease; }
+.room { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: none; display: flex; align-items: center; gap: 9px; white-space: nowrap; font: 600 20px/1 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 7px 12px; opacity: 0; transition: opacity 400ms ease; }
+.room .dot { width: 11px; height: 11px; box-shadow: 0 0 0 2px var(--ink); }
 
 /* HUD */
 #clock { position: absolute; left: 64px; top: 48px; font-family: var(--font-display); text-shadow: 0 6px 16px rgba(24, 16, 8, 0.6); transition: opacity 300ms ease; }
-#clock .time { font-size: 104px; font-weight: 600; line-height: 0.9; }
+#clock .time { font-size: 104px; font-weight: 600; line-height: 0.9; transition: font-size 420ms cubic-bezier(.2, .8, .2, 1); }
 #clock .time small { font-size: 44px; margin-left: 10px; }
 #clock .line { font-size: 26px; margin-top: 12px; letter-spacing: 0.04em; white-space: nowrap; }
 #clock .line .sep { opacity: 0.45; margin: 0 11px; }
@@ -100,7 +101,7 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Lights and Now playing read as glass over the block rather than as paper cards pasted onto it: a thin
    dark scrim UNDER a cream wash. The scrim is load-bearing, not decoration — cream alone disappears
    against a Day sky, which is the brightest thing either of these two ever sits on. */
-#chip, .sign.pinned {
+#chip, .sign.pinned, #back {
   color: var(--paper);
   background: linear-gradient(rgba(20, 14, 8, 0.22), rgba(20, 14, 8, 0.22)), rgba(253, 247, 232, 0.1);
   border: 1px solid rgba(253, 247, 232, 0.26);
@@ -121,6 +122,21 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
   box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.22), 0 14px 30px rgba(26, 18, 10, 0.34);
 }
 #chip:focus-visible, #chip.focus { transform: translateY(-4px) scale(1.04); }
+
+/* The way out of the home: the same glass as the lights chip, bottom-left, and only while you are inside.
+   It is not a stop on the remote ring — the remote already has Back — so it never steals a press; it is
+   there for a pointer and for anyone reading the screen from across the room. */
+#back { position: absolute; left: 64px; bottom: 56px; display: flex; align-items: center; gap: 11px; font: 600 24px/1 var(--font-display); border-radius: 16px; padding: 14px 20px 14px 15px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 320ms ease, transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease; }
+#back svg { width: 26px; height: 26px; }
+#stage.inside #back { opacity: 1; pointer-events: auto; }
+#back:hover, #back:focus-visible { outline: none; color: #fffaf0; background: rgba(255, 224, 138, 0.24); border-color: rgba(255, 224, 138, 0.8); transform: translateX(-4px); }
+
+/* Inside the home the big clock lands on the plan, and its dateline is about the weather on the street
+   outside. Both step back: the time stays as a small stamp in the corner, the weather line goes, and the
+   place line says the home instead of the block (`enterInside`). */
+#stage.inside #clock .time { font-size: 58px; }
+#stage.inside #clock .time small { font-size: 26px; }
+#stage.inside #clock .line { display: none; }
 
 /* Dock: glass tiles hovering over the block, lit from the top edge, blurring whatever is behind them.
    They answer the remote exactly like the map cards — same lift, same warm fill when selected. */
@@ -143,11 +159,15 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
   box-shadow: 0 18px 34px rgba(26, 18, 10, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-/* Drawer: the home's controls slide in from the right while the camera flies in. */
-#drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 500px; background: var(--paper); color: var(--ink); border-left: 2px solid var(--ink); box-shadow: -18px 0 36px rgba(40, 30, 18, 0.35); transform: translateX(110%); transition: transform 520ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; padding: 48px 36px 32px; gap: 22px; font-family: var(--font-display); }
+/* Drawer: the home's controls, as a card that floats in the frame the way the map cards do — inset on
+   every side, round-cornered, with the scene visible around it. It used to be a page-high slab butted
+   into the right edge with a hard border down its spine, which read less like a panel on the home than
+   like the page had broken. It arrives with the room rather than over the street (see `openHome`). */
+#drawer { position: absolute; top: 56px; right: 44px; bottom: 56px; width: 420px; background: linear-gradient(180deg, #fffdf5, var(--paper) 42%, var(--paper-2)); color: var(--ink); border: 2px solid var(--ink); border-radius: 30px; box-shadow: 0 24px 50px rgba(34, 24, 14, 0.45); transform: translateX(calc(100% + 64px)); transition: transform 560ms cubic-bezier(.2, .9, .26, 1); display: flex; flex-direction: column; padding: 34px 30px 26px; gap: 20px; font-family: var(--font-display); }
 #drawer.open { transform: translateX(0); }
-#drawer h2 { margin: 0; font-size: 40px; line-height: 1; }
-#drawer .addr { font-size: 19px; color: var(--muted); margin-top: 8px; }
+#drawer h2 { margin: 0; font-size: 38px; line-height: 1; display: flex; align-items: center; gap: 12px; }
+/* A rule under the header, so the title is a masthead and not the first item in the list. */
+#drawer .addr { font-size: 19px; color: var(--muted); margin-top: 8px; padding-bottom: 18px; border-bottom: 2px solid rgba(59, 51, 40, 0.15); }
 .scenes { display: flex; gap: 12px; }
 .pill { font: 600 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 12px 18px; cursor: pointer; }
 .pill:focus-visible, .pill.focus { outline: none; background: var(--focus); }
@@ -177,10 +197,11 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 #mock button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
 #mock .title { font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; font-size: 13px; text-transform: uppercase; }
 .hide { opacity: 0 !important; }
-@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .sign { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #drawer, .app, #chip, .sign, #back, #clock { transition: none; } }
 
-/* Inside the TV launcher the app draws the dock, the Lights button and its drawer. */
-.tv #dock, .tv #drawer, .tv #mock { display: none; }
+/* Inside the TV launcher the app draws the dock, the Lights button and its drawer, and the remote's own
+   Back key is the way out — the page never reaches the inside view there, it stops at the door. */
+.tv #dock, .tv #drawer, .tv #mock, .tv #back { display: none; }
 /* `backdrop-filter` is a full-frame GPU pass, and unlike the dock tiles (which the TV hides) these two
    are on screen every frame. The box is a 1.78 GB Fire TV already running the block at ~32 fps, so drop
    the blur there and buy the same legibility with a flatter, more opaque wash. This doubles as the

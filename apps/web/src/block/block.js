@@ -771,7 +771,9 @@ function applyLook() {
   const tod = currentTod(), L = LOOKS[tod];
   const wet = wx === "rain" || wx === "snow";
   const dim = wet ? 0.72 : 1;
-  scene.background = P.skyTexture(tod, wet);
+  // Inside the home the backdrop is the studio one, not the sky; a weather poll landing while you are in
+  // there must not paint the block's sky behind the model.
+  if (mode !== "home") scene.background = P.skyTexture(tod, wet);
   hemi.color.set(L.hemiSky); hemi.groundColor.set(L.hemiGround); hemi.intensity = L.hemiI * (wet ? 0.92 : 1) * PI;
   sun.color.set(L.sun); sun.intensity = L.sunI * (wet ? 0.35 : 1) * dim * PI;
   const az = L.az * Math.PI / 180, el = L.el * Math.PI / 180;
@@ -801,8 +803,13 @@ function updateSnowCover(dt) {
 const HOUSE = new THREE.Vector3(1500, 0, 0);
 const house = new THREE.Group(); house.position.copy(HOUSE); house.visible = false; scene.add(house);
 const pm = (c) => new THREE.MeshPhongMaterial({ color: c, shininess: 6 });
-const HM = { floor: pm("#b98a5e"), wall: pm("#efe7d8"), wallTop: pm("#3a3540"), rug: pm("#7a8fa6"), bed: pm("#e9e2d4"), duvet: pm("#5b7a9a"), duvet2: pm("#a65d4a"), wood: pm("#6e4f37"), sofa: pm("#56606f"), counter: pm("#d8d3c8"), dark: pm("#2a2a30"), plant: pm("#4f7d45"), tile: pm("#cfd6d8") };
+const HM = { floor: pm("#b98a5e"), wall: pm("#efe7d8"), wallTop: pm("#3a3540"), rug: pm("#7a8fa6"), bed: pm("#e9e2d4"), duvet: pm("#5b7a9a"), duvet2: pm("#a65d4a"), wood: pm("#6e4f37"), sofa: pm("#56606f"), counter: pm("#d8d3c8"), dark: pm("#2a2a30"), plant: pm("#4f7d45"), tile: pm("#cfd6d8"), base: pm("#6d5a46"), baseRim: pm("#43372b") };
 function hb(mat, x0, x1, y0, y1, z0, z1) { const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); m.castShadow = m.receiveShadow = true; house.add(m); return m; }
+// The base the apartment stands on. Without it the cutaway is a slab of floor hanging in mid-air, which is
+// exactly what made it read as a floor plan pasted over the background rather than a model of the home. A
+// margin of warm board on every side and a darker rim under it give it a bottom and a bit of weight.
+hb(HM.base, -1.3, 14.3, -0.85, -0.3, -1.3, 25.8);
+hb(HM.baseRim, -1.3, 14.3, -1.15, -0.85, -1.3, 25.8);
 // floor plate 13 x 24.5 (the lot), street side at z=0
 hb(HM.floor, 0, 13, -0.3, 0, 0, 24.5);
 hb(HM.tile, 9.5, 13, 0.01, 0.02, 11, 16);
@@ -873,7 +880,11 @@ function updateLamps() {
     l.light.color.set(lampColor(l));
     l.bulb.material.color.set(l.on ? lampColor(l) : "#6b6670");
   }
-  updateHomeWindows(); renderDrawer(); renderChip();
+  updateHomeWindows(); renderDrawer(); renderChip(); renderRoomSigns();
+}
+/** The room labels on the model carry the same lit/unlit dot as the chip, so the plan answers the drawer. */
+function renderRoomSigns() {
+  ROOMS.forEach((r, i) => { roomSigns[i].el.innerHTML = `<span class="dot ${roomOn(r.id) ? "" : "off"}"></span>${esc(r.name)}`; });
 }
 function roomOn(id) { const ls = LAMPS.filter((l) => l.room === id && l.on); return ls.length ? ls.reduce((a, l) => a + l.b, 0) / ls.length : 0; }
 function updateHomeWindows() {
@@ -945,13 +956,19 @@ const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX
 const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
 const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
-const INSIDE = { pos: HOUSE.clone().add(IN_C).add(IN_OFF), target: HOUSE.clone().add(IN_C), fov: 41 };
+// The lights drawer takes the right of the frame, so the apartment is centred in what is left of it rather
+// than in the whole: camera and target step sideways together along the screen-right of this view (a pan,
+// like the overview's), which slides the model ~215px left without re-aiming anything. Browser only — on
+// the TV the page stops at the door and the app draws its own panel.
+const IN_PAN = new THREE.Vector3(4.23, 0, 3.05);
+const IN_AT = HOUSE.clone().add(IN_C).add(IN_PAN);
+const INSIDE = { pos: IN_AT.clone().add(IN_OFF), target: IN_AT.clone(), fov: 41 };
 // Where the apartment is revealed from, coming out of the black. It used to be an eye-level pose just inside
 // the door, which continued the walk in — but the apartment is a cutaway with no ceiling, so from down there
 // it read as an edge-on slab hanging in an empty sky, and the room labels piled up on one line. So: the same
 // angle as the settled view, just closer and wider. The reveal is a step back, and the first frame is already
 // the apartment rather than something that looks broken.
-const INSIDE_IN = { pos: HOUSE.clone().add(IN_C).add(IN_OFF.clone().multiplyScalar(0.52)), target: HOUSE.clone().add(IN_C), fov: 58 };
+const INSIDE_IN = { pos: IN_AT.clone().add(IN_OFF.clone().multiplyScalar(0.52)), target: IN_AT.clone(), fov: 58 };
 const cam = { pos: OVERVIEW.pos.clone(), target: OVERVIEW.target.clone(), fov: OVERVIEW.fov };
 function applyCam() {
   camera.position.copy(cam.pos); camera.lookAt(cam.target); camera.fov = cam.fov;
@@ -977,10 +994,19 @@ const fadeEl = document.getElementById("fade");
 const fade = (v) => new Promise((res) => { fadeEl.style.opacity = v; setTimeout(res, 300); });
 let mode = "city", flying = false, wantClose = false;
 const cityHud = ["chip", "looks", "wxmarks", "dock", "mock"].map((id) => document.getElementById(id));
+/**
+ * Everything that is true of the frame while you are inside the home rather than over the block: the
+ * studio backdrop behind the model, and `#stage.inside`, which the CSS reads to shrink the clock, drop
+ * the weather dateline (it is about the street outside) and show the way back.
+ */
+function enterInside(on) {
+  stage.classList.toggle("inside", on);
+  document.querySelector("#clock .place").textContent = on ? NAMES.homeLabel : NAMES.place;
+  if (on) scene.background = P.skyTexture("inside", false); else applyLook();
+}
 async function openHome() {
   if (flying || mode !== "city") return;
   flying = true; cityHud.forEach((e) => e.classList.add("hide"));
-  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
   await tween(HIGH, 1300);
   await tween(STREET, 1000);
   await tween(DOOR, 650);
@@ -993,12 +1019,17 @@ async function openHome() {
   }
   await fade(1);
   house.visible = true; houseAmb.intensity = 0.55 * PI; mode = "home";
+  enterInside(true);
   setPose(INSIDE_IN);
   // Compile the apartment's materials while the screen is still black: the first frame that draws it would
   // otherwise cost a few hundred milliseconds on the TV, and that hitch would land in plain sight.
   renderer.compile(scene, camera);
   // The step back starts under the black and the black lifts into it, so nothing is ever shown standing still.
   const settle = tween(INSIDE, 1100);
+  // The drawer slides in on the same beat as the black lifting, so it arrives with the room. It used to
+  // open the instant you pressed, which put a page-high panel over the whole dive through the block —
+  // an overlay sitting on a street rushing past, which is what made the whole thing look broken.
+  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
   await fade(0);
   await settle;
   flying = false;
@@ -1020,6 +1051,7 @@ async function closeHome() {
   await tween(INSIDE_IN, 700);
   await fade(1);
   house.visible = false; houseAmb.intensity = 0; mode = "city";
+  enterInside(false);
   setPose(DOOR);
   await fade(0);
   await tween(STREET, 600);
@@ -1056,6 +1088,7 @@ document.getElementById("scenes").addEventListener("click", (e) => {
   updateLamps();
 });
 chip.addEventListener("click", openHome);
+document.getElementById("back").addEventListener("click", closeHome);
 const apps = [...document.querySelectorAll(".app")];
 function focusDrawer(i) { const items = drawerItems(); (items[i] || items[0]).focus(); }
 const drawerItems = () => [...drawer.querySelectorAll(".pill, .lamp")];
@@ -1454,7 +1487,7 @@ const UP = new THREE.Vector3(0, 1, 0);
   syncMock();
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
-  if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
+  if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); enterInside(true); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
 }
 applyLook(); updateLamps(); applyCam();
 setInterval(tickClock, 1000); tickClock();
@@ -1479,9 +1512,8 @@ function frame(now) {
   // the selected lamp pulses in the dollhouse
   for (const l of LAMPS) l.ring.material.opacity = l.focus && mode === "home" ? 0.55 + Math.sin(now / 180) * 0.35 : 0;
   if (mode === "home" && !flying) {
-    const c = HOUSE.clone().add(IN_C);
-    cam.pos.copy(c).add(IN_OFF.clone().applyAxisAngle(UP, Math.sin(now / 5200) * 0.18));
-    cam.target.copy(c);
+    cam.pos.copy(IN_AT).add(IN_OFF.clone().applyAxisAngle(UP, Math.sin(now / 5200) * 0.18));
+    cam.target.copy(IN_AT);
   }
   applyCam();
   renderer.render(scene, camera);

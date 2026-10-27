@@ -69,7 +69,11 @@ export function grain(g, size, n) {
 }
 
 // [overhead, horizon]; the horizon end is each look's `sky`, the overhead end a deeper version of it.
-const GRAD = { day: ["#9bbcd0", "#ead9bb"], dusk: ["#4e3f7a", "#ff9d63"], night: ["#0f1838", "#2b3763"] };
+// `inside` is not a sky: the apartment is shown as a model a thousand metres from the block, with nothing
+// behind it, and a daytime sky there was a huge pale wash with a floor plan sitting on it — which is what
+// made the view read as broken. It gets a studio backdrop instead: warm, dark, even, so the only thing in
+// the frame with any detail is the home.
+const GRAD = { day: ["#9bbcd0", "#ead9bb"], dusk: ["#4e3f7a", "#ff9d63"], night: ["#0f1838", "#2b3763"], inside: ["#241f31", "#5b4639"] };
 const skyCache = new Map();
 /** A washed sky: deep overhead, pale at the horizon, greyed when it rains or snows. */
 export function skyTexture(tod, wet) {
