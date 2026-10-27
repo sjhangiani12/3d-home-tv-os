@@ -1015,13 +1015,33 @@ const SPIDEY = {
 };
 
 // Two poses, each one merged vertex-coloured mesh (one draw call), built facing +x with +y up.
-const SUIT_RED = "#cf2027", SUIT_BLUE = "#1b3f9c";
+const SUIT_RED = "#cf2027", SUIT_BLUE = "#1b3f9c", SUIT_EYE = "#e9eef8";
+// A limb that can only be an axis-aligned box is a limb that can only be vertical or horizontal, and
+// a figure assembled from those reads as a stack of bricks whatever the proportions. Each part may
+// therefore carry a tilt — degrees about +z (pitch, the one that bends a knee or leans a back) and
+// about +x (splay, which opens the knees and the elbows) — turned about a pivot of its own, which is
+// the joint it hangs from. That one addition is the difference between a crate and a body.
 function figure(boxes) {
   const pos = [], nor = [], col = [], c = new THREE.Color();
-  for (const [x0, x1, y0, y1, z0, z1, hex] of boxes) {
+  const m = new THREE.Matrix4(), t = new THREE.Matrix4(), nm = new THREE.Matrix3();
+  const vv = new THREE.Vector3(), nv = new THREE.Vector3();
+  for (const [x0, x1, y0, y1, z0, z1, hex, tilt] of boxes) {
     c.set(hex);
+    m.identity();
+    if (tilt) {
+      const [dz, dx, px, py, pz] = tilt;
+      m.makeTranslation(px, py, pz)
+        .multiply(t.makeRotationZ(dz * Math.PI / 180))
+        .multiply(t.makeRotationX(dx * Math.PI / 180))
+        .multiply(t.makeTranslation(-px, -py, -pz));
+    }
+    nm.getNormalMatrix(m);
     const quad = (a, b, d, e, n) => {
-      for (const v of [a, b, d, a, d, e]) { pos.push(v[0], v[1], v[2]); nor.push(n[0], n[1], n[2]); col.push(c.r, c.g, c.b); }
+      nv.set(n[0], n[1], n[2]).applyMatrix3(nm).normalize();
+      for (const v of [a, b, d, a, d, e]) {
+        vv.set(v[0], v[1], v[2]).applyMatrix4(m);
+        pos.push(vv.x, vv.y, vv.z); nor.push(nv.x, nv.y, nv.z); col.push(c.r, c.g, c.b);
+      }
     };
     quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
     quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1]);
@@ -1036,22 +1056,53 @@ function figure(boxes) {
   g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   return g;
 }
-// Crouched on a ledge, knuckles down in front of him.
+// Crouched on a ledge: feet planted, knees up and apart, back curled, head out over the knees, arms
+// down outside them. What makes a shape read as a person from across a block is not detail but the
+// gaps — between the legs, between the arms and the ribs, between the head and the shoulders. Every
+// limb here is therefore slim and clear of its neighbour, and nothing is wider than the shoulders.
+const LEAN = [-12, 0, -0.01, 0.84, 0];   // the forward pitch of the whole upper body, about the hips
 const PERCH_G = figure([
-  [-0.20, 0.16, 0, 0.32, -0.28, -0.06, SUIT_BLUE], [-0.20, 0.16, 0, 0.32, 0.06, 0.28, SUIT_BLUE],
-  [-0.30, 0.12, 0.30, 0.64, -0.26, 0.26, SUIT_BLUE],
-  [-0.16, 0.22, 0.60, 1.16, -0.21, 0.21, SUIT_RED],
-  [-0.02, 0.25, 1.13, 1.40, -0.13, 0.13, SUIT_RED],
-  [0.18, 0.33, 0, 0.78, -0.33, -0.19, SUIT_RED], [0.18, 0.33, 0, 0.78, 0.19, 0.33, SUIT_RED],
+  [0.08, 0.30, 0.00, 0.07, -0.16, -0.06, SUIT_BLUE], [0.08, 0.30, 0.00, 0.07, 0.06, 0.16, SUIT_BLUE],
+  [0.09, 0.20, 0.05, 0.50, -0.15, -0.05, SUIT_BLUE, [-14, -4, 0.15, 0.06, -0.10]],
+  [0.09, 0.20, 0.05, 0.50, 0.05, 0.15, SUIT_BLUE, [-14, 4, 0.15, 0.06, 0.10]],
+  [-0.06, 0.28, 0.44, 0.56, -0.15, -0.05, SUIT_BLUE, [-42, -5, 0.26, 0.50, -0.10]],
+  [-0.06, 0.28, 0.44, 0.56, 0.05, 0.15, SUIT_BLUE, [-42, 5, 0.26, 0.50, 0.10]],
+  [-0.10, 0.08, 0.64, 0.84, -0.13, 0.13, SUIT_BLUE],
+  [-0.10, 0.08, 0.82, 1.22, -0.110, -0.065, SUIT_BLUE, LEAN],
+  [-0.10, 0.08, 0.82, 1.22, -0.065, 0.065, SUIT_RED, LEAN],
+  [-0.10, 0.08, 0.82, 1.22, 0.065, 0.110, SUIT_BLUE, LEAN],
+  [-0.09, 0.07, 1.16, 1.30, -0.17, 0.17, SUIT_RED, LEAN],
+  [-0.02, 0.08, 1.27, 1.36, -0.05, 0.05, SUIT_RED, LEAN],
+  [-0.03, 0.23, 1.34, 1.58, -0.095, 0.095, SUIT_RED, LEAN],
+  [0.225, 0.245, 1.42, 1.50, -0.09, -0.02, SUIT_EYE, LEAN],
+  [0.225, 0.245, 1.42, 1.50, 0.02, 0.09, SUIT_EYE, LEAN],
+  [0.04, 0.13, 0.86, 1.26, -0.27, -0.19, SUIT_RED, [-5, -7, 0.09, 1.26, -0.23]],
+  [0.04, 0.13, 0.86, 1.26, 0.19, 0.27, SUIT_RED, [-5, 7, 0.09, 1.26, 0.23]],
+  [0.05, 0.14, 0.48, 0.90, -0.265, -0.185, SUIT_RED, [-26, -4, 0.10, 0.90, -0.225]],
+  [0.05, 0.14, 0.48, 0.90, 0.185, 0.265, SUIT_RED, [-26, 4, 0.10, 0.90, 0.225]],
 ]);
-// On the web: legs trailing, one arm straight up the line. The hand is at y ≈ 2.0, which is where the
-// web is tied — orienting +y along the rope therefore puts the line in his fist without any extra maths.
+// On the web: one arm straight up the line, the other trailing, back arched, legs streaming behind
+// and bent at the knee. The fist is at y = HAND on the figure's own axis, which is where the web is
+// tied — orienting +y along the rope therefore puts the line in his hand with no extra maths.
+const ARCH = [-10, 0, 0, 1.16, 0];       // the hips swung back behind the shoulders, the way a body hangs
 const SWING_G = figure([
-  [-0.30, 0.10, 0, 0.74, -0.26, -0.06, SUIT_BLUE], [-0.26, 0.12, 0, 0.74, 0.06, 0.26, SUIT_BLUE],
-  [-0.16, 0.18, 0.70, 1.30, -0.21, 0.21, SUIT_RED],
-  [-0.04, 0.24, 1.26, 1.54, -0.13, 0.13, SUIT_RED],
-  [-0.06, 0.09, 1.34, 2.02, 0.08, 0.22, SUIT_RED],
-  [-0.30, -0.08, 0.74, 1.28, -0.24, -0.10, SUIT_RED],
+  [-0.06, 0.06, 1.60, 2.02, -0.07, 0.05, SUIT_RED],
+  [-0.07, 0.05, 1.22, 1.64, -0.13, -0.01, SUIT_RED, [0, 9, -0.01, 1.62, -0.07]],
+  [-0.09, 0.07, 1.12, 1.26, -0.17, 0.17, SUIT_RED],
+  [0.00, 0.26, 1.16, 1.40, -0.095, 0.095, SUIT_RED],
+  [0.255, 0.275, 1.24, 1.32, -0.08, -0.02, SUIT_EYE], [0.255, 0.275, 1.24, 1.32, 0.02, 0.08, SUIT_EYE],
+  [-0.12, 0.06, 0.72, 1.16, -0.110, -0.065, SUIT_BLUE, ARCH],
+  [-0.12, 0.06, 0.72, 1.16, -0.065, 0.065, SUIT_RED, ARCH],
+  [-0.12, 0.06, 0.72, 1.16, 0.065, 0.110, SUIT_BLUE, ARCH],
+  [-0.40, -0.02, 0.92, 1.02, -0.26, -0.18, SUIT_RED, [16, -8, -0.04, 1.00, -0.22]],
+  [-0.74, -0.36, 0.84, 0.94, -0.25, -0.17, SUIT_RED, [26, -6, -0.38, 0.90, -0.21]],
+  [-0.22, 0.00, 0.56, 0.78, -0.13, 0.13, SUIT_BLUE, ARCH],
+  [-0.56, -0.12, 0.56, 0.66, -0.15, -0.05, SUIT_BLUE, [8, -4, -0.12, 0.62, -0.10]],
+  [-0.56, -0.12, 0.56, 0.66, 0.05, 0.15, SUIT_BLUE, [8, 4, -0.12, 0.62, 0.10]],
+  [-0.98, -0.52, 0.52, 0.62, -0.15, -0.05, SUIT_BLUE, [28, -4, -0.54, 0.58, -0.10]],
+  [-0.98, -0.52, 0.52, 0.62, 0.05, 0.15, SUIT_BLUE, [28, 4, -0.54, 0.58, 0.10]],
+  [-1.12, -0.92, 0.48, 0.58, -0.15, -0.05, SUIT_BLUE, [40, -4, -0.96, 0.54, -0.10]],
+  [-1.12, -0.92, 0.48, 0.58, 0.05, 0.15, SUIT_BLUE, [40, 4, -0.96, 0.54, 0.10]],
 ]);
 const HAND = 2.0;   // where the web sits in his fist, measured up from his feet
 const REACH = 3.2;  // how short the rope is reeled before he catches the ledge by hand
@@ -1076,7 +1127,7 @@ scene.add(spidey);
 // instead, scaled along its length each frame, so it has a width that can be chosen.
 const webGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
 webGeo.translate(0, 0.5, 0);   // base at the origin, so the tube runs 0..1 up +y and scales by length
-const WEB_R = 0.60;            // metres of radius: a few pixels across, in step with the bigger figure
+const WEB_R = 0.22;            // metres of radius: a thread with a width, not a cable slung off a crane
 const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.85 }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
