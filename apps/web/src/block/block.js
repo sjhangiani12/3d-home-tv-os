@@ -754,7 +754,18 @@ scene.add(sun, sun.target);
 const LOOKS = P.LOOKS;
 let look = null, todMode = "auto", wx = "clear", snowCover = 0;
 function nycHour() { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date()); return parseInt(p, 10); }
-function currentTod() { if (todMode !== "auto") return todMode; const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night"; }
+/**
+ * Day, dusk or night — from where the sun actually is over the home when the bridge has told us
+ * (`sunElev`, the rule the apartment view already follows: day above +6°, night below −6°, dusk in
+ * between), else from the clock. The clock version is off by over an hour at the solstices: in late
+ * autumn the block painted DAY until 17:00 with the street already dark outside the window.
+ */
+let sunElev = null;
+function currentTod() {
+  if (todMode !== "auto") return todMode;
+  if (sunElev !== null) return sunElev > 6 ? "day" : sunElev < -6 ? "night" : "dusk";
+  const h = nycHour(); return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 19) || h === 6 ? "dusk" : "night";
+}
 const target = new THREE.Vector3(38, 0, 0);
 function applyLook() {
   const tod = currentTod(), L = LOOKS[tod];
@@ -1323,11 +1334,18 @@ async function pollBikes() {
   liveBikes = true;
 }
 async function pollWeather() {
-  if (wxForced || !LOC) return;
+  // No LOC guard: the bridge knows where home is and answers without being told, so a page opened with
+  // no ?lat= still gets the real weather. LOC only feeds the direct-to-Open-Meteo fallback.
   const c = await fetchWeather(LOC);
   if (!c) return; // keep the last look
-  wxTemp = c.temp; wxLabel = c.label;
-  if (c.kind !== wx) { wx = c.kind; applyLook(); }
+  // The sun moves the sky even when the weather is pinned to a mark — pinning RAIN says what is falling,
+  // not what hour it is.
+  if (c.sun && typeof c.sun.elevation === "number") sunElev = c.sun.elevation;
+  if (wxForced) { tickClock(); return; }
+  if (c.kind) {
+    wxTemp = c.temp; wxLabel = c.label;
+    if (c.kind !== wx) { wx = c.kind; applyLook(); }
+  }
   tickClock();
 }
 // Remote control of the music panel: row 0 = the group's transport, rows 1… = a room's volume.
