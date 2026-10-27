@@ -96,6 +96,24 @@ const STS = [
   { z: 240, w: 16, dir: -1 },
 ];
 const AREA = { x0: -260, x1: 460, z0: -290, z1: 290 };
+/**
+ * The block is built 720×580 so the streets run off every edge of the frame and the city does not stop
+ * where the picture does. The lens only reaches about 465×450 of it: at the far corners of AREA sit two
+ * whole avenues, a cross street, and the trees, lamps and water towers along them, which no pose the
+ * camera can take has ever shown. They were being driven, swayed, transformed and shadowed for nobody.
+ *
+ * This is the footprint of the frustum on the ground over every pose (x −171..295, z −209..246),
+ * measured up to roof height and grown by a bus length, so a prop is only dropped once no part of it
+ * could cross the edge of the frame. Verified by pixel diff, not by eye: hiding everything outside it
+ * changes zero pixels from the overview, the high shot, the street and the door, while hiding what is
+ * inside it changes tens of thousands.
+ *
+ * The block is still *generated* whole, in the same order — the seeded RNG decides the palette and the
+ * skyline, and skipping a spawn would shift every draw after it and repaint the city. Cull after, never
+ * during.
+ */
+const SEEN = { x0: -180, x1: 302, z0: -216, z1: 251 };
+const unseen = (x, z) => x < SEEN.x0 || x > SEEN.x1 || z < SEEN.z0 || z > SEEN.z1;
 const SW = 4.5, CURB = 0.18, FH = 3.3, CW = 3.4;
 // Our lot, on the north side of the fourth street. It sits well into the block rather than near the corner,
 // the way a walk-up on a long Manhattan side street does: there is a good stretch of neighbours either side
@@ -386,10 +404,11 @@ const glassMesh = A.glass.mesh(M.glass); glassMesh.renderOrder = 2; glassMesh.re
 const dummy = new THREE.Object3D();
 function inst(geo, mat, n, cast) { const m = new THREE.InstancedMesh(geo, mat, Math.max(1, n)); m.castShadow = !!cast; m.receiveShadow = true; scene.add(m); return m; }
 {
-  const tank = inst(new THREE.CylinderGeometry(1.7, 1.7, 3.2, 8), M.wood, towers.length, true);
-  const cone = inst(new THREE.ConeGeometry(1.95, 1.4, 8), M.woodRoof, towers.length, true);
-  const legs = inst(new THREE.BoxGeometry(2.6, 2.2, 2.6), M.pole, towers.length, true);
-  towers.forEach(([x, y, z], i) => {
+  const seen = towers.filter(([x, , z]) => !unseen(x, z));
+  const tank = inst(new THREE.CylinderGeometry(1.7, 1.7, 3.2, 8), M.wood, seen.length, true);
+  const cone = inst(new THREE.ConeGeometry(1.95, 1.4, 8), M.woodRoof, seen.length, true);
+  const legs = inst(new THREE.BoxGeometry(2.6, 2.2, 2.6), M.pole, seen.length, true);
+  seen.forEach(([x, y, z], i) => {
     dummy.position.set(x, y + 1.1, z); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); legs.setMatrixAt(i, dummy.matrix);
     dummy.position.set(x, y + 3.8, z); dummy.updateMatrix(); tank.setMatrixAt(i, dummy.matrix);
     dummy.position.set(x, y + 6.1, z); dummy.updateMatrix(); cone.setMatrixAt(i, dummy.matrix);
@@ -397,21 +416,28 @@ function inst(geo, mat, n, cast) { const m = new THREE.InstancedMesh(geo, mat, M
   legs.material = new THREE.MeshLambertMaterial({ color: "#3b3d44", transparent: true, opacity: 0.85 });
 }
 const canopyMat = lam(BASE.canopy);
-const trunkM = inst(new THREE.CylinderGeometry(0.22, 0.28, 2.6, 5), lam(BASE.trunk), trees.length, true);
-const canopyM = inst(new THREE.IcosahedronGeometry(2.3, 0), canopyMat, trees.length, true);
-const treeData = trees.map(([x, z], i) => {
-  const s = R(0.8, 1.25), ph = R(0, 6.28);
-  dummy.position.set(x, CURB + 1.3, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); trunkM.setMatrixAt(i, dummy.matrix);
-  canopyM.setColorAt(i, new THREE.Color().setHSL(R(0.24, 0.31), R(0.35, 0.5), R(0.27, 0.36)));
-  return { x, z, s, ph };
+// Every tree is still drawn from the bag in order — height, sway phase, then the three numbers of its
+// green — because the bag is what makes the row of them look planted rather than stamped. Only then are
+// the off-camera ones set aside.
+const everyTree = trees.map(([x, z]) => ({
+  x, z, s: R(0.8, 1.25), ph: R(0, 6.28),
+  color: new THREE.Color().setHSL(R(0.24, 0.31), R(0.35, 0.5), R(0.27, 0.36)),
+}));
+const treeData = everyTree.filter((t) => !unseen(t.x, t.z));
+const trunkM = inst(new THREE.CylinderGeometry(0.22, 0.28, 2.6, 5), lam(BASE.trunk), treeData.length, true);
+const canopyM = inst(new THREE.IcosahedronGeometry(2.3, 0), canopyMat, treeData.length, true);
+treeData.forEach((t, i) => {
+  dummy.position.set(t.x, CURB + 1.3, t.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); trunkM.setMatrixAt(i, dummy.matrix);
+  canopyM.setColorAt(i, t.color);
 });
 if (canopyM.instanceColor) canopyM.instanceColor.needsUpdate = true;
-const poleM = inst(new THREE.BoxGeometry(0.18, 5.2, 0.18), M.pole, lamps.length, false);
-const headM = inst(new THREE.BoxGeometry(0.7, 0.25, 0.7), M.lampHead, lamps.length, false);
+const litLamps = lamps.filter(([x, z]) => !unseen(x, z));
+const poleM = inst(new THREE.BoxGeometry(0.18, 5.2, 0.18), M.pole, litLamps.length, false);
+const headM = inst(new THREE.BoxGeometry(0.7, 0.25, 0.7), M.lampHead, litLamps.length, false);
 const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
-const glowM = inst(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), glowMat, lamps.length, false);
+const glowM = inst(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), glowMat, litLamps.length, false);
 glowM.renderOrder = 3; glowM.receiveShadow = false;
-lamps.forEach(([x, z], i) => {
+litLamps.forEach(([x, z], i) => {
   dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
   dummy.position.set(x, CURB + 2.6, z); dummy.updateMatrix(); poleM.setMatrixAt(i, dummy.matrix);
   dummy.position.set(x, CURB + 5.2, z); dummy.updateMatrix(); headM.setMatrixAt(i, dummy.matrix);
@@ -494,19 +520,8 @@ for (const av of AVES) {
     }
   });
 }
-/**
- * The lens only reaches so far. Two of the five avenues and the far cross street fall entirely outside
- * every frame the camera can compose, and so do the kerbs beyond them — two cars in five were being
- * driven, transformed and shadowed for nobody. The block is still generated whole, in the same order,
- * so every street keeps exactly the cars it had and the seeded palette is untouched; the ones the
- * camera can never reach are dropped before they become instances.
- *
- * The box is the frustum's footprint on the road, measured at roof height over every pose the camera
- * takes (x -170..295, z -209..244), grown by a bus length so a car is only dropped once no part of it
- * could cross the edge of the frame.
- */
-const SEEN = { x0: -180, x1: 302, z0: -216, z1: 251 };
-const unseen = (x, z) => x < SEEN.x0 || x > SEEN.x1 || z < SEEN.z0 || z > SEEN.z1;
+// Two cars in five drive off-camera for ever (see SEEN). Every street keeps exactly the cars it was
+// given; the ones no pose can reach are dropped before they become instances.
 for (const lane of lanes) {
   // A lane is a line at a fixed coordinate running the whole area, so one test retires all of it.
   if (!(lane.axis === "z" ? unseen(lane.fixed, 0) : unseen(0, lane.fixed))) continue;
