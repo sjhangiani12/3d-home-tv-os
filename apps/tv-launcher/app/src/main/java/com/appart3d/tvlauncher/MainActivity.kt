@@ -748,9 +748,22 @@ class MainActivity : Activity() {
             }
         }, tileW)
         drawer.visibility = View.VISIBLE
+        confineFocusToDrawer(true)
         (0 until drawerGrid.childCount).asSequence()
             .mapNotNull { (drawerGrid.getChildAt(it) as? ViewGroup)?.getChildAt(0) }
             .firstOrNull()?.requestFocus()
+    }
+
+    /**
+     * The drawer covers the screen but the dock and the block are still in the view tree, so ↓ off the
+     * last row (or ↑ off the first, which every tile sends to the block) walked the remote onto buttons
+     * hidden behind it. While it is open nothing underneath may take focus: Back is the only way out.
+     */
+    private fun confineFocusToDrawer(confined: Boolean) {
+        val behind = if (confined) ViewGroup.FOCUS_BLOCK_DESCENDANTS else ViewGroup.FOCUS_AFTER_DESCENDANTS
+        dockScroll.descendantFocusability = behind
+        homePanel.descendantFocusability = behind
+        web.isFocusable = !confined
     }
 
     private data class DrawerTile(val tag: String, val label: String, val icon: android.graphics.drawable.Drawable?, val onClick: () -> Unit)
@@ -793,6 +806,7 @@ class MainActivity : Activity() {
     private fun hideDrawer() {
         drawer.visibility = View.GONE
         drawerGrid.removeAllViews()
+        confineFocusToDrawer(false)
         dock.findViewWithTag<View>(ALL_APPS_TAG)?.requestFocus()
     }
 
@@ -849,6 +863,7 @@ class MainActivity : Activity() {
         if (drawer.visibility == View.VISIBLE) {
             drawer.visibility = View.GONE
             drawerGrid.removeAllViews()
+            confineFocusToDrawer(false)
         }
         dockScroll.smoothScrollTo(0, 0)
         dock.getChildAt(0)?.requestFocus()
