@@ -992,7 +992,10 @@ function tween(to, ms) {
 const setPose = (p) => { cam.pos.copy(p.pos); cam.target.copy(p.target); cam.fov = p.fov; };
 const fadeEl = document.getElementById("fade");
 const fade = (v) => new Promise((res) => { fadeEl.style.opacity = v; setTimeout(res, 300); });
-let mode = "city", flying = false, wantClose = false;
+// `goingIn` is true only for the dive towards the door. `mode` is still the city for most of it, so it
+// is the one thing that tells the inward flight apart from the outward one, and it is what lets Back
+// turn a mis-press into a there-and-back instead of three seconds you cannot stop.
+let mode = "city", flying = false, wantClose = false, goingIn = false;
 const cityHud = ["chip", "looks", "wxmarks", "dock", "mock"].map((id) => document.getElementById(id));
 /**
  * Everything that is true of the frame while you are inside the home rather than over the block: the
@@ -1006,13 +1009,13 @@ function enterInside(on) {
 }
 async function openHome() {
   if (flying || mode !== "city") return;
-  flying = true; cityHud.forEach((e) => e.classList.add("hide"));
+  flying = true; goingIn = true; cityHud.forEach((e) => e.classList.add("hide"));
   await tween(HIGH, 1300);
   await tween(STREET, 1000);
   await tween(DOOR, 650);
   if (TV) {
     // On the TV the app shows the real apartment (its 3D view) from here; the page waits at the door.
-    mode = "door"; flying = false;
+    mode = "door"; flying = false; goingIn = false;
     toNative({ type: "atDoor" });
     if (wantClose) { wantClose = false; closeHome(); }
     return;
@@ -1032,7 +1035,7 @@ async function openHome() {
   drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
   await fade(0);
   await settle;
-  flying = false;
+  flying = false; goingIn = false;
   focusDrawer(0);
   if (wantClose) { wantClose = false; closeHome(); }
 }
@@ -1103,6 +1106,9 @@ addEventListener("keydown", (e) => {
     else if (k === "Enter" || k === " ") enter(sel);
     return;
   }
+  // Back while the dive is still running. `closeHome` parks it in `wantClose` and `openHome` honours it
+  // the moment it lands, so the home arrives and leaves again rather than the press being swallowed.
+  if (goingIn) { if (k === "Escape" || k === "Backspace") { e.preventDefault(); closeHome(); } return; }
   if (mode === "home") {
     if (k === "Escape" || k === "Backspace") { e.preventDefault(); closeHome(); return; }
     const items = drawerItems(), i = items.indexOf(document.activeElement);
