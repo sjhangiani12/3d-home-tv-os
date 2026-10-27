@@ -168,6 +168,9 @@ export function createScenery(scene, area) {
     // Sunlit by day, barely moonlit at night — a white cloud over a dark block reads as a smudge.
     cloudMat.opacity = 0.6 - lamp * 0.44;
     shadowMat.opacity = 0.28 * (1 - lamp);
+    // At night the sheet is exactly transparent, and a transparent sheet still costs a blended pass
+    // over most of the frame. Skip it, as the fireflies are skipped by day.
+    shade.visible = shadowMat.opacity > 0.01;
     for (const c of clouds) {
       c.position.x += 2.6 * dt;
       if (c.position.x > 500) c.position.x = -500;

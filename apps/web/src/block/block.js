@@ -456,13 +456,12 @@ for (const st of STS) {
   if (st.two) { for (const i of [0, 1]) { addLane("x", st.z - 1.9 - i * 3.5, -1, false); addLane("x", st.z + 1.9 + i * 3.5, 1, false); } }
   else addLane("x", st.z + (st.dir > 0 ? 1.2 : -1.2), st.dir, false);
 }
-const moving = [];
 for (const lane of lanes) {
   const density = lane.avenue ? 26 : 42;
   for (let s = R(0, 12); s < lane.L - 6; s += R(density * 0.6, density * 1.5)) {
     let t = carType(); if (lane.avenue && rng() < 0.04) t = CAR_TYPES[4];
     const car = { lane, t, s, v: R(6, 10), vmax: R(9, 12.5), color: carColor(t) };
-    lane.cars.push(car); moving.push(car);
+    lane.cars.push(car);
   }
   lane.cars.sort((a, b) => b.s - a.s);
 }
@@ -495,14 +494,34 @@ for (const av of AVES) {
     }
   });
 }
-const NCARS = moving.length + parked.length;
+/**
+ * The lens only reaches so far. Two of the five avenues and the far cross street fall entirely outside
+ * every frame the camera can compose, and so do the kerbs beyond them — two cars in five were being
+ * driven, transformed and shadowed for nobody. The block is still generated whole, in the same order,
+ * so every street keeps exactly the cars it had and the seeded palette is untouched; the ones the
+ * camera can never reach are dropped before they become instances.
+ *
+ * The box is the frustum's footprint on the road, measured at roof height over every pose the camera
+ * takes (x -170..295, z -209..244), grown by a bus length so a car is only dropped once no part of it
+ * could cross the edge of the frame.
+ */
+const SEEN = { x0: -180, x1: 302, z0: -216, z1: 251 };
+const unseen = (x, z) => x < SEEN.x0 || x > SEEN.x1 || z < SEEN.z0 || z > SEEN.z1;
+for (const lane of lanes) {
+  // A lane is a line at a fixed coordinate running the whole area, so one test retires all of it.
+  if (!(lane.axis === "z" ? unseen(lane.fixed, 0) : unseen(0, lane.fixed))) continue;
+  lane.cars.length = 0;
+}
+const onstage = lanes.flatMap((l) => l.cars);
+const parkedSeen = parked.filter((c) => !unseen(c.x, c.z));
+const NCARS = onstage.length + parkedSeen.length;
 const carMat = new THREE.MeshLambertMaterial({ color: "#ffffff" });
 const bodyM = inst(unit, carMat, NCARS, true);
 const cabM = inst(unit, new THREE.MeshLambertMaterial({ color: "#ffffff" }), NCARS, true);
 const headMat = new THREE.MeshBasicMaterial({ color: "#fff3c9" }), tailMat = new THREE.MeshBasicMaterial({ color: "#d8352f" });
 const hlM = inst(unit, headMat, NCARS, false), tlM = inst(unit, tailMat, NCARS, false);
 const tmpC = new THREE.Color();
-[...moving, ...parked].forEach((c, i) => {
+[...onstage, ...parkedSeen].forEach((c, i) => {
   bodyM.setColorAt(i, tmpC.set(c.color));
   cabM.setColorAt(i, tmpC.set(c.t.k === "taxi" ? "#2a2c33" : "#2c3440"));
   c.i = i;
@@ -521,7 +540,7 @@ function placeCar(c, x, z, axis, dir) {
   dummy.position.set(x + fwd.x * (t.len / 2 + 0.02), 0.55, z + fwd.z * (t.len / 2 + 0.02)); dummy.scale.set(0.08, 0.22, t.wid * 0.8); dummy.updateMatrix(); hlM.setMatrixAt(i, dummy.matrix);
   dummy.position.set(x - fwd.x * (t.len / 2 + 0.02), 0.6, z - fwd.z * (t.len / 2 + 0.02)); dummy.updateMatrix(); tlM.setMatrixAt(i, dummy.matrix);
 }
-parked.forEach((c) => placeCar(c, c.x, c.z, c.axis, c.dir));
+parkedSeen.forEach((c) => placeCar(c, c.x, c.z, c.axis, c.dir));
 function signalGreen(avenue, t) { const p = t % 64; return avenue ? p < 34 : p >= 37 && p < 61; }
 function updateTraffic(dt, t, weatherSlow) {
   for (const lane of lanes) {
@@ -780,6 +799,9 @@ function applyLook() {
   facMats.forEach((m) => { m.emissiveIntensity = L.win * 0.9; });
   bandMat.emissiveIntensity = L.win * 0.6;
   glowMat.opacity = L.lamp * 0.8;
+  // By day the pools under the lamps are transparent; additive blending costs the same whether it
+  // adds light or nothing, so take them out of the frame instead of adding zero to it.
+  glowM.visible = glowMat.opacity > 0.01;
   M.lampHead.color.set(L.lamp > 0 ? "#fff0c4" : "#c9c4b8");
   headMat.color.set(L.lamp > 0 ? "#fff3c9" : "#d9d6cc");
   M.asphalt.color.set(BASE.asphalt).multiplyScalar(wx === "rain" ? 0.72 : 1);
