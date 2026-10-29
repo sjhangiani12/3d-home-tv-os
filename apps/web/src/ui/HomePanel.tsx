@@ -8,6 +8,7 @@ import {
   canMedia,
   deviceTint,
   formatTime,
+  mediaLoaded,
   mediaPosition,
   nowPlaying,
   resolveAsset,
@@ -213,8 +214,6 @@ function HomeList() {
         })}
       </div>
 
-      <NowPlayingCard />
-
       <div className="hp-rooms" role="tablist" aria-label="Rooms">
         {counts.map((c) => (
           <button key={c.room} role="tab" aria-selected={room === c.room} className={`hp-chip${room === c.room ? " is-active" : ""}`} onClick={() => h.setRoom(c.room)}>
@@ -237,6 +236,10 @@ function HomeList() {
         )}
         {shown.length === 0 && <p className="hp-empty">No devices in this room.</p>}
       </div>
+
+      {/* Under the lamps, where the TV keeps it: the panel is about the lights, and the music is the
+          footer of the room rather than the first thing between you and a switch. */}
+      <NowPlayingCard />
     </>
   );
 }
@@ -983,11 +986,15 @@ function Transport({ d, big }: { d: Device; big?: boolean }) {
   );
 }
 
-/** "Now playing" card at the top of the Home panel (speaker playing or paused). */
+/**
+ * "Now playing", under the lamps (speaker playing or paused). `nowPlaying` also answers with a speaker
+ * that is merely reachable, so that a panel driven by a remote keeps a card to start; here, where there
+ * is a pointer and a whole device page a tap away, a card saying nothing is better left out.
+ */
 function NowPlayingCard() {
   const devices = useHome((s) => s.devices);
   const d = useMemo(() => nowPlaying(devices), [devices]);
-  if (!d) return null;
+  if (!d || !mediaLoaded(d)) return null;
   return <NowPlayingInner d={d} />;
 }
 

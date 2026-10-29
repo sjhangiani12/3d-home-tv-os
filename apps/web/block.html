@@ -56,6 +56,17 @@
         <button class="pill" type="button" data-scene="off">All off</button>
       </div>
       <div id="rooms"></div>
+      <!-- What the home is playing, under the lamps and above the hint — where the TV's own panel keeps
+           it. The panel is about the lights; the music is the footer of the room. -->
+      <section id="np" aria-label="Now playing" hidden>
+        <div class="t" id="nptitle"></div>
+        <div class="s" id="npsub"></div>
+        <div class="keys" id="npkeys">
+          <button class="npkey" type="button" data-np="previous" aria-label="Previous track">⏮</button>
+          <button class="npkey" type="button" data-np="playPause" aria-label="Play or pause">▶</button>
+          <button class="npkey" type="button" data-np="next" aria-label="Next track">⏭</button>
+        </div>
+      </section>
       <div class="hint" id="hint"></div>
     </aside>
 

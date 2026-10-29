@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Device } from "@appart3d/home";
-import { canMedia, formatTime, isOn, lookForItem, mediaPosition, nowPlaying, predict, resolveAsset, stateWord, tvContent } from "../src/lib/home";
+import { formatTime, isOn, lookForItem, mediaLoaded, nowPlaying, predict, resolveAsset, stateWord, tvContent } from "../src/lib/home";
 import { brandOf, tvCardKey, tvCardModel } from "../src/lib/tvCard";
 import { mockDevices } from "../src/lib/homeClient";
 
@@ -18,31 +18,26 @@ describe("now playing", () => {
     expect(stateWord({ ...d, state: { on: false, reachable: true, media: { state: "idle" } } })).toBe("Idle");
   });
 
-  it("nowPlaying prefers a playing speaker over a paused one, ignores idle / unreachable", () => {
+  // Which speaker to show is the one rule all three panels read, and it is tested where it lives
+  // (packages/home/test/media.test.ts). What this view adds is the choice not to draw a card for a room
+  // that is merely reachable: there is a pointer here, and a device page one tap away.
+  it("the panel shows a card only for a speaker with something in it", () => {
     const a = homepod();
     const b = { ...predict(a, { type: "media", command: "pause" }), id: "airplay:other" };
     expect(nowPlaying([b, a])?.id).toBe(a.id);
-    expect(nowPlaying([b])?.id).toBe("airplay:other");
-    expect(nowPlaying([{ ...a, state: { on: false, reachable: true, media: { state: "idle" } } }])).toBeUndefined();
+    expect(mediaLoaded(nowPlaying([b])!)).toBe(true);
+    expect(mediaLoaded({ ...a, state: { on: false, reachable: true, media: { state: "idle" } } })).toBe(false);
     expect(nowPlaying([{ ...a, state: { ...a.state, reachable: false } }])).toBeUndefined();
   });
 
-  it("position interpolated while playing, frozen when paused, clamped to the duration", () => {
-    const at = Date.parse("2026-10-14T15:00:00Z");
-    const m = { state: "playing" as const, position: 60, duration: 200, updatedAt: new Date(at).toISOString() };
-    expect(mediaPosition(m, at + 15_000)).toBeCloseTo(75);
-    expect(mediaPosition({ ...m, state: "paused" }, at + 15_000)).toBe(60);
-    expect(mediaPosition(m, at + 999_000)).toBe(200);
-    expect(mediaPosition({ state: "playing" }, at)).toBeUndefined();
+  it("a track's time reads as a clock", () => {
     expect(formatTime(187)).toBe("3:07");
     expect(formatTime(3729)).toBe("1:02:09");
     expect(formatTime(undefined)).toBe("–:––");
   });
 
-  it("transport availability and optimistic prediction", () => {
+  it("optimistic prediction of a transport press", () => {
     const d = homepod();
-    expect(canMedia(d, "playPause")).toBe(true);
-    expect(canMedia({ ...d, capabilities: { volume: true } }, "next")).toBe(false);
     const toggled = predict(d, { type: "toggle" });
     expect(toggled.state.media?.state).toBe("paused");
     expect(predict(toggled, { type: "media", command: "playPause" }).state.media?.state).toBe("playing");

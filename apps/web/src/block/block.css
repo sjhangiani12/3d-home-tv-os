@@ -190,7 +190,10 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* The focus swap hides the half of a room row that is not in use, and `display: flex` on a class
    out-specifies the browser's `[hidden]` rule — so say it again, as `#mock` has to further down. */
 #drawer [hidden] { display: none; }
-#rooms { display: flex; flex-direction: column; gap: 20px; }
+/* The rooms take the slack, so the footer below them sits on the bottom edge whether the home has two
+   rooms or six — and scroll rather than push it off the panel when it has more than fit. */
+#rooms { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 20px; }
+#rooms::-webkit-scrollbar { width: 0; }
 .roomgrp { display: flex; flex-direction: column; }
 /* A room row: name, then what it is doing, then its lamps as dots. No switch and no bar at rest — one
    number for several brightnesses would be a lie, and a label only sometimes allowed to appear changes
@@ -254,7 +257,16 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .lamprow.focus .sw::after, .lamprow:focus-visible .sw::after { background: var(--paper); }
 .roomrow.focus .pip, .roomrow:focus-visible .pip { border-color: var(--paper); }
 .roomrow.focus .pip.on, .roomrow:focus-visible .pip.on { background: var(--warm); }
-#drawer .hint { margin-top: auto; padding-top: 14px; font: 500 17px/1.45 var(--font-display); color: var(--muted); }
+/* Now playing. It sits on the rule that closes the lamps rather than in a card of its own: a second
+   bordered box this far down the panel would read as a seventh lamp. A key the source does not offer is
+   not drawn — a dead ⏭ on a radio station is a promise the house cannot keep. */
+#np { padding-top: 16px; margin-top: 8px; border-top: 2px solid rgba(59, 51, 40, 0.18); }
+#np .t { font: 600 24px/1.15 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#np .s { font: 500 18px/1.2 var(--font-display); color: var(--muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#np .keys { display: flex; gap: 10px; margin-top: 12px; }
+.npkey { flex: 1; height: 46px; font: 500 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 12px; cursor: pointer; }
+.npkey:focus-visible, .npkey.focus { outline: none; background: var(--ink); color: var(--paper); }
+#drawer .hint { padding-top: 14px; font: 500 17px/1.45 var(--font-display); color: var(--muted); }
 
 /* Mock controls: outside the design, for trying weather and time. */
 #mock { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; font: 500 16px/1 var(--font-ui); color: var(--paper); background: rgba(14, 12, 24, 0.8); border: 2px dashed rgba(251, 246, 234, 0.5); padding: 12px 14px; transition: opacity 300ms ease; }

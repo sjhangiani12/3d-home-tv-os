@@ -331,3 +331,5 @@ export const DEFAULT_SCENES: HomeScene[] = [
 
 /** The lamps as every panel has to read them: on/off, colour, room grouping, and what a mood is. */
 export * from "./lights.ts";
+/** …and what the home is playing, under them. */
+export * from "./media.ts";

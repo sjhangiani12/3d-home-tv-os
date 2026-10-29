@@ -4,6 +4,7 @@ import {
   isReachable,
   kelvinToHex,
   lightColor,
+  mediaPosition,
   roomGroups,
   roomLabel,
   WARM_WHITE,
@@ -23,11 +24,16 @@ import { tvCardModel } from "./tvCard";
  * the block's drawer and the TV read it too. Re-exported here so this stays the one import for the view.
  */
 export {
+  canMedia,
   isLightLike,
   isOn,
   isReachable,
   kelvinToHex,
   lightColor,
+  mediaLoaded,
+  mediaPosition,
+  mediaRooms,
+  nowPlaying,
   roomGroups,
   roomLabel,
   WARM_WHITE,
@@ -194,23 +200,6 @@ export function sourceLabel(raw: string): string {
 
 /* ------------------------------------------------------------------ now playing */
 
-/** Speaker with something loaded (playing first, then paused). */
-export function nowPlaying(devices: readonly Device[]): Device | undefined {
-  const speakers = devices.filter((d) => d.kind === "speaker" && isReachable(d) && d.state.media && d.state.media.state !== "idle");
-  return speakers.find((d) => d.state.media!.state === "playing") ?? speakers[0];
-}
-
-/** Seconds into the track now: interpolated from `position` sampled at `updatedAt` while playing. */
-export function mediaPosition(m: MediaInfo | undefined, nowMs: number): number | undefined {
-  if (!m || typeof m.position !== "number") return undefined;
-  let pos = m.position;
-  if (m.state === "playing" && m.updatedAt) {
-    const at = Date.parse(m.updatedAt);
-    if (Number.isFinite(at)) pos += Math.max(0, (nowMs - at) / 1000);
-  }
-  return typeof m.duration === "number" && m.duration > 0 ? clamp(pos, 0, m.duration) : Math.max(0, pos);
-}
-
 /** "3:07", "1:02:09". */
 export function formatTime(seconds: number | undefined): string {
   if (seconds === undefined || !Number.isFinite(seconds)) return "–:––";
@@ -219,12 +208,6 @@ export function formatTime(seconds: number | undefined): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = String(s % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
-}
-
-/** Transport control offered right now (`playPause` = play or pause). */
-export function canMedia(d: Device, command: "play" | "pause" | "next" | "previous" | "playPause"): boolean {
-  const list = d.capabilities.media ?? [];
-  return command === "playPause" ? list.includes("play") || list.includes("pause") : list.includes(command);
 }
 
 /** Artwork URL usable by the browser (relative bridge URLs resolved against the bridge base). */
