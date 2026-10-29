@@ -96,6 +96,24 @@ const STS = [
   { z: 240, w: 16, dir: -1 },
 ];
 const AREA = { x0: -260, x1: 460, z0: -290, z1: 290 };
+/**
+ * The block is built 720×580 so the streets run off every edge of the frame and the city does not stop
+ * where the picture does. The lens only reaches about 465×450 of it: at the far corners of AREA sit two
+ * whole avenues, a cross street, and the trees, lamps and water towers along them, which no pose the
+ * camera can take has ever shown. They were being driven, swayed, transformed and shadowed for nobody.
+ *
+ * This is the footprint of the frustum on the ground over every pose (x −171..295, z −209..246),
+ * measured up to roof height and grown by a bus length, so a prop is only dropped once no part of it
+ * could cross the edge of the frame. Verified by pixel diff, not by eye: hiding everything outside it
+ * changes zero pixels from the overview, the high shot, the street and the door, while hiding what is
+ * inside it changes tens of thousands.
+ *
+ * The block is still *generated* whole, in the same order — the seeded RNG decides the palette and the
+ * skyline, and skipping a spawn would shift every draw after it and repaint the city. Cull after, never
+ * during.
+ */
+const SEEN = { x0: -180, x1: 302, z0: -216, z1: 251 };
+const unseen = (x, z) => x < SEEN.x0 || x > SEEN.x1 || z < SEEN.z0 || z > SEEN.z1;
 const SW = 4.5, CURB = 0.18, FH = 3.3, CW = 3.4;
 // Our lot, on the north side of the fourth street. It sits well into the block rather than near the corner,
 // the way a walk-up on a long Manhattan side street does: there is a good stretch of neighbours either side
@@ -386,10 +404,11 @@ const glassMesh = A.glass.mesh(M.glass); glassMesh.renderOrder = 2; glassMesh.re
 const dummy = new THREE.Object3D();
 function inst(geo, mat, n, cast) { const m = new THREE.InstancedMesh(geo, mat, Math.max(1, n)); m.castShadow = !!cast; m.receiveShadow = true; scene.add(m); return m; }
 {
-  const tank = inst(new THREE.CylinderGeometry(1.7, 1.7, 3.2, 8), M.wood, towers.length, true);
-  const cone = inst(new THREE.ConeGeometry(1.95, 1.4, 8), M.woodRoof, towers.length, true);
-  const legs = inst(new THREE.BoxGeometry(2.6, 2.2, 2.6), M.pole, towers.length, true);
-  towers.forEach(([x, y, z], i) => {
+  const seen = towers.filter(([x, , z]) => !unseen(x, z));
+  const tank = inst(new THREE.CylinderGeometry(1.7, 1.7, 3.2, 8), M.wood, seen.length, true);
+  const cone = inst(new THREE.ConeGeometry(1.95, 1.4, 8), M.woodRoof, seen.length, true);
+  const legs = inst(new THREE.BoxGeometry(2.6, 2.2, 2.6), M.pole, seen.length, true);
+  seen.forEach(([x, y, z], i) => {
     dummy.position.set(x, y + 1.1, z); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); legs.setMatrixAt(i, dummy.matrix);
     dummy.position.set(x, y + 3.8, z); dummy.updateMatrix(); tank.setMatrixAt(i, dummy.matrix);
     dummy.position.set(x, y + 6.1, z); dummy.updateMatrix(); cone.setMatrixAt(i, dummy.matrix);
@@ -397,21 +416,28 @@ function inst(geo, mat, n, cast) { const m = new THREE.InstancedMesh(geo, mat, M
   legs.material = new THREE.MeshLambertMaterial({ color: "#3b3d44", transparent: true, opacity: 0.85 });
 }
 const canopyMat = lam(BASE.canopy);
-const trunkM = inst(new THREE.CylinderGeometry(0.22, 0.28, 2.6, 5), lam(BASE.trunk), trees.length, true);
-const canopyM = inst(new THREE.IcosahedronGeometry(2.3, 0), canopyMat, trees.length, true);
-const treeData = trees.map(([x, z], i) => {
-  const s = R(0.8, 1.25), ph = R(0, 6.28);
-  dummy.position.set(x, CURB + 1.3, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); trunkM.setMatrixAt(i, dummy.matrix);
-  canopyM.setColorAt(i, new THREE.Color().setHSL(R(0.24, 0.31), R(0.35, 0.5), R(0.27, 0.36)));
-  return { x, z, s, ph };
+// Every tree is still drawn from the bag in order — height, sway phase, then the three numbers of its
+// green — because the bag is what makes the row of them look planted rather than stamped. Only then are
+// the off-camera ones set aside.
+const everyTree = trees.map(([x, z]) => ({
+  x, z, s: R(0.8, 1.25), ph: R(0, 6.28),
+  color: new THREE.Color().setHSL(R(0.24, 0.31), R(0.35, 0.5), R(0.27, 0.36)),
+}));
+const treeData = everyTree.filter((t) => !unseen(t.x, t.z));
+const trunkM = inst(new THREE.CylinderGeometry(0.22, 0.28, 2.6, 5), lam(BASE.trunk), treeData.length, true);
+const canopyM = inst(new THREE.IcosahedronGeometry(2.3, 0), canopyMat, treeData.length, true);
+treeData.forEach((t, i) => {
+  dummy.position.set(t.x, CURB + 1.3, t.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); trunkM.setMatrixAt(i, dummy.matrix);
+  canopyM.setColorAt(i, t.color);
 });
 if (canopyM.instanceColor) canopyM.instanceColor.needsUpdate = true;
-const poleM = inst(new THREE.BoxGeometry(0.18, 5.2, 0.18), M.pole, lamps.length, false);
-const headM = inst(new THREE.BoxGeometry(0.7, 0.25, 0.7), M.lampHead, lamps.length, false);
+const litLamps = lamps.filter(([x, z]) => !unseen(x, z));
+const poleM = inst(new THREE.BoxGeometry(0.18, 5.2, 0.18), M.pole, litLamps.length, false);
+const headM = inst(new THREE.BoxGeometry(0.7, 0.25, 0.7), M.lampHead, litLamps.length, false);
 const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
-const glowM = inst(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), glowMat, lamps.length, false);
+const glowM = inst(new THREE.PlaneGeometry(9, 9).rotateX(-Math.PI / 2), glowMat, litLamps.length, false);
 glowM.renderOrder = 3; glowM.receiveShadow = false;
-lamps.forEach(([x, z], i) => {
+litLamps.forEach(([x, z], i) => {
   dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
   dummy.position.set(x, CURB + 2.6, z); dummy.updateMatrix(); poleM.setMatrixAt(i, dummy.matrix);
   dummy.position.set(x, CURB + 5.2, z); dummy.updateMatrix(); headM.setMatrixAt(i, dummy.matrix);
@@ -456,13 +482,12 @@ for (const st of STS) {
   if (st.two) { for (const i of [0, 1]) { addLane("x", st.z - 1.9 - i * 3.5, -1, false); addLane("x", st.z + 1.9 + i * 3.5, 1, false); } }
   else addLane("x", st.z + (st.dir > 0 ? 1.2 : -1.2), st.dir, false);
 }
-const moving = [];
 for (const lane of lanes) {
   const density = lane.avenue ? 26 : 42;
   for (let s = R(0, 12); s < lane.L - 6; s += R(density * 0.6, density * 1.5)) {
     let t = carType(); if (lane.avenue && rng() < 0.04) t = CAR_TYPES[4];
     const car = { lane, t, s, v: R(6, 10), vmax: R(9, 12.5), color: carColor(t) };
-    lane.cars.push(car); moving.push(car);
+    lane.cars.push(car);
   }
   lane.cars.sort((a, b) => b.s - a.s);
 }
@@ -495,14 +520,23 @@ for (const av of AVES) {
     }
   });
 }
-const NCARS = moving.length + parked.length;
+// Two cars in five drive off-camera for ever (see SEEN). Every street keeps exactly the cars it was
+// given; the ones no pose can reach are dropped before they become instances.
+for (const lane of lanes) {
+  // A lane is a line at a fixed coordinate running the whole area, so one test retires all of it.
+  if (!(lane.axis === "z" ? unseen(lane.fixed, 0) : unseen(0, lane.fixed))) continue;
+  lane.cars.length = 0;
+}
+const onstage = lanes.flatMap((l) => l.cars);
+const parkedSeen = parked.filter((c) => !unseen(c.x, c.z));
+const NCARS = onstage.length + parkedSeen.length;
 const carMat = new THREE.MeshLambertMaterial({ color: "#ffffff" });
 const bodyM = inst(unit, carMat, NCARS, true);
 const cabM = inst(unit, new THREE.MeshLambertMaterial({ color: "#ffffff" }), NCARS, true);
 const headMat = new THREE.MeshBasicMaterial({ color: "#fff3c9" }), tailMat = new THREE.MeshBasicMaterial({ color: "#d8352f" });
 const hlM = inst(unit, headMat, NCARS, false), tlM = inst(unit, tailMat, NCARS, false);
 const tmpC = new THREE.Color();
-[...moving, ...parked].forEach((c, i) => {
+[...onstage, ...parkedSeen].forEach((c, i) => {
   bodyM.setColorAt(i, tmpC.set(c.color));
   cabM.setColorAt(i, tmpC.set(c.t.k === "taxi" ? "#2a2c33" : "#2c3440"));
   c.i = i;
@@ -521,7 +555,7 @@ function placeCar(c, x, z, axis, dir) {
   dummy.position.set(x + fwd.x * (t.len / 2 + 0.02), 0.55, z + fwd.z * (t.len / 2 + 0.02)); dummy.scale.set(0.08, 0.22, t.wid * 0.8); dummy.updateMatrix(); hlM.setMatrixAt(i, dummy.matrix);
   dummy.position.set(x - fwd.x * (t.len / 2 + 0.02), 0.6, z - fwd.z * (t.len / 2 + 0.02)); dummy.updateMatrix(); tlM.setMatrixAt(i, dummy.matrix);
 }
-parked.forEach((c) => placeCar(c, c.x, c.z, c.axis, c.dir));
+parkedSeen.forEach((c) => placeCar(c, c.x, c.z, c.axis, c.dir));
 function signalGreen(avenue, t) { const p = t % 64; return avenue ? p < 34 : p >= 37 && p < 61; }
 function updateTraffic(dt, t, weatherSlow) {
   for (const lane of lanes) {
@@ -780,6 +814,9 @@ function applyLook() {
   facMats.forEach((m) => { m.emissiveIntensity = L.win * 0.9; });
   bandMat.emissiveIntensity = L.win * 0.6;
   glowMat.opacity = L.lamp * 0.8;
+  // By day the pools under the lamps are transparent; additive blending costs the same whether it
+  // adds light or nothing, so take them out of the frame instead of adding zero to it.
+  glowM.visible = glowMat.opacity > 0.01;
   M.lampHead.color.set(L.lamp > 0 ? "#fff0c4" : "#c9c4b8");
   headMat.color.set(L.lamp > 0 ? "#fff3c9" : "#d9d6cc");
   M.asphalt.color.set(BASE.asphalt).multiplyScalar(wx === "rain" ? 0.72 : 1);
