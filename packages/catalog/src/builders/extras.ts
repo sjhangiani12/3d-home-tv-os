@@ -6,7 +6,7 @@
  * the ceiling at y = h.
  */
 import { rng, type V2, type V3 } from "../parts";
-import { ACCENTS, type Build, Parts, clamp, darken, lighten, palette } from "./common";
+import { type Build, Parts, clamp, darken, lighten, palette } from "./common";
 
 /** Warm "lit" color for bulbs / shades (the glow role adds the emissive). */
 const BULB = "#ffe7b0";
@@ -382,6 +382,12 @@ export const coatRackHanging: Build = (c) => {
 };
 
 /**
+ * What hangs on a garment rack: jackets and coats, not a paint chart. Browns, blacks and blues,
+ * dark enough that the rack reads as a block of clothes from across the room.
+ */
+const WARDROBE = ["#4a3b2e", "#2b2b2f", "#334358", "#6b5844", "#1f1f22", "#3d4f66", "#57493a"];
+
+/**
  * Rolling garment rack: two uprights on tube feet, one rail across the top, clothes on hangers.
  * The rail's ends are the width of the box, the feet its depth, so the frame is what touches the
  * sides and the clothes always hang inside it.
@@ -412,9 +418,10 @@ export const coatRackGarment: Build = (c) => {
   for (let i = 0; i < n; i++) {
     const x = -span / 2 + (span * (i + 0.5)) / n;
     const top = railY - r * 2.2;
-    const len = Math.min(h * (0.4 + rand() * 0.25), railY - h * 0.16);
+    // jacket length, not floor-length coat
+    const len = Math.min(h * (0.34 + rand() * 0.18), railY - h * 0.16);
     p.add({ kind: "tube", path: [[x, railY - r * 0.2, 0], [x + r, top - gr * 0.1, 0]], r: 0.005, seg: 4, steps: 2 }, [0, 0, 0], palette.steel);
-    coat(p, x, 0, top, len, gr, ACCENTS[(i + seed) % ACCENTS.length] as string, Math.PI / 2);
+    coat(p, x, 0, top, len, gr, WARDROBE[(i + seed) % WARDROBE.length] as string, Math.PI / 2);
   }
   return p;
 };
