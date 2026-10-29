@@ -1,6 +1,6 @@
 import type { Device } from "@appart3d/home";
 import { describe, expect, it } from "vitest";
-import { HUE_RECIPES, planScene, SCENE_COLORS } from "../src/scenes.ts";
+import { HUE_RECIPES, moodFollowUp, planScene, SCENE_COLORS } from "../src/scenes.ts";
 
 const light = (id: string, room: string, on: boolean | null, extra: Partial<Device> = {}): Device => ({
   id,
@@ -81,10 +81,35 @@ describe("planScene", () => {
     expect(r["hue:light:12"]).toEqual([{ type: "power", on: true }, { type: "brightness", value: 100 }, { type: "kelvin", value: HUE_RECIPES.read.kelvin }]);
   });
 
-  it("Relax with every lamp off: the living room lights up, nothing else", () => {
+  it("Relax never switches a lamp on: an off or unreachable lamp is left out of the plan", () => {
+    expect(byId(planScene("relax", devices, opts))["hue:light:18"]).toBeUndefined(); // off
+    expect(byId(planScene("relax", devices, opts))["hue:light:9"]).toBeUndefined(); // unreachable
+  });
+
+  it("Relax with every lamp off plans nothing at all — it only arms itself", () => {
     const allOff = devices.map((d) => (d.kind === "light" || d.kind === "plug" ? { ...d, state: { ...d.state, on: false } } : d));
-    const p = byId(planScene("relax", allOff, opts));
-    expect(Object.keys(p).sort()).toEqual(["hue:light:12", "hue:light:18", "hue:light:9"]);
+    expect(planScene("relax", allOff, opts)).toEqual([]);
+  });
+
+  describe("moodFollowUp", () => {
+    const lamp = (on: boolean | null) => ({ ...light("hue:light:5", "Salon", on) });
+
+    it("brings a lamp that just came on into the armed mood, without a second power action", () => {
+      expect(moodFollowUp("relax", lamp(true), false)).toEqual([
+        { type: "brightness", value: HUE_RECIPES.relax.brightness },
+        { type: "kelvin", value: HUE_RECIPES.relax.kelvin },
+      ]);
+    });
+
+    it("leaves a lamp that was already on alone: a hand dim keeps the colour and just stops matching", () => {
+      expect(moodFollowUp("relax", lamp(true), true)).toEqual([]);
+    });
+
+    it("does nothing with no mood armed, on a lamp going off, or on a plug", () => {
+      expect(moodFollowUp(null, lamp(true), false)).toEqual([]);
+      expect(moodFollowUp("read", lamp(false), true)).toEqual([]);
+      expect(moodFollowUp("read", { ...lamp(true), kind: "plug", capabilities: {} }, false)).toEqual([]);
+    });
   });
 
   it("finds the strip by name when the role id is missing", () => {

@@ -21,6 +21,23 @@ export const HUE_RECIPES = {
 
 const isLight = (d: Device) => d.kind === "light" || d.kind === "plug";
 
+/** Scenes that stay armed once run, so a lamp switched on later comes up in them. */
+export const MOOD_SCENES = ["relax", "read"] as const;
+export type MoodScene = (typeof MOOD_SCENES)[number];
+export const isMoodScene = (id: string): id is MoodScene => (MOOD_SCENES as readonly string[]).includes(id);
+
+/**
+ * What to send a lamp that has *just* been switched on so it joins the armed mood. Empty when nothing
+ * is armed, when the device is not a light, when it did not just come on, or when it cannot be dimmed
+ * (a plug takes the power and nothing else). A lamp that was already on is left alone: dimming a Relax
+ * lamp by hand keeps its colour, it only stops matching Relax's level.
+ */
+export function moodFollowUp(mood: MoodScene | null, device: Device, wasOn: boolean | null): DeviceAction[] {
+  if (!mood || wasOn === true || !isLight(device) || device.state.on !== true) return [];
+  const recipe = HUE_RECIPES[mood];
+  return lightOn(device, recipe.brightness, { kelvin: recipe.kelvin }).filter((a) => a.type !== "power");
+}
+
 function lightOn(d: Device, brightness: number, look: { kelvin?: number; hex?: string }): DeviceAction[] {
   const actions: DeviceAction[] = [{ type: "power", on: true }];
   if (d.kind === "plug") return actions;
@@ -85,11 +102,12 @@ export function planScene(
       break;
     case "relax":
     case "read": {
-      // The lamps already on take the look; with everything off, the living room lights up.
+      // A mood is not a command. The lamps already on take the look; the ones that are off stay off,
+      // so no press in the panel can light a room you are not standing in. With everything off this
+      // plans nothing and the mood only arms itself (Hub.runScene).
       const recipe = HUE_RECIPES[sceneId];
-      const lit = lights.filter((d) => d.state.on === true);
-      const targets = lit.length ? lit : lights.filter((d) => d.room === living || /living|salon/i.test(d.room));
-      for (const d of targets) plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
+      for (const d of lights.filter((d) => d.state.on === true))
+        plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
       break;
     }
     case "movie":

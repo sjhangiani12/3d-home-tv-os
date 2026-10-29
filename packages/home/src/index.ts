@@ -167,6 +167,14 @@ export interface HomeSnapshot {
   home: string;
   devices: Device[];
   scenes: HomeScene[];
+  /**
+   * Additive: the mood currently armed (`"relax"` / `"read"`), or null. Relax and Read are not commands
+   * that fire once — they re-tone the lamps already on, never switch one on, and then stay armed, so a
+   * lamp switched on afterwards (from any client) comes up in them. Running the armed one again disarms
+   * it and changes no light; any other scene clears it. Clients show it as a mark on the scene, not as a
+   * claim about the lamps: a lamp dimmed by hand keeps the mood's colour but stops matching its level.
+   */
+  activeScene?: string | null;
   /** ISO time of the last refresh. */
   updatedAt: string;
   /**
