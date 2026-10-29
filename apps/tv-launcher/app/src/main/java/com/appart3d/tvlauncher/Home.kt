@@ -66,6 +66,44 @@ data class Lamp(
 data class Scene(val id: String, val name: String)
 
 /**
+ * What a speaker of the home is playing. `where` is the room — the lead one when several play together,
+ * and `rooms` says how many — so the card can say where the music is, not only what it is.
+ */
+data class Playing(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val where: String,
+    val rooms: Int,
+    val playing: Boolean,
+) {
+    companion object {
+        /** True of any speaker, playing or not — so one falling silent can clear the card. */
+        fun isSpeaker(d: JSONObject) = d.optString("kind") == "speaker"
+
+        /** What this speaker is playing, or null when it is unreachable or has nothing on. */
+        fun parse(d: JSONObject): Playing? {
+            if (!isSpeaker(d)) return null
+            val st = d.optJSONObject("state") ?: return null
+            if (!st.optBoolean("reachable", true)) return null
+            val m = st.optJSONObject("media") ?: return null
+            val state = m.optString("state")
+            if (state != "playing" && state != "paused") return null
+            val group = m.optJSONArray("group")
+            val app = m.optString("app")
+            return Playing(
+                id = d.getString("id"),
+                title = m.optString("title").ifEmpty { app }.ifEmpty { "Playing" },
+                artist = m.optString("artist").ifEmpty { app },
+                where = group?.optString(0)?.takeIf { it.isNotEmpty() } ?: d.optString("name"),
+                rooms = group?.length() ?: 1,
+                playing = state == "playing",
+            )
+        }
+    }
+}
+
+/**
  * Live lamps from the bridge's event stream (GET /api/home/events: a snapshot, then one event per
  * device change, from any source). Reconnects on its own; callbacks run on the feed thread.
  */
@@ -77,6 +115,10 @@ class HomeFeed(
     /** Solar elevation (degrees) from each snapshot, null when the bridge has none. */
     private val onSun: (Double?) -> Unit = {},
     private val onScenes: (List<Scene>) -> Unit = {},
+    /** Every speaker with something on, from each snapshot (the others are simply absent). */
+    private val onPlaying: (List<Playing>) -> Unit = {},
+    /** One speaker changed: what it plays now, or null when it went quiet or out of reach. */
+    private val onSpeaker: (String, Playing?) -> Unit = { _, _ -> },
 ) {
     @Volatile private var running = false
     @Volatile private var conn: HttpURLConnection? = null
@@ -142,9 +184,14 @@ class HomeFeed(
                     onScenes((0 until a.length()).map { a.getJSONObject(it) }.map { Scene(it.getString("id"), it.optString("name")) })
                 }
                 val devices = snapshot.optJSONArray("devices") ?: return
-                onLamps((0 until devices.length()).mapNotNull { Lamp.parse(devices.getJSONObject(it)) })
+                val all = (0 until devices.length()).map { devices.getJSONObject(it) }
+                onLamps(all.mapNotNull(Lamp::parse))
+                onPlaying(all.mapNotNull(Playing::parse))
             }
-            "device" -> ev.optJSONObject("device")?.let(Lamp::parse)?.let(onLamp)
+            "device" -> ev.optJSONObject("device")?.let { d ->
+                Lamp.parse(d)?.let(onLamp)
+                if (Playing.isSpeaker(d)) onSpeaker(d.optString("id"), Playing.parse(d))
+            }
         }
     }
 

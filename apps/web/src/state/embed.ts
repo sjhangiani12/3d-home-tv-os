@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EmbedCommand, EmbedEvent, FrameTarget } from "@appart3d/home";
-import { deviceIdsForItem, FLIGHT_BURST_MS, flightTarget, isEmbedView, itemFocusSize, itemForDevice, parseEmbedCommand, parseFrame, parseOrbit, parseTilt, switchedItems, type Orbit } from "../lib/embed";
+import { deviceIdsForItem, FLIGHT_BURST_MS, flightTarget, isEmbedView, itemFocusSize, itemForDevice, parseEmbedCommand, parseFrame, parseOrbit, parsePanel, parseTilt, switchedItems, type Orbit } from "../lib/embed";
 import { isOn } from "../lib/home";
 import { useStore } from "./store";
 import { useHome } from "./home";
@@ -34,6 +34,12 @@ export interface EmbedState {
   tilt: number | null;
   /** `?lite=1`: cheaper rendering for weak GPUs (TV launcher): no shadows (full resolution kept, 1x looks pixelated on a TV). */
   lite: boolean;
+  /**
+   * `?panel=<px>`: the host app draws a panel of this width over the right of the view (the TV's lamp
+   * panel). The apartment then frames itself in what is left of the screen rather than in the middle,
+   * which is otherwise half under the panel. 0 = nothing covers it.
+   */
+  panel: number;
 }
 
 export const useEmbed = create<EmbedState>()(() => ({
@@ -48,6 +54,7 @@ export const useEmbed = create<EmbedState>()(() => ({
   lite: false,
   orbit: "sway",
   tilt: null,
+  panel: 0,
 }));
 
 interface WebkitWindow {
@@ -154,6 +161,7 @@ export function startEmbed(params: URLSearchParams): boolean {
     lite: params.get("lite") === "1",
     orbit: parseOrbit(params.get("orbit")),
     tilt: parseTilt(params.get("tilt")),
+    panel: parsePanel(params.get("panel")),
   });
   document.documentElement.classList.add("is-embed");
   (window as unknown as WebkitWindow).appart3dEmbed = {

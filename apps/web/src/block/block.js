@@ -1014,7 +1014,8 @@ function renderSigns(now) {
 const v3 = new THREE.Vector3();
 function projectSigns() {
   for (const s of signs) {
-    const show = !s.off && (isInside() ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
+    // The room labels are pinned to the stand-in model, so they go wherever it goes.
+    const show = !s.off && (isInside() ? !s.city && house.visible : s.city && mode === "city" && !flying && s.el !== detailHost);
     // A pinned card sits where the CSS puts it; the camera has no say, so don't write a transform over it.
     if (s.pinned) { s.el.style.opacity = show ? "1" : "0"; continue; }
     v3.copy(s.at).project(camera);
@@ -1098,6 +1099,17 @@ function enterInside(on) {
   document.querySelector("#clock .place").textContent = on ? NAMES.homeLabel : NAMES.place;
   if (on) scene.background = P.skyTexture("inside", false); else applyLook();
 }
+// On the TV the app fades the real apartment — the scan, a whole second 3D page — in over this one, on a
+// transparent canvas. The model below is only the stand-in for the seconds before that lands, so it steps
+// off when it does: left up, it shows straight through the scan, two homes at two angles in one frame. The
+// backdrop stays, and the scan fades into it. If the scan is dropped for memory or its renderer dies the
+// app says so and the stand-in comes back.
+let realHome = false, wantHouse = false;
+function showHouse(on) {
+  wantHouse = on;
+  house.visible = on && !realHome;
+  houseAmb.intensity = house.visible ? 0.55 * PI : 0;
+}
 async function openHome() {
   if (flying || mode !== "city") return;
   flying = true; goingIn = true; cityHud.forEach((e) => e.classList.add("hide"));
@@ -1124,7 +1136,7 @@ async function openHome() {
     // does not open the drawer (the app draws its own panel). The room is there the instant the black
     // lifts, the real apartment arrives into the same frame and the same colour a moment later, and if it
     // never arrives the screen is still a finished one.
-    house.visible = true; houseAmb.intensity = 0.55 * PI;
+    showHouse(true);
     enterInside(true);
     setPose(INSIDE);
     renderer.compile(scene, camera);
@@ -1135,7 +1147,7 @@ async function openHome() {
     if (wantClose) { wantClose = false; closeHome(); }
     return;
   }
-  house.visible = true; houseAmb.intensity = 0.55 * PI; mode = "home";
+  showHouse(true); mode = "home";
   enterInside(true);
   setPose(INSIDE_IN);
   // Compile the apartment's materials while the screen is still black: the first frame that draws it would
@@ -1160,7 +1172,7 @@ async function closeHome() {
     // does — under the black, back onto the stoop — and only then walks out to the block.
     flying = true;
     await fade(1);
-    house.visible = false; houseAmb.intensity = 0;
+    realHome = false; showHouse(false);
     enterInside(false);
     setPose(THROUGH);
     await fade(0);
@@ -1175,7 +1187,7 @@ async function closeHome() {
   drawer.classList.remove("open"); drawer.setAttribute("aria-hidden", "true");
   await tween(INSIDE_IN, 700);
   await fade(1);
-  house.visible = false; houseAmb.intensity = 0; mode = "city";
+  realHome = false; showHouse(false); mode = "city";
   enterInside(false);
   // Out the way you came: standing in the open doorway, then back down onto the stoop as the door shuts.
   setPose(THROUGH);
@@ -1602,6 +1614,7 @@ window.appart3dEmbed = {
     // step aside for it exactly as it does for this page's own drawer. Without it the middle is the middle.
     if (cmd.type === "openHome") { setInsidePan(!TV || !!cmd.panel); openHome(); return true; }
     if (cmd.type === "closeHome") { closeHome(); return true; }
+    if (cmd.type === "realHome") { realHome = !!cmd.on; showHouse(wantHouse); return true; }
     if (cmd.type === "spotlightDevice") { LAMPS.forEach((l) => { l.focus = cmd.deviceId === `hue:light:${l.id}`; }); return true; }
     if (command(cmd.type)) return true;
     return false;
@@ -1619,7 +1632,7 @@ const UP = new THREE.Vector3(0, 1, 0);
   syncMock();
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
-  if (h === "inside") { mode = "home"; house.visible = true; houseAmb.intensity = 0.55 * PI; setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); enterInside(true); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
+  if (h === "inside") { mode = "home"; showHouse(true); setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); enterInside(true); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
 }
 applyLook(); updateLamps(); applyCam();
 setInterval(tickClock, 1000); tickClock();
