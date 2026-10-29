@@ -1561,7 +1561,9 @@ const toNative = (msg) => { try { if (window.appart3dAndroid) window.appart3dAnd
 window.appart3dEmbed = {
   post(cmd) {
     if (!cmd || typeof cmd !== "object") return false;
-    if (cmd.type === "openHome") { openHome(); return true; }
+    // `panel`: the app is sliding its own lights panel over the right of the screen, so the apartment has to
+    // step aside for it exactly as it does for this page's own drawer. Without it the middle is the middle.
+    if (cmd.type === "openHome") { setInsidePan(!TV || !!cmd.panel); openHome(); return true; }
     if (cmd.type === "closeHome") { closeHome(); return true; }
     if (cmd.type === "spotlightDevice") { LAMPS.forEach((l) => { l.focus = cmd.deviceId === `hue:light:${l.id}`; }); return true; }
     if (command(cmd.type)) return true;
