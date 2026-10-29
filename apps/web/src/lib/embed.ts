@@ -307,6 +307,16 @@ export function parseOrbit(v: string | null): Orbit {
   return v === "full" ? "full" : "sway";
 }
 
+/**
+ * `?panel=<CSS px>` (1..800): how much of the right of the view the host app's own panel covers, so the
+ * apartment can frame itself in what is left instead of in the middle, half of it behind the panel.
+ * 0 when absent or out of range.
+ */
+export function parsePanel(v: string | null): number {
+  const px = v == null ? NaN : Number(v);
+  return Number.isFinite(px) && px > 0 && px <= 800 ? px : 0;
+}
+
 /** `?tilt=<degrees from vertical>` (30..80), lower values look more from above; null when absent / invalid. */
 export function parseTilt(v: string | null): number | null {
   const deg = v == null ? NaN : Number(v);

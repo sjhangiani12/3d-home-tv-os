@@ -62,22 +62,27 @@ export function IsoRig() {
   const compact = useHome((s) => s.compact);
   // Embedded 3D view (native apps): whole canvas, auto-framed, gentle idle rotation.
   const embed = useEmbed((s) => s.active);
+  // Embedded: the host app's own panel (the TV's lamps, `?panel=<px>`) covers the right of the view.
+  const panel = useEmbed((s) => s.panel);
   // Desktop Home mode: the control panel covers the right side; center the apartment in what is left.
-  const side = useStore((s) => s.mode === "home") && !compact && !embed && size.width > 900 ? 400 : 0;
+  const home = useStore((s) => s.mode === "home");
+  const side = embed ? panel : home && !compact && size.width > 900 ? 400 : 0;
+  // The width the apartment actually has to fill.
+  const frameW = Math.max(200, size.width - side);
 
   const camera = useMemo(() => new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, RADIUS * 4), []);
   const controlsRef = useRef<ControlsLike | null>(null);
   const anim = useRef<Anim | null>(null);
 
   const fitZoom = useMemo(() => {
-    if (embed) return embedFitZoom(size.width, size.height, boundsDiag(bounds), DEFAULT_POLAR);
+    if (embed) return embedFitZoom(frameW, size.height, boundsDiag(bounds), DEFAULT_POLAR);
     const diag = boundsDiag(bounds) + 1.2;
     // Projected footprint ≈ diag wide, diag·cos(polar) + wall height·sin(polar) tall.
-    const zw = (size.width - (compact ? 8 : 0) - side) / diag;
+    const zw = (frameW - (compact ? 8 : 0)) / diag;
     // Leave room for the top bar and hint bar.
     const zh = (size.height - (compact ? 10 : 130)) / (diag * Math.cos(DEFAULT_POLAR) + 2.6 * Math.sin(DEFAULT_POLAR));
     return Math.max(4, Math.min(zw, zh) * (compact ? 0.9 : 0.78));
-  }, [bounds, size.width, size.height, compact, side, embed]);
+  }, [bounds, frameW, size.height, compact, embed]);
 
   // Frustum follows the canvas size (pixels; zoom = pixels per meter).
   useLayoutEffect(() => {
@@ -104,12 +109,12 @@ export function IsoRig() {
   const living = useMemo(
     () =>
       embed
-        ? livingFraming(items, rooms, linkedKey.split("|").map((itemId) => ({ itemId: itemId || undefined })), size.width, size.height, DEFAULT_AZ, {
+        ? livingFraming(items, rooms, linkedKey.split("|").map((itemId) => ({ itemId: itemId || undefined })), frameW, size.height, DEFAULT_AZ, {
             orbit,
             ...(tilt != null ? { polar: tilt } : {}),
           })
         : null,
-    [embed, items, rooms, linkedKey, size.width, size.height, orbit, tilt],
+    [embed, items, rooms, linkedKey, frameW, size.height, orbit, tilt],
   );
   const homeView = (): View => {
     if (embed && frame === "living" && living) return { target: new THREE.Vector3(...living.target), az: living.az, polar: living.polar, zoom: living.zoom };
@@ -213,7 +218,7 @@ export function IsoRig() {
       animateTo(homePose(), 1.1);
     } else if (cmd.type === "fly") {
       if (!embed) return;
-      const zoom = Math.min(zoomLimits.max, Math.max(zoomLimits.min, Math.min(size.width, size.height) / cmd.size, homeView().zoom * 1.5));
+      const zoom = Math.min(zoomLimits.max, Math.max(zoomLimits.min, Math.min(frameW, size.height) / cmd.size, homeView().zoom * 1.5));
       // Fly in, lower, toward the item, seen from the living area (less furniture in front), turning
       // at most 20° from the current angle (the living framing already faces the room).
       const cur = current();
@@ -244,7 +249,7 @@ export function IsoRig() {
     } else if (cmd.type === "focus") {
       flight.current = null;
       // Embedded view: a focus always gets closer than the (already tight) default framing.
-      const base = Math.min(size.width, size.height) / (cmd.size * 2.1);
+      const base = Math.min(frameW, size.height) / (cmd.size * 2.1);
       const zoom = Math.min(zoomLimits.max, Math.max(zoomLimits.min, embed ? Math.max(base, homeView().zoom * 1.35) : base));
       animateTo({ target: new THREE.Vector3(cmd.center[0], 0, cmd.center[1]), zoom });
     } else if (cmd.type === "rotate") {

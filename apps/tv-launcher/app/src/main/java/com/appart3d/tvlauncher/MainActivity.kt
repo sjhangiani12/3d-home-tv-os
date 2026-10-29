@@ -71,6 +71,11 @@ class MainActivity : Activity() {
     private lateinit var heroMessage: TextView
     private lateinit var lights: LightsPanel
     private lateinit var homePanel: FrameLayout
+    /** The now-playing card at the foot of the home panel, and the speakers it chooses from. */
+    private lateinit var npCard: LinearLayout
+    private lateinit var npTitle: TextView
+    private lateinit var npSub: TextView
+    private val playing = LinkedHashMap<String, Playing>()
     /**
      * The real apartment (the original 3D view, `/?view=3d`), shown when Lights opens and the block has flown to
      * the door. Preloaded after the block is up and kept paused while hidden, so it opens at once.
@@ -276,6 +281,8 @@ class MainActivity : Activity() {
             onLamp = { lamp -> main.post { lights.update(lamp) } },
             onSun = { elevation -> main.post { setSun(elevation) } },
             onScenes = { scenes -> main.post { lights.setScenes(scenes) } },
+            onPlaying = { list -> main.post { playing.clear(); list.forEach { playing[it.id] = it }; renderPlaying() } },
+            onSpeaker = { id, p -> main.post { if (p == null) playing.remove(id) else playing[id] = p; renderPlaying() } },
         ).also { it.start() }
     }
 
@@ -442,8 +449,10 @@ class MainActivity : Activity() {
                         revealHome()
                     }
                     "focusDock" -> focusDock()
-                    "openLights" -> showHome(drawer = true)
-                    "viewHome" -> showHome(drawer = false)
+                    // Lights and Home are two doors into the same room, as they already are in the browser.
+                    // Home used to land on the apartment with no panel and nothing to press, which read as
+                    // the lights having gone missing.
+                    "openLights", "viewHome" -> showHome()
                     // Zoomed into a station or a dock: the dock steps aside.
                     "poi" -> dockScroll.animate().alpha(if (msg.optBoolean("on")) 0f else 1f).setDuration(250).start()
                     "error" -> {
@@ -517,6 +526,7 @@ class MainActivity : Activity() {
                 typeface = pixel
             })
             addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) })
+            addView(buildNowPlaying(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(TextView(context).apply {
                 text = getString(R.string.home_hint)
                 setTextColor(0xFF6A6170.toInt())
@@ -534,6 +544,47 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * What the home is playing, under the lamps. Display only — the remote keeps running down the lamps and
+     * out, as it did — but the panel is where you look to see what the home is doing, and music is half of it.
+     * It is hidden outright when nothing is on, so it never leaves a blank shelf.
+     */
+    private fun buildNowPlaying(): LinearLayout {
+        npTitle = TextView(this).apply {
+            setTextColor(INK)
+            textSize = 13f
+            typeface = pixel
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        npSub = TextView(this).apply {
+            setTextColor(0xFF6A6170.toInt())
+            textSize = 10f
+            typeface = pixel
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        npCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(dp(8), dp(8), dp(8), dp(2))
+            addView(View(context).apply { setBackgroundColor(0x22000000) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply { bottomMargin = dp(8) })
+            addView(npTitle)
+            addView(npSub)
+        }
+        return npCard
+    }
+
+    /** The one speaker group worth showing: playing before paused, then whichever fills the most rooms. */
+    private fun renderPlaying() {
+        val np = playing.values.maxWithOrNull(compareBy({ it.playing }, { it.rooms }, { it.title }))
+        npCard.visibility = if (np == null) View.GONE else View.VISIBLE
+        if (np == null) return
+        npTitle.text = "${if (np.playing) "♪" else "❚❚"} ${np.title}"
+        val where = if (np.rooms > 1) getString(R.string.np_rooms, np.where, np.rooms) else np.where
+        npSub.text = if (np.artist.isEmpty()) where else "${np.artist} · $where"
+    }
+
     /** Creates and loads the apartment view (hidden, under the native views) if it is not there yet. */
     private fun ensureHomeWeb() {
         if (homeWeb != null) return
@@ -545,7 +596,9 @@ class MainActivity : Activity() {
         homeReady = false
         root.addView(h, root.indexOfChild(web) + 1, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         // maxDpr=1.5: ~57 fps on this TV vs ~48 at 2x, hardly less sharp from the sofa (see ?stats=1).
-        h.loadUrl("$base/?view=3d&lite=1&orbit=full&tilt=64&maxDpr=1.5")
+        // panel: the lamp panel covers that much of the right, so the apartment frames itself in the rest
+        // (CSS px = dp here — the page sets width=device-width). The block page does the same for its own.
+        h.loadUrl("$base/?view=3d&lite=1&orbit=full&tilt=64&maxDpr=1.5&panel=$HOME_W")
     }
 
     private fun dropHomeWeb() {
@@ -555,6 +608,13 @@ class MainActivity : Activity() {
         (h.parent as? ViewGroup)?.removeView(h)
         h.destroy()
         sentSpotlight = null
+        // Gone while it was on screen (dropped for memory, or its renderer died): the block page is paused
+        // underneath with its own apartment stepped off, so the screen is a frozen, empty backdrop. Wake it
+        // and give the stand-in back.
+        if (homeShowing) {
+            web.onResume()
+            postRealHome(false)
+        }
     }
 
     /** At the door and loaded: the apartment fades in over the block, which pauses underneath. */
@@ -563,6 +623,9 @@ class MainActivity : Activity() {
         val h = homeWeb ?: return ensureHomeWeb()
         if (!homeReady) return
         h.onResume()
+        // This view draws on a transparent canvas, so the block page's stand-in apartment would show
+        // straight through the real one. It steps off first and leaves its backdrop to fade into.
+        postRealHome(true)
         h.animate().alpha(1f).setDuration(600).withEndAction { if (homeShowing) web.onPause() }.start()
     }
 
@@ -572,22 +635,25 @@ class MainActivity : Activity() {
         web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post({type:'$type'$extra})", null)
     }
 
+    /** The real scan is up over the block page (or gone again), so its stand-in apartment steps off (or back). */
+    private fun postRealHome(on: Boolean) {
+        web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post({type:'realHome',on:$on})", null)
+    }
+
     /**
-     * The apartment: the page flies to the door, then the real 3D home fades in. With `drawer` (Lights), the lamp
-     * drawer slides in and takes the remote; without (Home), it is just to look, and Back returns.
+     * The apartment: the page flies to the door, then the real 3D home fades in, with the lamp panel sliding
+     * in beside it and taking the remote. Back returns to the block.
      */
-    private fun showHome(drawer: Boolean) {
+    private fun showHome() {
         if (homeShowing) return
         homeShowing = true
         atDoor = false
         ensureHomeWeb()
         dockScroll.animate().alpha(0f).setDuration(220).withEndAction { if (homeShowing) dockScroll.visibility = View.INVISIBLE }.start()
-        postToBlock("openHome", panel = drawer)
-        if (drawer) {
-            homePanel.visibility = View.VISIBLE
-            homePanel.animate().translationX(0f).setDuration(420).setInterpolator(DecelerateInterpolator()).start()
-            lights.requestFocus()
-        }
+        postToBlock("openHome", panel = true)
+        homePanel.visibility = View.VISIBLE
+        homePanel.animate().translationX(0f).setDuration(420).setInterpolator(DecelerateInterpolator()).start()
+        lights.requestFocus()
     }
 
     private fun hideHome(refocus: Boolean = true) {
