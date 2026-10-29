@@ -446,6 +446,7 @@ class MainActivity : Activity() {
                     }
                     "atDoor" -> {
                         atDoor = true
+                        showHomePanel()
                         revealHome()
                     }
                     "focusDock" -> focusDock()
@@ -651,15 +652,33 @@ class MainActivity : Activity() {
         ensureHomeWeb()
         dockScroll.animate().alpha(0f).setDuration(220).withEndAction { if (homeShowing) dockScroll.visibility = View.INVISIBLE }.start()
         postToBlock("openHome", panel = true)
+        // The panel waits for the apartment. It used to slide in on the press, so a page-high slab of lamps
+        // sat over the whole walk down the street and through the door. Back still closes the lot from the
+        // first frame -- `onBackPressed` asks `homeShowing`, not who holds the focus.
+        main.removeCallbacks(panelFallback)
+        main.postDelayed(panelFallback, 7000)
+    }
+
+    /**
+     * The apartment is up (or near enough): the lamps slide in beside it and take the remote. Idempotent --
+     * the page's `atDoor` and the fallback below both land here, and whichever is first wins.
+     */
+    private fun showHomePanel() {
+        if (!homeShowing || homePanel.visibility == View.VISIBLE) return
+        main.removeCallbacks(panelFallback)
         homePanel.visibility = View.VISIBLE
         homePanel.animate().translationX(0f).setDuration(420).setInterpolator(DecelerateInterpolator()).start()
         lights.requestFocus()
     }
 
+    /** If the page never reaches the door -- a stale build, a dead renderer -- the lamps still arrive. */
+    private val panelFallback = Runnable { showHomePanel() }
+
     private fun hideHome(refocus: Boolean = true) {
         if (!homeShowing) return
         homeShowing = false
         atDoor = false
+        main.removeCallbacks(panelFallback)
         web.onResume()
         homeWeb?.let { h -> h.animate().alpha(0f).setDuration(400).withEndAction { if (!homeShowing) h.onPause() }.start() }
         if (homePanel.visibility == View.VISIBLE) homePanel.animate().translationX(dp(HOME_W).toFloat()).setDuration(320).withEndAction { homePanel.visibility = View.GONE }.start()
