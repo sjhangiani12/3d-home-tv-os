@@ -328,3 +328,6 @@ export const DEFAULT_SCENES: HomeScene[] = [
   { id: "night", name: "Night", icon: "moon" },
   { id: "away", name: "Away", icon: "door" },
 ];
+
+/** The lamps as every panel has to read them: on/off, colour, room grouping, and what a mood is. */
+export * from "./lights.ts";

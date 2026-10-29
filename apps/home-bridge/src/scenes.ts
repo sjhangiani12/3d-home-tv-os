@@ -1,5 +1,7 @@
 /** Bridge-side scenes, planned as a pure function over the current devices. */
-import type { Device, DeviceAction } from "@appart3d/home";
+import { HUE_RECIPES, type Device, type DeviceAction, type MoodScene } from "@appart3d/home";
+
+export { HUE_RECIPES, isMoodScene, MOOD_SCENES, type MoodScene } from "@appart3d/home";
 
 export interface ScenePlanItem {
   deviceId: string;
@@ -13,18 +15,7 @@ export const SCENE_COLORS = {
   movie: "#4b1fd1",
 } as const;
 
-/** Philips Hue's own Relax and Read recipes (ct 447 / 346 mired, bri 144 / 254). */
-export const HUE_RECIPES = {
-  relax: { kelvin: 2237, brightness: 57 },
-  read: { kelvin: 2890, brightness: 100 },
-} as const;
-
 const isLight = (d: Device) => d.kind === "light" || d.kind === "plug";
-
-/** Scenes that stay armed once run, so a lamp switched on later comes up in them. */
-export const MOOD_SCENES = ["relax", "read"] as const;
-export type MoodScene = (typeof MOOD_SCENES)[number];
-export const isMoodScene = (id: string): id is MoodScene => (MOOD_SCENES as readonly string[]).includes(id);
 
 /**
  * What to send a lamp that has *just* been switched on so it joins the armed mood. Empty when nothing
