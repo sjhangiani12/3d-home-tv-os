@@ -859,15 +859,15 @@ function applyLook() {
   sun.target.position.copy(target);
   facMats.forEach((m) => { m.emissiveIntensity = L.win * 0.9; });
   bandMat.emissiveIntensity = L.win * 0.6;
-  // He carries a little of his own light after dark. Everything else on a night block is either grey
-  // or a lit window, so a figure lit only by a blue moon goes the same grey as the roof he is on.
-  // Keyed off the window glow rather than off the name of the hour: it is already the measure of how
-  // dark the block is, and it moves with the weather dimming too. Day sits at win 0.3 and gets
-  // nothing — in daylight a glowing suit is a sticker.
-  // The emissive is a flat white add, not a tint of the suit — three.js does not run it through the
-  // vertex colours — so every point of it is also a point of pink. 0.1 is about where he separates
-  // from the roof without the red going to salmon; at 0.2 he is a lit sign.
-  suitMat.emissiveIntensity = 0.18 + 0.1 * clamp((L.win - 0.3) / 0.7, 0, 1);
+  // The suit's own light comes *down* as the block gets dark, which is the opposite of what it looks
+  // like it should do. The emissive is a flat white add — three.js does not run it through the vertex
+  // colours — so it is a fixed number of lamps against a scene whose every other light has dropped.
+  // The same 0.18 that is a faint sheen at noon is most of what you see of him at midnight: the red
+  // goes salmon, the blue goes lilac, and the shading flattens out of him altogether. He still pops
+  // after dark at 0.1, because the roof he is sitting on fell further than he did.
+  // Keyed off the window glow rather than the name of the hour: it already measures how dark the block
+  // is, and it follows the weather dimming for free. Day sits at win 0.3, night at 1.
+  suitMat.emissiveIntensity = 0.18 - 0.08 * clamp((L.win - 0.3) / 0.7, 0, 1);
   glowMat.opacity = L.lamp * 0.8;
   // By day the pools under the lamps are transparent; additive blending costs the same whether it
   // adds light or nothing, so take them out of the frame instead of adding zero to it.
@@ -1011,18 +1011,26 @@ const SPIDEY = {
   // launch all want different ones. `grip` is the parapet corner itself, exactly on the building, and
   // it is where the thread bites — aimed anywhere inside the footprint the last stretch of web
   // disappears into the roof, which is what makes it look like it went through the wall rather than
-  // caught the edge. `at` is where his feet go. It used to be a full two metres inside, from when he
-  // stood there: a standing figure on the corner itself hovers beside it. Crouched with a hand on
-  // the roof he wants the opposite — under a metre in, so the fist and the near foot are on the lip
-  // and he is sitting on the corner rather than near it. `edge` is a stride outside, the lip he
-  // steps off, because starting a swing from inside the footprint drops him through his own roof.
+  // caught the edge. `at` is his origin while he sits, and it is set by where his *hand* has to land,
+  // not by his feet: the planted fist is 2.4 m in front of him, so an origin on the corner itself puts
+  // the hand in mid-air past the lip. Four metres in sets the fist on the deck a stride inside the
+  // parapet with his toes behind it. `edge` is a stride *outside*, the lip he steps off, because
+  // starting a swing from inside the footprint drops him through his own roof.
+  // `look` is the way he is facing while he sits there, and it is authored per corner rather than
+  // derived, because the only thing it has to satisfy is the camera. This view is fixed and almost
+  // isometric, and a crouch seen head-on or from behind is a man standing up — the bent knee and the
+  // planted arm are only legible in profile. Each of these is the roof direction that projects
+  // closest to horizontal on screen *and* points off the building, so he is also looking at something.
   // The avenue tower first, then one block over the street, then the roof up by the clock.
   perches: [
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
-    // leaves him behind ninety-six metres of his own building for a third of the arc.
-    { grip: [18.5, 95.7, 106.6], at: [19.3, 95.7, 107.4], edge: [17.0, 95.7, 105.1], dwell: 15 },
-    { grip: [66.9, 49.5, 35.6], at: [67.7, 49.5, 34.8], edge: [65.4, 49.5, 37.0], dwell: 8.5 },
-    { grip: [18.5, 49.5, -41.5], at: [19.3, 49.5, -42.3], edge: [17.0, 49.5, -40.0], dwell: 10 },
+    // leaves him behind ninety-six metres of his own building for a third of the arc. Here the outward
+    // diagonal happens to be the flat one — it projects to almost exactly screen-left.
+    { grip: [18.5, 95.7, 106.6], at: [21.3, 95.7, 109.4], edge: [17.0, 95.7, 105.1], look: [-1, 0, -1], dwell: 15 },
+    // On these two the outward diagonal runs down the screen, which is straight at the camera, so he
+    // looks out along -x instead: the same lip, read from the side.
+    { grip: [66.9, 49.5, 35.6], at: [70.5, 49.5, 32.8], edge: [65.4, 49.5, 37.0], look: [-1, 0, 0], dwell: 8.5 },
+    { grip: [18.5, 49.5, -41.5], at: [22.0, 49.5, -44.3], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
   ],
   // Low and well in front of the block, far enough toward the camera to start about a hundred and
   // twenty pixels below the bottom edge: the first web bites the corner of the tall tower and goes up
@@ -1055,11 +1063,31 @@ const SCALE = 5.4;
 const TH_LET = 0.52, LAND_T = 0.6;
 // Seconds at the end of a dwell spent in the raised-arm pose before the thread leaves his hand.
 const RISE = 0.35;
-// The emissive is lifted at night by applyLook — see SUIT_LIT. He is the one thing on screen that is
-// not a building, and after dark the lit windows are brighter than he is, so he sinks into them.
+// Seconds before that at which he stops looking out over the ledge and starts turning to face where
+// he is going. A full turn at TURN_RATE takes about a second, so the turn is finished and settled
+// before the arm comes up: body first, then the arm, then the thread. All three at once is a twitch.
+const TURN = 1.5, TURN_RATE = 2.6;   // radians per second
+// Rotate a flat facing vector toward `want` by at most `max` radians. A plain lerp between two
+// directions slows to nothing as it arrives and shortens the vector on the way; this keeps a constant
+// turn rate, which is what makes it read as him looking round rather than as the model being eased.
+function turnTo(face, want, max) {
+  const a = Math.atan2(face.z, face.x);
+  let d = Math.atan2(want.z, want.x) - a;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  const s = a + clamp(d, -max, max);
+  face.set(Math.cos(s), 0, Math.sin(s));
+}
+// A touch of self-light so the suit does not go the same grey as everything else it is lit by.
+// applyLook trims it as the block darkens — see the comment there; the number set here is the
+// daylight one.
 const suitMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18 });
 const spidey = new THREE.Group();
 const crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
+// He casts. A figure on a roof with no shadow floats, and on a corner — where the roof behind him is
+// edge-on and the thing behind *that* is a facade a block away — the shadow is the only cue left
+// that says which surface he is on. One more caster in the shadow pass, and he is sitting down.
+for (const m of [crouchMesh, perchMesh, swingMesh]) m.castShadow = true;
 spidey.add(crouchMesh, perchMesh, swingMesh);
 // Three poses, one of them at a time. Setting them one by one at each site is how a pose gets left
 // on and two of him are drawn inside each other.
@@ -1197,7 +1225,7 @@ function buildHops() {
 
 const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
-const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3();
+const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3();
 function aim(up, fwd) {
   by.copy(up).normalize();
   bx.copy(fwd).addScaledVector(by, -fwd.dot(by));
@@ -1314,12 +1342,18 @@ function updateSpidey(dt) {
     }
     return;
   }
-  // Perched: hunkered on the corner with a hand on the roof, looking the way he is going next.
-  // Nothing bobs — his feet are on the roof, and a figure that drifts up and down on a rooftop is a
-  // figure that is not on it.
+  // Perched: hunkered on the corner with a fist on the roof, looking out over the ledge, and only at
+  // the end turning to where he is going next. Nothing bobs — his feet are on the roof, and a figure
+  // that drifts up and down on a rooftop is a figure that is not on it.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
-  spid.face.subVectors(next.A, spid.pos).setY(0).normalize();
+  // He sits looking out along `look` and only turns to the next anchor at the end. This is not
+  // decoration: the anchors sit nearly dead away from this camera, and a crouch seen from behind is a
+  // man standing up. `look` is the one angle at which a bent knee and a planted arm survive at forty
+  // pixels, which is why it is authored per corner and not derived from where he is going.
+  if (spid.t >= p.dwell - RISE - TURN) tmp.subVectors(next.A, spid.pos);
+  else tmp.set(p.look[0], 0, p.look[2]);
+  turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
   spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
   // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
