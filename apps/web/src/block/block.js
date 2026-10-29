@@ -1193,21 +1193,32 @@ const SCALE = 5.4;
 // fastest, so the last fifth of the arc arrived in two frames and read as a teleport. Letting go at
 // TH_LET and sailing the rest is both calmer to watch and what he actually does.
 const TH_LET = 0.52, LAND_T = 0.6;
-// Seconds at the end of a dwell spent in the raised-arm pose before the thread leaves his hand.
-const RISE = 0.35;
-// Seconds before that at which he stops looking out over the ledge and starts turning to face where
-// he is going. A full turn at TURN_RATE takes about a second, so the turn is finished and settled
-// before the arm comes up: body first, then the arm, then the thread. All three at once is a twitch.
-const TURN = 1.5, TURN_RATE = 2.6;   // radians per second
 // Seconds at the start of a dwell spent coming out of the landing crouch and shuffling to the lip.
 const SETTLE = 1.2;
+// The exit, counted back from the moment the thread leaves his hand. Four beats, one at a time:
+//
+//   STAND_T  he pulls himself back off the lip and comes up out of the sit
+//   TURN     he turns on the spot to face the next anchor
+//   ARM_T    the arm comes up and points at it
+//   RISE     two frames of the point held, and the web goes
+//
+// They were overlapping before, and that was the thing that looked wrong. He stood up out of the
+// sit over half a second while the slide back from the lip took three times as long, so for most of
+// standing up his feet were planted on thin air out past the parapet. And he began turning on the
+// frame he began standing, which is a seated man starting to rotate.
+//
+// The point is the trigger, so ARM_T ends where the thwip starts. RISE is only a cushion: at 24 fps
+// a raise that lands on the same frame as the shot can land one frame late, and the thread would
+// then leave a fist that is still on its way up.
+const STAND_T = 0.75, TURN = 1.2, ARM_T = 0.45, RISE = 0.12;
+const EXIT = STAND_T + TURN + ARM_T + RISE;
+const TURN_RATE = 2.6;   // radians per second; TURN at this rate covers half a circle
 // How long each change of pose takes to cross over. Sitting is the slow one — it is his whole body
 // folding down over a parapet, and it is timed to *end* where the shuffle to the lip ends, so the
-// walk out and the sit down are one move instead of a walk and then a swap. Getting up is quicker
-// than sitting, the way it is. The arm coming up is the quick one and has to finish inside RISE, or
-// the thread leaves a hand that is still on its way. The reach at the end of a toss is quicker
-// still: it is the half-second before he hits a parapet, and there is no time in it to be gentle.
-const SIT_T = 0.7, STAND_T = 0.5, ARM_T = 0.3, REACH_T = 0.28;
+// walk out and the sit down are one move instead of a walk and then a swap. The reach at the end of
+// a toss is the quick one: it is the half-second before he hits a parapet, and there is no time in
+// it to be gentle.
+const SIT_T = 0.7, REACH_T = 0.28;
 const smooth = (k) => k * k * (3 - 2 * k);
 // Rotate a flat facing vector toward `want` by at most `max` radians. A plain lerp between two
 // directions slows to nothing as it arrives and shortens the vector on the way; this keeps a constant
@@ -1268,9 +1279,9 @@ webGeo.translate(0, 0.5, 0);   // base at the origin, so the tube runs 0..1 up +
 const WEB_R = 0.15;            // metres of radius: a thread with a width, not a cable slung off a crane
 // Thread, not cable. At 0.85 it was a white rod laid over the city; the facade behind it has to come
 // through, or the one thing on screen that is supposed to be gossamer is the most solid thing in the
-// frame. Not lower than this, though: it still has to hold together across a room, and at 0.45 it
-// vanished into a pale roof.
-const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.6 }));
+// frame. This is about as far as it goes — it still has to hold together across a room, and the roofs
+// it crosses are pale.
+const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.46 }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
 
@@ -1539,27 +1550,27 @@ function updateSpidey(dt) {
   // that drifts up and down on a rooftop is a figure that is not on one.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
-  const rise = p.dwell - RISE - TURN;
-  // He sits looking out along `look` and only turns to the next anchor when he stands. This is not
-  // decoration: the anchors sit nearly dead away from this camera, and a seated figure seen from
-  // behind is a shapeless lump. `look` is the one angle at which the hang of the legs and the arm on
-  // the knee survive at forty pixels, which is why it is authored per corner and not derived.
-  if (spid.t >= rise) tmp.subVectors(next.A, atV.fromArray(p.at));
+  const rise = p.dwell - EXIT;
+  // He sits looking out along `look` and only turns to the next anchor once he is on his feet. This
+  // is not decoration: the anchors sit nearly dead away from this camera, and a seated figure seen
+  // from behind is a shapeless lump. `look` is the one angle at which the hang of the legs and the
+  // arm on the knee survive at forty pixels, which is why it is authored per corner and not derived.
+  if (spid.t >= rise + STAND_T) tmp.subVectors(next.A, atV.fromArray(p.at));
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
   // Out to the lip and back again. `at` is set by where the crouch's planted fist lands, a stride
   // inside the parapet; `sit` is a metre from it, because a sit is only a sit if the legs are over
   // the drop. Sliding between them is what makes the sit something he does rather than somewhere he
-  // appears.
-  const k = spid.t < SETTLE ? smooth(spid.t / SETTLE) : 1 - smooth(clamp((spid.t - rise) / TURN, 0, 1));
+  // appears. Coming back takes exactly as long as standing up does, so the feet arrive on the deck
+  // on the frame they become feet that are standing on it.
+  const k = spid.t < SETTLE ? smooth(spid.t / SETTLE) : 1 - smooth(clamp((spid.t - rise) / STAND_T, 0, 1));
   spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), k);
   spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
-  // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
-  // change and a thwip on the same frame. The crouch is only the hinge between standing and sitting
-  // at either end; the long middle of the dwell is the sit. Each of these is asked for early enough
-  // that it *arrives* on its beat rather than starting there — the sit a whole SIT_T before the
-  // shuffle to the lip is over, the arm a whole ARM_T before the thread goes.
+  // The crouch is only the hinge between standing and sitting at either end; the long middle of the
+  // dwell is the sit. Each of these is asked for early enough that it *arrives* on its beat rather
+  // than starting there — the sit a whole SIT_T before the shuffle to the lip is over, the arm a
+  // whole ARM_T before the thread goes, which is what makes the point and the thwip one action.
   if (spid.t >= p.dwell - RISE - ARM_T) pose("perch", ARM_T);
   else if (spid.t >= rise) pose("crouch", STAND_T);
   else if (spid.t >= SETTLE - SIT_T) pose("sit", SIT_T);
