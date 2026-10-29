@@ -94,16 +94,33 @@ export async function fetchWeather(loc) {
   return { kind, temp: Math.round(w.tempF), label: kind === "wind" ? "Windy" : WMO(w.code), isDay: w.isDay, sun: d.sun };
 }
 
-/** The bridge's event stream: a snapshot, then one event per change. onDevice gets each device. */
-export function connectDevices(onDevice) {
+/**
+ * The bridge's event stream: a snapshot, then one event per change. `onDevice` gets each changed device.
+ * `onSnapshot` takes the whole thing instead — a screen that wants it is usually a screen that has to
+ * replace its list outright, and the snapshot is the only place the armed mood (`activeScene`) rides:
+ * a device event says what a lamp did, never which mood the house is in.
+ */
+export function connectDevices(onDevice, onSnapshot) {
   if (typeof EventSource === "undefined") return null;
   const es = new EventSource("/api/home/events");
   es.onmessage = (e) => {
     let ev; try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.type === "snapshot") (ev.snapshot && ev.snapshot.devices || []).forEach(onDevice);
-    else if (ev.type === "device") onDevice(ev.device);
+    if (ev.type === "snapshot") {
+      const snap = ev.snapshot || {};
+      if (onSnapshot) onSnapshot(snap);
+      else (snap.devices || []).forEach(onDevice);
+    } else if (ev.type === "device") onDevice(ev.device);
   };
   return es;
+}
+
+/** Run a scene; returns the snapshot the bridge echoes back (so the mood is known at once), or null. */
+export async function runScene(id) {
+  try {
+    const r = await fetch(`/api/home/scenes/${encodeURIComponent(id)}`, { method: "POST" });
+    if (r.ok) return await r.json();
+  } catch { /* the stream brings the result anyway */ }
+  return null;
 }
 
 /** Act on a device (a lamp, a speaker); returns the device the bridge echoes back, or null. */
