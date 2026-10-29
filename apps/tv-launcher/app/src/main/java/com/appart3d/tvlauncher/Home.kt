@@ -68,14 +68,27 @@ data class Scene(val id: String, val name: String)
 /**
  * What a speaker of the home is playing. `where` is the room — the lead one when several play together,
  * and `rooms` says how many — so the card can say where the music is, not only what it is.
+ *
+ * One of these per *speaker*, and every speaker of a Sonos group carries the same music with the same
+ * `where`: that is what lets the details view list the rooms of one group with their own volumes.
+ * Transport goes to the group whichever member it is sent to; volume is that room's alone.
  */
 data class Playing(
     val id: String,
+    /** The speaker's own name (its room), as opposed to `where`, which is the group's lead. */
+    val name: String,
     val title: String,
     val artist: String,
+    val app: String,
     val where: String,
     val rooms: Int,
     val playing: Boolean,
+    /** This room's volume 0..100, null when the speaker does not report one. */
+    val volume: Int?,
+    /** What the source allows right now: a TV or line-in stream has no transport, radio has no skipping. */
+    val canPlayPause: Boolean,
+    val canNext: Boolean,
+    val canPrevious: Boolean,
 ) {
     companion object {
         /** True of any speaker, playing or not — so one falling silent can clear the card. */
@@ -91,13 +104,21 @@ data class Playing(
             if (state != "playing" && state != "paused") return null
             val group = m.optJSONArray("group")
             val app = m.optString("app")
+            val caps = d.optJSONObject("capabilities")?.optJSONArray("media")
+            val controls = (0 until (caps?.length() ?: 0)).map { caps!!.optString(it) }
             return Playing(
                 id = d.getString("id"),
+                name = d.optString("name"),
                 title = m.optString("title").ifEmpty { app }.ifEmpty { "Playing" },
                 artist = m.optString("artist").ifEmpty { app },
+                app = app,
                 where = group?.optString(0)?.takeIf { it.isNotEmpty() } ?: d.optString("name"),
                 rooms = group?.length() ?: 1,
                 playing = state == "playing",
+                volume = if (st.has("volume")) st.optInt("volume").coerceIn(0, 100) else null,
+                canPlayPause = "play" in controls || "pause" in controls,
+                canNext = "next" in controls,
+                canPrevious = "previous" in controls,
             )
         }
     }
@@ -208,6 +229,20 @@ class HomeFeed(
         fun fanSpeed(base: String, token: String, lamp: Lamp, step: Int): Lamp? =
             action(base, token, lamp, JSONObject().put("type", "speed").put("value", if (step <= 0) 0 else (step * 100.0 / lamp.fanSteps).roundToInt()))
 
+        /**
+         * Transport on a speaker: "playPause", "next", "previous". The bridge sends it to the group's
+         * coordinator, so it acts on every room playing together, whichever member it is addressed to.
+         * Throws on errors.
+         */
+        fun media(base: String, token: String, speaker: Playing, command: String) {
+            device(base, token, speaker.id, JSONObject().put("type", "media").put("command", command))
+        }
+
+        /** Volume 0..100 of one room (never the group's). Throws on errors. */
+        fun volume(base: String, token: String, speaker: Playing, value: Int) {
+            device(base, token, speaker.id, JSONObject().put("type", "volume").put("value", value.coerceIn(0, 100)))
+        }
+
         /** POST /api/home/scenes/:id (changes come back through the event stream). Throws on errors. */
         fun scene(base: String, token: String, id: String) {
             post(base, token, "/api/home/scenes/${URLEncoder.encode(id, "UTF-8")}", JSONObject())
@@ -222,7 +257,10 @@ class HomeFeed(
         }
 
         private fun action(base: String, token: String, lamp: Lamp, action: JSONObject): Lamp? =
-            Lamp.parse(post(base, token, "/api/home/devices/${URLEncoder.encode(lamp.id, "UTF-8")}/action", action))
+            Lamp.parse(device(base, token, lamp.id, action))
+
+        private fun device(base: String, token: String, id: String, action: JSONObject): JSONObject =
+            post(base, token, "/api/home/devices/${URLEncoder.encode(id, "UTF-8")}/action", action)
 
         private fun post(base: String, token: String, path: String, body: JSONObject): JSONObject {
             val c = URL("$base$path").openConnection() as HttpURLConnection

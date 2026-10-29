@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.view.animation.DecelerateInterpolator
 import android.graphics.drawable.TransitionDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -75,7 +76,18 @@ class MainActivity : Activity() {
     private lateinit var npCard: LinearLayout
     private lateinit var npTitle: TextView
     private lateinit var npSub: TextView
+    private lateinit var npPrev: TextView
+    private lateinit var npPlay: TextView
+    private lateinit var npNext: TextView
+    private lateinit var npMore: TextView
     private val playing = LinkedHashMap<String, Playing>()
+    /** The group the card shows: what the transport row acts on and what the details view lists. */
+    private var nowPlaying: Playing? = null
+    /** The rooms of that group with their own volumes, over the lamps while it is open. */
+    private lateinit var speakers: SpeakersPanel
+    private lateinit var speakersView: FrameLayout
+    /** The lamps and the card, blocked from focus search while the details view covers them. */
+    private lateinit var homeColumn: LinearLayout
     /**
      * The real apartment (the original 3D view, `/?view=3d`), shown when Lights opens and the block has flown to
      * the door. Preloaded after the block is up and kept paused while hidden, so it opens at once.
@@ -175,6 +187,7 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         when {
             pairPanel.visibility == View.VISIBLE && store.token != null -> hidePairing()
+            speakersView.visibility == View.VISIBLE -> hideSpeakers()
             homeShowing -> hideHome()
             web.hasFocus() -> postToBlock("back")
             drawer.visibility == View.VISIBLE -> hideDrawer()
@@ -517,7 +530,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildHomePanel(): FrameLayout {
-        val column = LinearLayout(this).apply {
+        val column = LinearLayout(this).also { homeColumn = it }.apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(24), dp(12), dp(14))
             addView(TextView(context).apply {
@@ -535,20 +548,31 @@ class MainActivity : Activity() {
                 typeface = pixel
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         }
+        speakers = SpeakersPanel(this, ::setVolume)
+        speakersView = FrameLayout(this).apply {
+            setBackgroundColor(PAPER)
+            visibility = View.GONE
+            isClickable = true
+            setPadding(dp(16), dp(24), dp(12), dp(14))
+            addView(speakers, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
         return FrameLayout(this).apply {
             setBackgroundColor(PAPER)
             visibility = View.GONE
             translationX = dp(HOME_W).toFloat()
             isClickable = true
             addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(speakersView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(View(context).apply { setBackgroundColor(INK) }, FrameLayout.LayoutParams(dp(2), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START))
         }
     }
 
     /**
-     * What the home is playing, under the lamps. Display only — the remote keeps running down the lamps and
-     * out, as it did — but the panel is where you look to see what the home is doing, and music is half of it.
-     * It is hidden outright when nothing is on, so it never leaves a blank shelf.
+     * What the home is playing, under the lamps: the track, then a row of transport keys. ↓ off the last lamp
+     * lands on the title, which opens the app the music comes from; ↓ again is the row that pauses it, skips,
+     * or opens the rooms and their volumes. It is hidden outright when nothing is on, so it never leaves a
+     * blank shelf — and the keys that the source does not allow (a TV stream has none, radio cannot skip) are
+     * hidden one by one rather than shown dead.
      */
     private fun buildNowPlaying(): LinearLayout {
         npTitle = TextView(this).apply {
@@ -557,6 +581,10 @@ class MainActivity : Activity() {
             typeface = pixel
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            isFocusable = true
+            setPadding(dp(4), dp(2), dp(4), dp(2))
+            setOnClickListener { openMusicApp() }
+            setOnFocusChangeListener { _, f -> paintNpFocus(npTitle, f) }
         }
         npSub = TextView(this).apply {
             setTextColor(0xFF6A6170.toInt())
@@ -564,26 +592,133 @@ class MainActivity : Activity() {
             typeface = pixel
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(4), 0, dp(4), 0)
         }
+        npPrev = npKey("⏮") { sendMedia("previous") }
+        npPlay = npKey("⏯") { sendMedia("playPause") }
+        npNext = npKey("⏭") { sendMedia("next") }
+        npMore = npKey("≡") { showSpeakers() }
         npCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            setPadding(dp(8), dp(8), dp(8), dp(2))
+            setPadding(dp(4), dp(8), dp(4), dp(2))
             addView(View(context).apply { setBackgroundColor(0x22000000) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply { bottomMargin = dp(8) })
             addView(npTitle)
             addView(npSub)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                setPadding(dp(2), dp(6), dp(2), dp(2))
+                listOf(npPrev, npPlay, npNext, npMore).forEach {
+                    addView(it, LinearLayout.LayoutParams(0, dp(28), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+                }
+            })
         }
         return npCard
     }
 
-    /** The one speaker group worth showing: playing before paused, then whichever fills the most rooms. */
+    /** One transport key of the card: a small paper pill that turns to ink under the remote. */
+    private fun npKey(glyph: String, onClick: () -> Unit): TextView {
+        val key = TextView(this)
+        key.text = glyph
+        key.textSize = 13f
+        key.typeface = pixel
+        key.gravity = Gravity.CENTER
+        key.isFocusable = true
+        key.setOnClickListener { onClick() }
+        key.setOnFocusChangeListener { _, f -> paintNpFocus(key, f) }
+        paintNpFocus(key, false)
+        return key
+    }
+
+    private fun paintNpFocus(view: TextView, focused: Boolean) {
+        view.background = if (focused) GradientDrawable().apply { setColor(INK) } else null
+        view.setTextColor(if (focused) PAPER else INK)
+    }
+
+    /**
+     * The one speaker group worth showing: playing before paused, then whichever fills the most rooms.
+     * Re-run on every change from the bridge, so the card follows the music from room to room.
+     */
     private fun renderPlaying() {
         val np = playing.values.maxWithOrNull(compareBy({ it.playing }, { it.rooms }, { it.title }))
+        nowPlaying = np
         npCard.visibility = if (np == null) View.GONE else View.VISIBLE
-        if (np == null) return
+        if (np == null) return hideSpeakers()
         npTitle.text = "${if (np.playing) "♪" else "❚❚"} ${np.title}"
+        // Only a track that leads somewhere takes the remote; otherwise ↓ off the lamps goes straight to the keys.
+        npTitle.isFocusable = np.app in MUSIC_APPS
         val where = if (np.rooms > 1) getString(R.string.np_rooms, np.where, np.rooms) else np.where
         npSub.text = if (np.artist.isEmpty()) where else "${np.artist} · $where"
+        npPrev.visibility = if (np.canPrevious) View.VISIBLE else View.GONE
+        npPlay.visibility = if (np.canPlayPause) View.VISIBLE else View.GONE
+        npNext.visibility = if (np.canNext) View.VISIBLE else View.GONE
+        npPlay.text = if (np.playing) "❚❚" else "▶"
+        if (speakersView.visibility == View.VISIBLE) speakers.setSpeakers(np.title, groupOf(np))
+    }
+
+    /** Every room playing this, the group's lead first — one `Playing` each, each with its own volume. */
+    private fun groupOf(np: Playing): List<Playing> =
+        playing.values.filter { it.where == np.where }.sortedByDescending { it.name == it.where }
+
+    /** A transport key: shown at once on the card, then confirmed (or undone) by the bridge's own event. */
+    private fun sendMedia(command: String) {
+        val np = nowPlaying ?: return
+        val base = store.url ?: return
+        val token = store.token ?: return
+        if (command == "playPause") {
+            playing[np.id] = np.copy(playing = !np.playing)
+            renderPlaying()
+        }
+        io.execute {
+            val result = runCatching { HomeFeed.media(base, token, np, command) }
+            main.post { result.onFailure { toast(getString(R.string.command_failed, np.where)) } }
+        }
+    }
+
+    /** ← / → on a room of the details view: shown at once, sent straight away (volume is cheap and per room). */
+    private fun setVolume(speaker: Playing, value: Int) {
+        val base = store.url ?: return
+        val token = store.token ?: return
+        playing[speaker.id] = speaker.copy(volume = value)
+        nowPlaying?.let { speakers.setSpeakers(it.title, groupOf(it)) }
+        io.execute {
+            val result = runCatching { HomeFeed.volume(base, token, speaker, value) }
+            main.post { result.onFailure { toast(getString(R.string.setting_failed, speaker.name)) } }
+        }
+    }
+
+    /** The rooms and their volumes, over the lamps. Back (or the music stopping) brings the lamps back. */
+    private fun showSpeakers() {
+        val np = nowPlaying ?: return
+        speakers.setSpeakers(np.title, groupOf(np))
+        if (speakers.isEmpty()) return
+        speakersView.visibility = View.VISIBLE
+        // A sibling overlay does not stop focus search on its own: ↓ off the last room would land on a lamp
+        // behind it. Same confinement the All-apps drawer needs, for the same reason.
+        homeColumn.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        speakersView.post { speakers.focusFirst() }
+    }
+
+    private fun hideSpeakers(refocus: Boolean = true) {
+        if (speakersView.visibility != View.VISIBLE) return
+        speakersView.visibility = View.GONE
+        homeColumn.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        if (!refocus) return
+        if (npCard.visibility == View.VISIBLE) npMore.requestFocus() else lights.requestFocus()
+    }
+
+    /**
+     * OK on the track: the app the sound comes from, on the TV itself. The bridge names the source as Sonos
+     * reports it ("Spotify", "Apple Music", "TV"…); what is not an app we can open — a radio stream, the TV's
+     * own sound — leaves the title inert rather than opening something arbitrary. Spotify TV is often not
+     * installed on a Fire TV, so the fallback is its page in the Appstore: one more OK and it is there.
+     */
+    private fun openMusicApp() {
+        val pkg = MUSIC_APPS[nowPlaying?.app] ?: return
+        val intent = catalog.launchIntent(pkg)
+        if (intent != null) return start(intent)
+        start(Intent(Intent.ACTION_VIEW, Uri.parse("amzn://apps/android?p=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** Creates and loads the apartment view (hidden, under the native views) if it is not there yet. */
@@ -679,6 +814,7 @@ class MainActivity : Activity() {
         homeShowing = false
         atDoor = false
         main.removeCallbacks(panelFallback)
+        hideSpeakers(refocus = false)
         web.onResume()
         homeWeb?.let { h -> h.animate().alpha(0f).setDuration(400).withEndAction { if (!homeShowing) h.onPause() }.start() }
         if (homePanel.visibility == View.VISIBLE) homePanel.animate().translationX(dp(HOME_W).toFloat()).setDuration(320).withEndAction { homePanel.visibility = View.GONE }.start()
@@ -1067,6 +1203,16 @@ class MainActivity : Activity() {
         private const val HOME_W = 250
         /** The block's WebView id (stable across its re-creation), for the dock's ↑. */
         private val WEB_ID = View.generateViewId()
+        /**
+         * The source name the bridge reads off the speaker → the app to open on the TV. Fire OS package
+         * names: Spotify ships a separate TV build, Amazon Music and TuneIn are the Fire TV ones. A source
+         * that is not here (Radio, Music library, the TV's own sound) leaves the track inert.
+         */
+        private val MUSIC_APPS = mapOf(
+            "Spotify" to "com.spotify.tv.android",
+            "Amazon Music" to "com.amazon.bueller.music",
+            "TuneIn" to "tunein.player",
+        )
         private const val ALL_APPS_TAG = "__all_apps"
         private const val INPUT_TAG = "__inputs"
         private const val SIDE = 40
