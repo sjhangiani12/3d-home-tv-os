@@ -358,13 +358,48 @@ box(homeRoofAcc, HOME.x0 - 0.3, HOME.x1 + 0.3, HOME.floors * FH, HOME.floors * F
 const homeMesh = homeAcc.mesh(homeMat, { cast: true });
 const homeRoofMat = lam("#c0643f");
 const homeRoof = homeRoofAcc.mesh(homeRoofMat, { cast: true });
-// stoop and door on the street
+// stoop and door on the street. The door hangs on a hinge of its own rather than being baked into the
+// building, so the walk in can open it: a group at the jamb, the leaf built off to one side of it, and
+// `swingDoor` turns the group. Behind it, a plain dark panel — the hall, unlit — so that what opens
+// reveals somewhere to go instead of the wall of the façade.
+const DOOR_W = 1.6, DOOR_Y0 = CURB + 1.2, DOOR_Y1 = CURB + 3.6;
+const doorPivot = new THREE.Group();
 {
   const sx = HX, z = HOME.z0;
   const st = new Acc();
   for (let i = 0; i < 4; i++) box(st, sx - 1.5, sx + 1.5, CURB, CURB + 0.3 * (i + 1), z - 2.4 + i * 0.6, z);
   st.mesh(M.stoop, { cast: true });
-  const dr = new Acc(); box(dr, sx - 0.8, sx + 0.8, CURB + 1.2, CURB + 3.6, z - 0.06, z + 0.02); dr.mesh(M.door);
+  // Both panels sit just *in front* of the façade: the wall of the building is one solid box with no
+  // hole in it, so anything at or behind `z` is swallowed by its front face.
+  const hall = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_W, DOOR_Y1 - DOOR_Y0), new THREE.MeshBasicMaterial({ color: "#15100d" }));
+  hall.position.set(sx, (DOOR_Y0 + DOOR_Y1) / 2, z - 0.04); hall.rotation.y = Math.PI; scene.add(hall);
+  doorPivot.position.set(sx - DOOR_W / 2, DOOR_Y0, z - 0.1);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_Y1 - DOOR_Y0, 0.08), M.door);
+  leaf.position.set(DOOR_W / 2, (DOOR_Y1 - DOOR_Y0) / 2, 0);
+  leaf.castShadow = true; leaf.receiveShadow = true;
+  doorPivot.add(leaf); scene.add(doorPivot);
+}
+/**
+ * Swing the door: 0 shut, 1 wide. Outwards, towards the street. Inwards would be the truer thing for a
+ * stoop, but there is no hole in the façade for it to swing into: the leaf would pass behind the front
+ * face of the building and be eaten by it halfway through the swing. Out, it stays lit, it reads from
+ * the camera, and it clears the way in — the hinge is to the left and it never reaches the centre line
+ * the camera walks down.
+ */
+const DOOR_OPEN = 1.1;
+function swingDoor(to, ms) {
+  const from = doorPivot.rotation.y, end = to * DOOR_OPEN;
+  if (!ms) { doorPivot.rotation.y = end; return Promise.resolve(); }
+  return new Promise((res) => {
+    const t0 = performance.now();
+    const step = () => {
+      const k = clamp((performance.now() - t0) / ms, 0, 1);
+      // Eased out only: a door is heavy at the start and light by the end, and it must not bounce.
+      doorPivot.rotation.y = lerp(from, end, 1 - Math.pow(1 - k, 3));
+      if (k < 1) requestAnimationFrame(step); else res();
+    };
+    step();
+  });
 }
 // lit windows of the apartment: back (camera side) = the two bedrooms, front (street) = living room
 const homeWin = [];
@@ -962,20 +997,32 @@ const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplySc
 const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX, 6, 12.5), fov: 32 };
 const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
 const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
+// A step through the open door, into the dark of the hall, before the black takes over: the walk in ends by
+// going somewhere rather than by stopping dead on the threshold. Close enough to the doorway that the dark
+// panel behind the leaf covers the whole frame — so the fade to black has nothing to cut, it only deepens
+// a dark that is already there.
+const THROUGH = { pos: new THREE.Vector3(HX, 2.3, 12.15), target: new THREE.Vector3(HX, 2.5, 16), fov: 72 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
-// The lights drawer takes the right of the frame, so the apartment is centred in what is left of it rather
-// than in the whole: camera and target step sideways together along the screen-right of this view (a pan,
-// like the overview's), which slides the model ~215px left without re-aiming anything. Browser only — on
-// the TV the page stops at the door and the app draws its own panel.
+// Where the apartment sits in the frame. On its own it belongs in the middle. With the lights drawer taking
+// the right of the screen the middle is no longer the middle, so camera and target step sideways together
+// along the screen-right of this view (a pan, like the overview's) and it centres in what is left — about
+// 215px to the left. `setInsidePan` is the one switch, so whoever knows whether anything covers the frame
+// can say so: the browser always opens its drawer, the TV's panel belongs to the app.
 const IN_PAN = new THREE.Vector3(4.23, 0, 3.05);
-const IN_AT = HOUSE.clone().add(IN_C).add(IN_PAN);
-const INSIDE = { pos: IN_AT.clone().add(IN_OFF), target: IN_AT.clone(), fov: 41 };
+const IN_AT = new THREE.Vector3();
+const INSIDE = { pos: new THREE.Vector3(), target: new THREE.Vector3(), fov: 41 };
 // Where the apartment is revealed from, coming out of the black. It used to be an eye-level pose just inside
 // the door, which continued the walk in — but the apartment is a cutaway with no ceiling, so from down there
 // it read as an edge-on slab hanging in an empty sky, and the room labels piled up on one line. So: the same
 // angle as the settled view, just closer and wider. The reveal is a step back, and the first frame is already
 // the apartment rather than something that looks broken.
-const INSIDE_IN = { pos: IN_AT.clone().add(IN_OFF.clone().multiplyScalar(0.52)), target: IN_AT.clone(), fov: 58 };
+const INSIDE_IN = { pos: new THREE.Vector3(), target: new THREE.Vector3(), fov: 58 };
+function setInsidePan(panned) {
+  IN_AT.copy(HOUSE).add(IN_C); if (panned) IN_AT.add(IN_PAN);
+  INSIDE.pos.copy(IN_AT).add(IN_OFF); INSIDE.target.copy(IN_AT);
+  INSIDE_IN.pos.copy(IN_AT).add(IN_OFF.clone().multiplyScalar(0.52)); INSIDE_IN.target.copy(IN_AT);
+}
+setInsidePan(!TV);
 const cam = { pos: OVERVIEW.pos.clone(), target: OVERVIEW.target.clone(), fov: OVERVIEW.fov };
 function applyCam() {
   camera.position.copy(cam.pos); camera.lookAt(cam.target); camera.fov = cam.fov;
@@ -1020,6 +1067,15 @@ async function openHome() {
   await tween(HIGH, 1300);
   await tween(STREET, 1000);
   await tween(DOOR, 650);
+  // The door opens, then the camera steps through it into the dark of the hall — and the black that takes
+  // the screen is that darkness continued, rather than a cut. It also buys the apartment a beat to be set
+  // up behind it.
+  await swingDoor(1, 520);
+  // The black starts while the camera is still moving, so the last thing on screen is the doorway growing
+  // dark rather than a frame held against the jamb. It also buys the apartment a beat to be set up behind it.
+  const push = tween(THROUGH, 560);
+  await new Promise((r) => setTimeout(r, 240));
+  await Promise.all([push, fade(1)]);
   if (TV) {
     // On the TV the app fades its own apartment in over this page — the real scan, a whole second 3D page.
     // That page can be seconds from ready, and the app drops it whenever it leaves the screen to save
@@ -1031,7 +1087,6 @@ async function openHome() {
     // does not open the drawer (the app draws its own panel). The room is there the instant the black
     // lifts, the real apartment arrives into the same frame and the same colour a moment later, and if it
     // never arrives the screen is still a finished one.
-    await fade(1);
     house.visible = true; houseAmb.intensity = 0.55 * PI;
     enterInside(true);
     setPose(INSIDE);
@@ -1043,7 +1098,6 @@ async function openHome() {
     if (wantClose) { wantClose = false; closeHome(); }
     return;
   }
-  await fade(1);
   house.visible = true; houseAmb.intensity = 0.55 * PI; mode = "home";
   enterInside(true);
   setPose(INSIDE_IN);
@@ -1071,8 +1125,9 @@ async function closeHome() {
     await fade(1);
     house.visible = false; houseAmb.intensity = 0;
     enterInside(false);
-    setPose(DOOR);
+    setPose(THROUGH);
     await fade(0);
+    await Promise.all([tween(DOOR, 560), swingDoor(0, 560)]);
     await tween(STREET, 600);
     await tween(OVERVIEW, 1500);
     mode = "city"; flying = false; cityHud.forEach((e) => e.classList.remove("hide"));
@@ -1085,8 +1140,10 @@ async function closeHome() {
   await fade(1);
   house.visible = false; houseAmb.intensity = 0; mode = "city";
   enterInside(false);
-  setPose(DOOR);
+  // Out the way you came: standing in the open doorway, then back down onto the stoop as the door shuts.
+  setPose(THROUGH);
   await fade(0);
+  await Promise.all([tween(DOOR, 560), swingDoor(0, 560)]);
   await tween(STREET, 600);
   await tween(OVERVIEW, 1500);
   flying = false; cityHud.forEach((e) => e.classList.remove("hide"));
