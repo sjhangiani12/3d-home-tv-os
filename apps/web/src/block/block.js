@@ -16,7 +16,7 @@
 import * as THREE from "three";
 import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
 import * as P from "./paint.js";
-import { PERCH_G, SWING_G, FIST } from "./figure.js";
+import { CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
@@ -859,6 +859,15 @@ function applyLook() {
   sun.target.position.copy(target);
   facMats.forEach((m) => { m.emissiveIntensity = L.win * 0.9; });
   bandMat.emissiveIntensity = L.win * 0.6;
+  // He carries a little of his own light after dark. Everything else on a night block is either grey
+  // or a lit window, so a figure lit only by a blue moon goes the same grey as the roof he is on.
+  // Keyed off the window glow rather than off the name of the hour: it is already the measure of how
+  // dark the block is, and it moves with the weather dimming too. Day sits at win 0.3 and gets
+  // nothing — in daylight a glowing suit is a sticker.
+  // The emissive is a flat white add, not a tint of the suit — three.js does not run it through the
+  // vertex colours — so every point of it is also a point of pink. 0.1 is about where he separates
+  // from the roof without the red going to salmon; at 0.2 he is a lit sign.
+  suitMat.emissiveIntensity = 0.18 + 0.1 * clamp((L.win - 0.3) / 0.7, 0, 1);
   glowMat.opacity = L.lamp * 0.8;
   // By day the pools under the lamps are transparent; additive blending costs the same whether it
   // adds light or nothing, so take them out of the frame instead of adding zero to it.
@@ -1002,16 +1011,18 @@ const SPIDEY = {
   // launch all want different ones. `grip` is the parapet corner itself, exactly on the building, and
   // it is where the thread bites — aimed anywhere inside the footprint the last stretch of web
   // disappears into the roof, which is what makes it look like it went through the wall rather than
-  // caught the edge. `at` is two metres inside, where his feet go, because standing on the corner
-  // itself leaves him hovering beside it. `edge` is a stride outside, the lip he steps off, because
-  // starting a swing from inside the footprint drops him through his own roof.
+  // caught the edge. `at` is where his feet go. It used to be a full two metres inside, from when he
+  // stood there: a standing figure on the corner itself hovers beside it. Crouched with a hand on
+  // the roof he wants the opposite — under a metre in, so the fist and the near foot are on the lip
+  // and he is sitting on the corner rather than near it. `edge` is a stride outside, the lip he
+  // steps off, because starting a swing from inside the footprint drops him through his own roof.
   // The avenue tower first, then one block over the street, then the roof up by the clock.
   perches: [
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
     // leaves him behind ninety-six metres of his own building for a third of the arc.
-    { grip: [18.5, 95.7, 106.6], at: [20.5, 95.7, 108.6], edge: [17.0, 95.7, 105.1], dwell: 15 },
-    { grip: [66.9, 49.5, 35.6], at: [68.9, 49.5, 33.6], edge: [65.4, 49.5, 37.0], dwell: 8.5 },
-    { grip: [18.5, 49.5, -41.5], at: [20.5, 49.5, -43.6], edge: [17.0, 49.5, -40.0], dwell: 10 },
+    { grip: [18.5, 95.7, 106.6], at: [19.3, 95.7, 107.4], edge: [17.0, 95.7, 105.1], dwell: 15 },
+    { grip: [66.9, 49.5, 35.6], at: [67.7, 49.5, 34.8], edge: [65.4, 49.5, 37.0], dwell: 8.5 },
+    { grip: [18.5, 49.5, -41.5], at: [19.3, 49.5, -42.3], edge: [17.0, 49.5, -40.0], dwell: 10 },
   ],
   // Low and well in front of the block, far enough toward the camera to start about a hundred and
   // twenty pixels below the bottom edge: the first web bites the corner of the tall tower and goes up
@@ -1042,10 +1053,17 @@ const SCALE = 5.4;
 // fastest, so the last fifth of the arc arrived in two frames and read as a teleport. Letting go at
 // TH_LET and sailing the rest is both calmer to watch and what he actually does.
 const TH_LET = 0.52, LAND_T = 0.6;
+// Seconds at the end of a dwell spent in the raised-arm pose before the thread leaves his hand.
+const RISE = 0.35;
+// The emissive is lifted at night by applyLook — see SUIT_LIT. He is the one thing on screen that is
+// not a building, and after dark the lit windows are brighter than he is, so he sinks into them.
 const suitMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18 });
 const spidey = new THREE.Group();
-const perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
-spidey.add(perchMesh, swingMesh);
+const crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
+spidey.add(crouchMesh, perchMesh, swingMesh);
+// Three poses, one of them at a time. Setting them one by one at each site is how a pose gets left
+// on and two of him are drawn inside each other.
+function pose(which) { crouchMesh.visible = which === "crouch"; perchMesh.visible = which === "perch"; swingMesh.visible = which === "swing"; }
 spidey.scale.setScalar(SCALE);
 spidey.visible = false;
 scene.add(spidey);
@@ -1054,7 +1072,7 @@ scene.add(spidey);
 // instead, scaled along its length each frame, so it has a width that can be chosen.
 const webGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
 webGeo.translate(0, 0.5, 0);   // base at the origin, so the tube runs 0..1 up +y and scales by length
-const WEB_R = 0.22;            // metres of radius: a thread with a width, not a cable slung off a crane
+const WEB_R = 0.15;            // metres of radius: a thread with a width, not a cable slung off a crane
 const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.85 }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
@@ -1235,7 +1253,7 @@ function updateSpidey(dt) {
     hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE);
     hand.y += FIST[1] * SCALE;
     aim(UPV, spid.face);
-    perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true;
+    pose("perch"); spidey.visible = true;
     web.visible = true;
     // Barely eased: a cubic ease-out spends most of the shot already arrived, which looks like the
     // web snapping on. Nearly constant speed with a little settle at the end is a thread flying.
@@ -1258,7 +1276,7 @@ function updateSpidey(dt) {
     }
     const q = h.at(spid.th, h.pow);
     spid.pos.set(q.x, q.y, q.z);
-    perchMesh.visible = false; swingMesh.visible = true; spidey.visible = true;
+    pose("swing"); spidey.visible = true;
     rope.subVectors(h.A, spid.pos);
     spidey.position.copy(spid.pos).addScaledVector(rope, -HAND * SCALE / Math.max(1, rope.length()));
     aim(rope, spid.face);
@@ -1284,7 +1302,8 @@ function updateSpidey(dt) {
       .addScaledVector(h.LAND, -2 * k3 + 3 * k2);
     spidey.position.copy(spid.pos);
     aim(UPV, spid.face);
-    perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true;
+    // Still the reaching pose on the way in: this leg of the curve *is* the hand catching the ledge.
+    pose("perch"); spidey.visible = true;
     web.visible = k < 0.25;
     if (web.visible) setWeb(spid.pos, h.A);
     if (k >= 1) {
@@ -1295,14 +1314,18 @@ function updateSpidey(dt) {
     }
     return;
   }
-  // perched: standing on the corner, looking the way he is going next. Nothing bobs — his feet are on
-  // the roof, and a figure that drifts up and down on a rooftop is a figure that is not on it.
+  // Perched: hunkered on the corner with a hand on the roof, looking the way he is going next.
+  // Nothing bobs — his feet are on the roof, and a figure that drifts up and down on a rooftop is a
+  // figure that is not on it.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
   spid.face.subVectors(next.A, spid.pos).setY(0).normalize();
   spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
-  perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true; web.visible = false;
+  // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
+  // change and a thwip on the same frame.
+  pose(spid.t >= p.dwell - RISE ? "perch" : "crouch");
+  spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }
 

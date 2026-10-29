@@ -10,7 +10,7 @@
  * — that difference is the test.
  */
 import * as THREE from "three";
-import { PERCH_G, SWING_G } from "../block/figure.js";
+import { CROUCH_G, PERCH_G, SWING_G } from "../block/figure.js";
 
 const canvas = document.getElementById("gl");
 const poseLabel = document.getElementById("pose");
@@ -40,7 +40,7 @@ const mat = new THREE.MeshLambertMaterial({
   vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18,
 });
 
-const poses = [{ name: "perch", geo: PERCH_G }, { name: "swing", geo: SWING_G }];
+const poses = [{ name: "crouch", geo: CROUCH_G }, { name: "perch", geo: PERCH_G }, { name: "swing", geo: SWING_G }];
 let poseIx = 0;
 const figure = new THREE.Mesh(poses[0].geo, mat);
 // Both poses are built standing on y=0 in his own units; drop him so the middle of him is the origin

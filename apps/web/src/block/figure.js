@@ -247,6 +247,31 @@ const PERCH_G = body({
   // and the face is the one part of him worth seeing.
   elbR: [0.28, 1.05, 0.225], wriR: [0.50, 0.99, 0.205], fistR: [0.59, 0.96, 0.20],
 });
+// The same crouch, settled: the shooting arm is down and the fist is on the roof in front of his
+// feet, which is the pose that reads as *sitting on a corner* rather than waiting in one. The hand
+// has to reach past the toes and touch y = 0 — an arm that stops in mid-air at knee height reads as
+// a man balancing, and the point of the beat is that he is not. He stays in this until a third of a
+// second before the thread goes, when he swaps to PERCH_G and the arm comes up: the raise is the
+// wind-up, and firing on the same frame the arm moves is what made the web look like it teleported.
+const CROUCH_G = body({
+  headR: 0.125,
+  // Rolled a little further forward than the perch — the weight is over the planted hand now, not
+  // over the hips — and the head still carried high, because the one thing he is doing in this beat
+  // is looking at where he is going next.
+  pelvis: [-0.07, 0.62, 0], chest: [0.06, 1.00, 0], neck: [0.12, 1.13, 0], head: [0.19, 1.24, 0],
+  hipL: [-0.06, 0.59, -0.085], hipR: [-0.06, 0.59, 0.085],
+  kneeL: [0.34, 0.56, -0.155], kneeR: [0.34, 0.56, 0.155],
+  ankL: [0.13, 0.09, -0.115], ankR: [0.13, 0.09, 0.115],
+  toeL: [0.31, 0.045, -0.115], toeR: [0.31, 0.045, 0.115],
+  shoL: [0.04, 1.07, -0.168], shoR: [0.04, 1.07, 0.168],
+  // The left arm hangs inside the knee rather than outside it: outside, the forearm and the shin are
+  // the same two parallel strokes at this size and the leg stops reading as a leg.
+  elbL: [0.09, 0.76, -0.235], wriL: [0.18, 0.47, -0.205], fistL: [0.21, 0.38, -0.195],
+  // Straight down past the knee and onto the roof, a little outside the foot so the arm is clear of
+  // the shin. The fist ball is 0.058 across, so a fist centre at 0.055 sets the knuckles on the
+  // surface instead of hovering over it.
+  elbR: [0.31, 0.73, 0.245], wriR: [0.42, 0.21, 0.225], fistR: [0.45, 0.055, 0.22],
+});
 // On the web: one arm straight up the line, the other trailing, back arched, legs streaming behind
 // and bent at the knee, and the two legs bent differently because a body in the air is never
 // symmetrical. The fist is at y = HAND on the figure's own axis, which is where the web is tied —
@@ -268,4 +293,4 @@ const SWING_G = body({
 // chest. Used to start the thread so it comes out of the hand that is pointing at the corner.
 const FIST = [0.59, 0.96];
 
-export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, PERCH_G, SWING_G, FIST };
+export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, CROUCH_G, PERCH_G, SWING_G, FIST };
