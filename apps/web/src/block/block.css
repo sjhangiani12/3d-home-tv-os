@@ -37,8 +37,10 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
   background: radial-gradient(130% 105% at 50% 38%, rgba(255, 248, 228, 0.07) 0 52%, rgba(62, 48, 32, 0.3) 100%);
 }
 
-/* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets. */
-.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease, background 160ms ease, box-shadow 160ms ease; }
+/* Map card: warm paper, a thin ink edge, a shadow that falls rather than offsets.
+   The selected fill and ring are not animated. A card does not move when you land on it, so there is no
+   motion for an eased tint to belong to — it was only a delay. Fading in and out of frame still is. */
+.sign { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; font-family: var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 8px 12px 9px; white-space: nowrap; transition: opacity 300ms ease; }
 .sign::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 0; height: 0; border: 7px solid transparent; border-top: 8px solid var(--card-tail); transform: translateX(-50%); }
 /* Pinned to the left margin instead of to a point on the map, so no tail and no transform — the loop
    leaves `transform` alone for these, and `left/bottom` here are the whole of their placement. It sits on
@@ -93,7 +95,9 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 .marks .m b { position: absolute; top: 50px; white-space: nowrap; font: 400 17px/1 var(--font-display); letter-spacing: 0.04em; opacity: 0; transition: opacity 160ms ease; }
 .marks .m:focus-visible b, .marks .m.sel b { opacity: 0.72; }
 
-#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); border-radius: 16px; padding: 15px 19px; cursor: pointer; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, opacity 300ms ease; }
+/* The lift is kept and the tint is not: the rise is what the eye follows across the room, the colour is
+   only the answer to the press and may as well arrive on the next frame. */
+#chip { position: absolute; right: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font: 600 26px/1 var(--font-display); border-radius: 16px; padding: 15px 19px; cursor: pointer; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1), opacity 300ms ease; }
 #chip svg { width: 30px; height: 30px; }
 #chip .dots { display: flex; gap: 6px; }
 
@@ -134,7 +138,7 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   box-shadow: 0 10px 26px rgba(26, 18, 10, 0.34), inset 0 1px 0 rgba(255, 253, 246, 0.55);
   cursor: pointer;
-  transition: transform 160ms cubic-bezier(.2, .8, .2, 1), background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+  transition: transform 160ms cubic-bezier(.2, .8, .2, 1);
 }
 .app:focus-visible, .app.focus, .app.sel {
   outline: none; color: var(--ink); background: var(--card-sel);
