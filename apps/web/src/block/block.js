@@ -16,7 +16,7 @@
 import * as THREE from "three";
 import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
 import * as P from "./paint.js";
-import { SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
+import { POSE_G, POSE_IX, FIST } from "./figure.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
@@ -1201,6 +1201,13 @@ const RISE = 0.35;
 const TURN = 1.5, TURN_RATE = 2.6;   // radians per second
 // Seconds at the start of a dwell spent coming out of the landing crouch and shuffling to the lip.
 const SETTLE = 1.2;
+// How long each change of pose takes to cross over. Sitting is the slow one — it is his whole body
+// folding down over a parapet, and it is timed to *end* where the shuffle to the lip ends, so the
+// walk out and the sit down are one move instead of a walk and then a swap. Getting up is quicker
+// than sitting, the way it is. The arm coming up is the quick one and has to finish inside RISE, or
+// the thread leaves a hand that is still on its way. The reach at the end of a toss is quicker
+// still: it is the half-second before he hits a parapet, and there is no time in it to be gentle.
+const SIT_T = 0.7, STAND_T = 0.5, ARM_T = 0.3, REACH_T = 0.28;
 const smooth = (k) => k * k * (3 - 2 * k);
 // Rotate a flat facing vector toward `want` by at most `max` radians. A plain lerp between two
 // directions slows to nothing as it arrives and shortens the vector on the way; this keeps a constant
@@ -1218,16 +1225,38 @@ function turnTo(face, want, max) {
 // daylight one.
 const suitMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18 });
 const spidey = new THREE.Group();
-const sitMesh = new THREE.Mesh(SIT_G, suitMat), crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
+const suit = new THREE.Mesh(POSE_G, suitMat);
 // He casts. A figure on a roof with no shadow floats, and on a corner — where the roof behind him is
 // edge-on and the thing behind *that* is a facade a block away — the shadow is the only cue left
 // that says which surface he is on. One more caster in the shadow pass, and he is sitting down.
-for (const m of [sitMesh, crouchMesh, perchMesh, swingMesh]) m.castShadow = true;
-spidey.add(sitMesh, crouchMesh, perchMesh, swingMesh);
-// Four poses, one of them at a time. Setting them one by one at each site is how a pose gets left
-// on and two of him are drawn inside each other.
-const POSES = { sit: sitMesh, crouch: crouchMesh, perch: perchMesh, swing: swingMesh };
-function pose(which) { for (const k in POSES) POSES[k].visible = k === which; }
+suit.castShadow = true;
+spidey.add(suit);
+// Four poses, and any mixture of two of them. Each call site still just names the pose it wants;
+// what changed is that arriving at one takes POSE_T seconds instead of a frame. Standing up out of
+// a landing crouch is half a metre of hip travel, and done as a cut it reads as the model being
+// swapped rather than as him moving — which is exactly what it was.
+//
+// The blend is held here rather than in the poses themselves because the dwell asks for the same
+// pose on most frames: `pose(x)` on an unchanged `x` has to be free, or every frame restarts the
+// fade and nothing ever arrives.
+const POSE_T = 0.42;
+const blend = { from: suit.morphTargetInfluences.slice(), to: "perch", k: 1, dur: POSE_T };
+function pose(which, dur = POSE_T) {
+  if (which === blend.to) return;
+  // The pose he is leaving is wherever he actually is, which during an interrupted fade is between
+  // two of them. Snapping back to a pure pose here is what would make a quick change jump.
+  blend.from = suit.morphTargetInfluences.slice();
+  blend.to = which;
+  blend.k = 0;
+  blend.dur = dur;
+}
+function stepPose(dt) {
+  if (blend.k >= 1) return;
+  blend.k = clamp(blend.k + dt / blend.dur, 0, 1);
+  const w = suit.morphTargetInfluences, e = smooth(blend.k), b = POSE_IX[blend.to];
+  for (let i = 0; i < w.length; i++) w[i] = blend.from[i] * (1 - e);
+  if (b >= 0) w[b] += e;
+}
 spidey.scale.setScalar(SCALE);
 spidey.visible = false;
 scene.add(spidey);
@@ -1237,7 +1266,11 @@ scene.add(spidey);
 const webGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
 webGeo.translate(0, 0.5, 0);   // base at the origin, so the tube runs 0..1 up +y and scales by length
 const WEB_R = 0.15;            // metres of radius: a thread with a width, not a cable slung off a crane
-const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.85 }));
+// Thread, not cable. At 0.85 it was a white rod laid over the city; the facade behind it has to come
+// through, or the one thing on screen that is supposed to be gossamer is the most solid thing in the
+// frame. Not lower than this, though: it still has to hold together across a room, and at 0.45 it
+// vanished into a pale roof.
+const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.6 }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
 
@@ -1398,6 +1431,7 @@ function updateSpidey(dt) {
   if (mode === "home") { spidey.visible = web.visible = false; return; }
   if (!HOPS) buildHops();
   spid.t += dt;
+  stepPose(dt);
   const h = HOPS[spid.hop];
   if (spid.phase === "away") {
     spidey.visible = web.visible = false;
@@ -1488,7 +1522,7 @@ function updateSpidey(dt) {
     // thing the swing never looks like in the game: there the release is the part where he is longest
     // and fastest, arms and legs trailing, and the tuck only happens at the ledge. So the swing pose
     // holds for the first half of the toss and the reach is the second.
-    pose(k < 0.52 ? "swing" : "perch"); spidey.visible = true;
+    pose(k < 0.52 ? "swing" : "perch", REACH_T); spidey.visible = true;
     web.visible = k < 0.25;
     if (web.visible) setWeb(spid.pos, h.A);
     if (k >= 1) {
@@ -1523,10 +1557,13 @@ function updateSpidey(dt) {
   aim(UPV, spid.face);
   // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
   // change and a thwip on the same frame. The crouch is only the hinge between standing and sitting
-  // at either end; the long middle of the dwell is the sit.
-  if (spid.t >= p.dwell - RISE) pose("perch");
-  else if (spid.t < SETTLE * 0.45 || spid.t >= rise) pose("crouch");
-  else pose("sit");
+  // at either end; the long middle of the dwell is the sit. Each of these is asked for early enough
+  // that it *arrives* on its beat rather than starting there — the sit a whole SIT_T before the
+  // shuffle to the lip is over, the arm a whole ARM_T before the thread goes.
+  if (spid.t >= p.dwell - RISE - ARM_T) pose("perch", ARM_T);
+  else if (spid.t >= rise) pose("crouch", STAND_T);
+  else if (spid.t >= SETTLE - SIT_T) pose("sit", SIT_T);
+  else pose("crouch", STAND_T);
   spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }
