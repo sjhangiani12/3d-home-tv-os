@@ -16,7 +16,7 @@
 import * as THREE from "three";
 import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
 import * as P from "./paint.js";
-import { CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
+import { SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
@@ -1022,15 +1022,20 @@ const SPIDEY = {
   // planted arm are only legible in profile. Each of these is the roof direction that projects
   // closest to horizontal on screen *and* points off the building, so he is also looking at something.
   // The avenue tower first, then one block over the street, then the roof up by the clock.
+  // `sit` is where he spends nearly all of the dwell, and it is a different point again: a sit only
+  // works if his backside is on the lip and his legs are out over nothing, so it sits a metre inside
+  // the parapet along `look` rather than four. He stands up and steps back to `at` for the launch.
   perches: [
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
     // leaves him behind ninety-six metres of his own building for a third of the arc. Here the outward
     // diagonal happens to be the flat one — it projects to almost exactly screen-left.
-    { grip: [18.5, 95.7, 106.6], at: [21.3, 95.7, 109.4], edge: [17.0, 95.7, 105.1], look: [-1, 0, -1], dwell: 15 },
+    { grip: [18.5, 95.7, 106.6], sit: [19.1, 95.7, 107.2], at: [21.3, 95.7, 109.4], edge: [17.0, 95.7, 105.1], look: [-1, 0, -1], dwell: 15 },
     // On these two the outward diagonal runs down the screen, which is straight at the camera, so he
-    // looks out along -x instead: the same lip, read from the side.
-    { grip: [66.9, 49.5, 35.6], at: [70.5, 49.5, 32.8], edge: [65.4, 49.5, 37.0], look: [-1, 0, 0], dwell: 8.5 },
-    { grip: [18.5, 49.5, -41.5], at: [22.0, 49.5, -44.3], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
+    // looks out along -x instead: the same lip, read from the side. Sitting, that also means sitting
+    // along the x face a couple of metres back from the corner rather than astride it — on the corner
+    // itself half of him hangs off the other edge as well.
+    { grip: [66.9, 49.5, 35.6], sit: [67.5, 49.5, 33.6], at: [70.5, 49.5, 32.8], edge: [65.4, 49.5, 37.0], look: [-1, 0, 0], dwell: 8.5 },
+    { grip: [18.5, 49.5, -41.5], sit: [19.1, 49.5, -43.5], at: [22.0, 49.5, -44.3], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
   ],
   // Low and well in front of the block, far enough toward the camera to start about a hundred and
   // twenty pixels below the bottom edge: the first web bites the corner of the tall tower and goes up
@@ -1067,6 +1072,9 @@ const RISE = 0.35;
 // he is going. A full turn at TURN_RATE takes about a second, so the turn is finished and settled
 // before the arm comes up: body first, then the arm, then the thread. All three at once is a twitch.
 const TURN = 1.5, TURN_RATE = 2.6;   // radians per second
+// Seconds at the start of a dwell spent coming out of the landing crouch and shuffling to the lip.
+const SETTLE = 1.2;
+const smooth = (k) => k * k * (3 - 2 * k);
 // Rotate a flat facing vector toward `want` by at most `max` radians. A plain lerp between two
 // directions slows to nothing as it arrives and shortens the vector on the way; this keeps a constant
 // turn rate, which is what makes it read as him looking round rather than as the model being eased.
@@ -1083,15 +1091,16 @@ function turnTo(face, want, max) {
 // daylight one.
 const suitMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18 });
 const spidey = new THREE.Group();
-const crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
+const sitMesh = new THREE.Mesh(SIT_G, suitMat), crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
 // He casts. A figure on a roof with no shadow floats, and on a corner — where the roof behind him is
 // edge-on and the thing behind *that* is a facade a block away — the shadow is the only cue left
 // that says which surface he is on. One more caster in the shadow pass, and he is sitting down.
-for (const m of [crouchMesh, perchMesh, swingMesh]) m.castShadow = true;
-spidey.add(crouchMesh, perchMesh, swingMesh);
-// Three poses, one of them at a time. Setting them one by one at each site is how a pose gets left
+for (const m of [sitMesh, crouchMesh, perchMesh, swingMesh]) m.castShadow = true;
+spidey.add(sitMesh, crouchMesh, perchMesh, swingMesh);
+// Four poses, one of them at a time. Setting them one by one at each site is how a pose gets left
 // on and two of him are drawn inside each other.
-function pose(which) { crouchMesh.visible = which === "crouch"; perchMesh.visible = which === "perch"; swingMesh.visible = which === "swing"; }
+const POSES = { sit: sitMesh, crouch: crouchMesh, perch: perchMesh, swing: swingMesh };
+function pose(which) { for (const k in POSES) POSES[k].visible = k === which; }
 spidey.scale.setScalar(SCALE);
 spidey.visible = false;
 scene.add(spidey);
@@ -1226,6 +1235,7 @@ function buildHops() {
 const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
 const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3();
+const atV = new THREE.Vector3(), sitV = new THREE.Vector3();
 function aim(up, fwd) {
   by.copy(up).normalize();
   bx.copy(fwd).addScaledVector(by, -fwd.dot(by));
@@ -1306,8 +1316,24 @@ function updateSpidey(dt) {
     spid.pos.set(q.x, q.y, q.z);
     pose("swing"); spidey.visible = true;
     rope.subVectors(h.A, spid.pos);
-    spidey.position.copy(spid.pos).addScaledVector(rope, -HAND * SCALE / Math.max(1, rope.length()));
-    aim(rope, spid.face);
+    // Hanging from the line only makes sense while the line goes *up*. The second hop leaves a
+    // ninety-six-metre tower for a fifty-metre roof, so for the first third of that arc the anchor is
+    // below him — and orienting his body along the rope then turns him upside down on the way out of
+    // the perch, which is the thing that looked broken. Over that stretch he is not swinging, he is
+    // dropping with the line already out, so he stays upright and the thread trails down out of his
+    // fist to the corner it has bitten. The blend finishes by the time the anchor is fifteen degrees
+    // above him, which is around the bottom of the arc, where hanging is what it reads as.
+    // `tmp` ends up as his up axis, and the fist sits on that axis at y = HAND, so whatever this
+    // chooses the hand stays exactly on the rope end and the thread still leaves his hand.
+    tmp.copy(rope).normalize();
+    const hang = clamp(tmp.y * 4, 0, 1);
+    tmp.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
+    // And while he is dropping he pitches into it. Bolt upright in mid-air is a man in a lift; the
+    // dive out of a tall roof in the game leads with the head and trails the legs, and that lean is
+    // most of what separates falling with purpose from falling.
+    tmp.addScaledVector(spid.face, (1 - hang) * 0.85).normalize();
+    spidey.position.copy(spid.pos).addScaledVector(tmp, -HAND * SCALE);
+    aim(tmp, spid.face);
     web.visible = true;
     setWeb(spid.pos, h.A);
     if (spid.th <= TH_LET + 0.005) {
@@ -1330,8 +1356,12 @@ function updateSpidey(dt) {
       .addScaledVector(h.LAND, -2 * k3 + 3 * k2);
     spidey.position.copy(spid.pos);
     aim(UPV, spid.face);
-    // Still the reaching pose on the way in: this leg of the curve *is* the hand catching the ledge.
-    pose("perch"); spidey.visible = true;
+    // He lets go and *sails* before he reaches. Switching to the reaching crouch on the frame the
+    // rope drops spends the whole half-second between buildings in a landing pose, which is the one
+    // thing the swing never looks like in the game: there the release is the part where he is longest
+    // and fastest, arms and legs trailing, and the tuck only happens at the ledge. So the swing pose
+    // holds for the first half of the toss and the reach is the second.
+    pose(k < 0.52 ? "swing" : "perch"); spidey.visible = true;
     web.visible = k < 0.25;
     if (web.visible) setWeb(spid.pos, h.A);
     if (k >= 1) {
@@ -1342,23 +1372,34 @@ function updateSpidey(dt) {
     }
     return;
   }
-  // Perched: hunkered on the corner with a fist on the roof, looking out over the ledge, and only at
-  // the end turning to where he is going next. Nothing bobs — his feet are on the roof, and a figure
-  // that drifts up and down on a rooftop is a figure that is not on it.
+  // The dwell, in four beats: he comes out of the landing crouch, shuffles to the lip and sits with
+  // his legs over it; he sits there for nearly all of it; he gets up and steps back off the edge
+  // while turning to the next anchor; the arm goes up. Nothing bobs — he is on a roof, and a figure
+  // that drifts up and down on a rooftop is a figure that is not on one.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
-  // He sits looking out along `look` and only turns to the next anchor at the end. This is not
-  // decoration: the anchors sit nearly dead away from this camera, and a crouch seen from behind is a
-  // man standing up. `look` is the one angle at which a bent knee and a planted arm survive at forty
-  // pixels, which is why it is authored per corner and not derived from where he is going.
-  if (spid.t >= p.dwell - RISE - TURN) tmp.subVectors(next.A, spid.pos);
+  const rise = p.dwell - RISE - TURN;
+  // He sits looking out along `look` and only turns to the next anchor when he stands. This is not
+  // decoration: the anchors sit nearly dead away from this camera, and a seated figure seen from
+  // behind is a shapeless lump. `look` is the one angle at which the hang of the legs and the arm on
+  // the knee survive at forty pixels, which is why it is authored per corner and not derived.
+  if (spid.t >= rise) tmp.subVectors(next.A, atV.fromArray(p.at));
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
+  // Out to the lip and back again. `at` is set by where the crouch's planted fist lands, a stride
+  // inside the parapet; `sit` is a metre from it, because a sit is only a sit if the legs are over
+  // the drop. Sliding between them is what makes the sit something he does rather than somewhere he
+  // appears.
+  const k = spid.t < SETTLE ? smooth(spid.t / SETTLE) : 1 - smooth(clamp((spid.t - rise) / TURN, 0, 1));
+  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), k);
   spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
   // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
-  // change and a thwip on the same frame.
-  pose(spid.t >= p.dwell - RISE ? "perch" : "crouch");
+  // change and a thwip on the same frame. The crouch is only the hinge between standing and sitting
+  // at either end; the long middle of the dwell is the sit.
+  if (spid.t >= p.dwell - RISE) pose("perch");
+  else if (spid.t < SETTLE * 0.45 || spid.t >= rise) pose("crouch");
+  else pose("sit");
   spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }

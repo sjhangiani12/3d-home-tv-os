@@ -272,6 +272,36 @@ const CROUCH_G = body({
   // surface instead of hovering over it.
   elbR: [0.31, 0.73, 0.245], wriR: [0.42, 0.21, 0.225], fistR: [0.45, 0.055, 0.22],
 });
+// Actually sitting on the lip, which the crouch above never was. A crouch is still a standing
+// silhouette — hips above the knees, every part of him above the surface — and from a fixed camera a
+// hundred metres away it reads as a man with soft knees however deep you make it. What reads as
+// *sitting on an edge* is the one thing nothing else in the block does: a piece of him below the
+// roofline. The legs hang over the void, so the roof cuts him across the hips and there is nothing
+// left to read him as but seated.
+// Backside on the deck (the hips sit a hip's-width above it, not on it), thighs out over the lip and
+// tipped slightly down, shins hanging free, right forearm draped over the right knee and the left
+// fist planted on the deck beside him taking some weight. The two legs hang at slightly different
+// angles and the feet at different heights: dangling legs are never a pair of parallel strokes, and
+// a symmetrical hang reads as a doll on a shelf.
+const SIT_G = body({
+  headR: 0.125,
+  // Leaning out over the drop rather than sitting to attention, and the head carried a little
+  // further forward still, because what he is doing in this beat is looking down at the street.
+  pelvis: [0.00, 0.17, 0], chest: [0.06, 0.60, 0], neck: [0.09, 0.73, 0], head: [0.14, 0.85, 0],
+  hipL: [0.01, 0.15, -0.085], hipR: [0.01, 0.15, 0.085],
+  kneeL: [0.40, 0.02, -0.110], kneeR: [0.40, 0.04, 0.110],
+  ankL: [0.33, -0.49, -0.120], ankR: [0.44, -0.46, 0.125],
+  // Toes down and forward: a hanging foot points at the street, and a foot left level reads as
+  // standing on something that is not there.
+  toeL: [0.46, -0.55, -0.125], toeR: [0.57, -0.52, 0.130],
+  shoL: [0.04, 0.67, -0.168], shoR: [0.04, 0.67, 0.168],
+  // Left arm straight down and a little behind, knuckles on the deck at y = 0.055 — the same height
+  // as the crouch's planted fist, which is where the fist ball touches instead of hovering.
+  elbL: [-0.06, 0.38, -0.215], wriL: [-0.17, 0.13, -0.215], fistL: [-0.20, 0.055, -0.210],
+  // Right forearm over the right knee. The hand has to come past the kneecap, not stop on it: an arm
+  // that ends at the knee reads as an arm that is missing a hand at this size.
+  elbR: [0.14, 0.40, 0.225], wriR: [0.36, 0.19, 0.215], fistR: [0.44, 0.13, 0.210],
+});
 // On the web: one arm straight up the line, the other trailing, back arched, legs streaming behind
 // and bent at the knee, and the two legs bent differently because a body in the air is never
 // symmetrical. The fist is at y = HAND on the figure's own axis, which is where the web is tied —
@@ -293,4 +323,4 @@ const SWING_G = body({
 // chest. Used to start the thread so it comes out of the hand that is pointing at the corner.
 const FIST = [0.59, 0.96];
 
-export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, CROUCH_G, PERCH_G, SWING_G, FIST };
+export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST };
