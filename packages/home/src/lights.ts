@@ -49,6 +49,31 @@ export function isOn(d: Device): boolean {
   return d.state.on === true;
 }
 
+/** How bright a lamp is reading, 0–100; a lamp that is on but says nothing is full. */
+export function lampLevel(d: Device): number {
+  if (!isOn(d)) return 0;
+  return typeof d.state.brightness === "number" ? d.state.brightness : 100;
+}
+
+/** Hue rounds kelvin through mireds, so a lamp set to a recipe comes back a few degrees off it. */
+const MOOD_KELVIN_SLACK = 75;
+
+/**
+ * A lamp is *in* the armed mood while it carries the mood's white. Dimming by hand does not cool a
+ * lamp, so a lamp moved after the mood ran is still in it — see `moodAdjusted` for that case.
+ */
+export function inMood(d: Device, scene: string | null | undefined): boolean {
+  if (!scene || !isMoodScene(scene) || !isOn(d)) return false;
+  const k = d.state.kelvin;
+  return typeof k === "number" && Math.abs(k - HUE_RECIPES[scene].kelvin) <= MOOD_KELVIN_SLACK;
+}
+
+/** …and has been moved by hand when it kept the colour but no longer sits at the mood's level. */
+export function moodAdjusted(d: Device, scene: string | null | undefined): boolean {
+  if (!inMood(d, scene)) return false;
+  return Math.abs(lampLevel(d) - HUE_RECIPES[scene as MoodScene].brightness) > 2;
+}
+
 /* ------------------------------------------------------------------ colour */
 
 /** Default warm white shown for lights that report neither a colour nor a temperature. */
@@ -111,6 +136,14 @@ export interface RoomGroup {
   label: string;
   devices: Device[];
   on: number;
+  /** Devices answering. A room whose lamps are all lit reads differently from one with a lamp away. */
+  reachable: number;
+}
+
+/** The three positions of a room's knob: nothing lit, some lit, every lamp that answers lit. */
+export function roomPosition(g: RoomGroup): "off" | "mix" | "on" {
+  if (g.on === 0) return "off";
+  return g.reachable > 0 && g.on === g.reachable ? "on" : "mix";
 }
 
 /**
@@ -123,9 +156,10 @@ export function roomGroups(devices: readonly Device[], order: readonly string[] 
   const map = new Map<string, RoomGroup>();
   for (const d of devices) {
     const room = d.room || "Other";
-    const g = map.get(room) ?? { room, label: roomLabel(room), devices: [], on: 0 };
+    const g = map.get(room) ?? { room, label: roomLabel(room), devices: [], on: 0, reachable: 0 };
     g.devices.push(d);
     if (isOn(d)) g.on++;
+    if (isReachable(d)) g.reachable++;
     map.set(room, g);
   }
   const at = (r: string) => {

@@ -7,7 +7,9 @@
     <title>The Block</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Nunito+Sans:wght@400;600;700&display=swap" />
+    <!-- 500 is the weight the panel's lamp rows and its hint are set in; without it here the browser
+         snapped them to 400 or faked a bold, and the rows did not match the mock they were drawn from. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Nunito+Sans:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="/src/block/block.css" />
   </head>
   <body>
@@ -46,17 +48,15 @@
     </div>
 
     <aside id="drawer" aria-label="Home lights" aria-hidden="true">
-      <div>
-        <h2>Home</h2>
-        <div class="addr">Home</div>
-      </div>
+      <h2>Home</h2>
+      <div class="status" id="status" aria-live="polite"></div>
       <div class="scenes" id="scenes">
         <button class="pill" type="button" data-scene="relax">Relax</button>
         <button class="pill" type="button" data-scene="read">Read</button>
         <button class="pill" type="button" data-scene="off">All off</button>
       </div>
       <div id="rooms"></div>
-      <div class="hint">OK turns a lamp on or off · ← → dims it<br>Back returns to the block</div>
+      <div class="hint" id="hint"></div>
     </aside>
 
     <!-- The way out of the home, only on screen while you are in it. The remote has Back; a pointer and a

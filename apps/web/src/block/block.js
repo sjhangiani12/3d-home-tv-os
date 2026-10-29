@@ -15,7 +15,10 @@
  */
 import * as THREE from "three";
 import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction, runScene } from "../shared/feeds.js";
-import { HUE_RECIPES, isLightLike, isMoodScene, isOn, lightColor, roomGroups } from "@appart3d/home";
+import {
+  HUE_RECIPES, inMood, isLightLike, isMoodScene, isOn, isReachable, lampLevel, lightColor, moodAdjusted,
+  roomGroups, roomPosition,
+} from "@appart3d/home";
 import * as P from "./paint.js";
 import { SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
 
@@ -28,7 +31,6 @@ const CFG = await loadHomeConfig();
 const LOC = resolveLocation(CFG, Q);
 const NAMES = {
   place: CFG.place || "YOUR BLOCK",
-  address: CFG.address || "Home",
   homeLabel: CFG.homeLabel || "Home",
   station: Object.assign({ name: "Station", line: "", stop: null }, CFG.station || {}),
   // Each dock says what it is and which avenue it stands on; the near one is a block over, the far one
@@ -40,7 +42,7 @@ const PI = Math.PI;
 if (TV) document.body.classList.add("tv");
 document.title = CFG.title || document.title;
 document.querySelector("#clock .place").textContent = NAMES.place;
-document.querySelector("#drawer .addr").textContent = NAMES.address;
+document.querySelector("#drawer h2").textContent = NAMES.homeLabel;
 if (!MOCK) document.getElementById("mock").hidden = true;
 const stage = document.getElementById("stage");
 /**
@@ -1112,7 +1114,6 @@ let MOOD = null;
 /** True once the bridge has spoken: until then the presses below move the made-up devices instead. */
 let LIVE = false;
 const homeLamps = () => [...DEVICES.values()].filter(isLightLike);
-const lampLevel = (d) => (isOn(d) && typeof d.state.brightness === "number" ? d.state.brightness : isOn(d) ? 100 : 0);
 
 function updateLamps() {
   for (const l of LAMPS) {
@@ -1757,7 +1758,9 @@ async function openHome() {
   await fade(0);
   await settle;
   flying = false; goingIn = false;
-  focusDrawer(0);
+  // On the first room, never on a pill: a TV home screen is shared, and the press that puts the whole
+  // flat out should not be the one already under the cursor when the panel arrives.
+  focusFirstRoom();
   if (wantClose) { wantClose = false; closeHome(); }
 }
 async function closeHome() {
@@ -1796,19 +1799,100 @@ async function closeHome() {
 
 // ---------- drawer and remote control
 const drawer = document.getElementById("drawer"), roomsEl = document.getElementById("rooms"), chip = document.getElementById("chip");
+const statusEl = document.getElementById("status"), hintEl = document.getElementById("hint");
+
+const MOOD_NAME = { relax: "Relax", read: "Read" };
+/** A lamp at 1% must not read as off, so the fill has a floor the eye can still see. */
+const fill = (d) => (isOn(d) ? Math.max(14, lampLevel(d)) : 0);
+/**
+ * One cell per lamp, in the order of the rows directly beneath — so the bar on a room row is a legend
+ * for its children rather than one number standing in for all of them. A lamp that stopped answering
+ * keeps an empty outlined cell: its place in the room is a fact even when its level is not.
+ */
+const segbar = (ds) => `<span class="segbar">${ds.map((d) => {
+  if (!isReachable(d)) return `<span class="cell away"></span>`;
+  const sc = inMood(d, MOOD);
+  const tick = moodAdjusted(d, MOOD) ? `<b style="left:${HUE_RECIPES[MOOD].brightness}%"></b>` : "";
+  return `<span class="cell"><i class="${sc ? "sc" : ""}" style="width:${fill(d)}%"></i>${tick}</span>`;
+}).join("")}</span>`;
+const pips = (ds) => `<span class="dots">${ds.map((d) =>
+  `<span class="pip${isOn(d) ? " on" : ""}${inMood(d, MOOD) ? " sc" : ""}${isReachable(d) ? "" : " away"}"></span>`).join("")}</span>`;
+
+/** "2 of 3 on", never a percentage: one number for several brightnesses would be a lie. */
+function roomCount(g) {
+  const away = g.devices.length - g.reachable;
+  return (g.on ? `${g.on} of ${g.devices.length} on` : "Off") + (away ? ` · ${away} away` : "");
+}
+function statusLine() {
+  const ls = homeLamps(), lit = ls.filter(isOn);
+  let s = `${ls.length} light${ls.length === 1 ? "" : "s"} · ${lit.length ? `${lit.length} on` : "everything is off"}`;
+  if (MOOD) {
+    const name = MOOD_NAME[MOOD] || MOOD, m = lit.filter((d) => inMood(d, MOOD)), a = m.filter((d) => moodAdjusted(d, MOOD));
+    s += !m.length ? ` · <b>${name} is armed</b>`
+      : a.length ? ` · <b>${name}</b> · ${a.length} adjusted`
+      : m.length === lit.length ? ` · <b>${name}</b>`
+      : ` · <b>${name}</b> on ${m.length} of ${lit.length} lit`;
+  }
+  return s;
+}
+/** What OK would do to whatever is focused, said before it is pressed. */
+function hintLine() {
+  const el = document.activeElement, scene = el && el.dataset ? el.dataset.scene : null;
+  if (scene === "off") return "OK turns everything off";
+  if (scene) return scene === MOOD ? `OK stops ${MOOD_NAME[scene]}. No light changes.` : `OK puts the lights that are on into ${MOOD_NAME[scene]}`;
+  if (el && el.classList.contains("roomrow")) return "OK turns the room on or off · ← → dims the room";
+  if (el && el.classList.contains("lamprow")) return "OK turns the lamp on or off · ← → dims it";
+  return "↑ ↓ chooses · OK switches · ← → dims";
+}
+
+/** The rooms as last drawn, so a focus move can re-dress a row without rebuilding the list. */
+const GROUP_BY_ROOM = new Map();
+
 function renderDrawer() {
-  const focusedId = document.activeElement && document.activeElement.dataset.lamp;
-  roomsEl.innerHTML = roomGroups(homeLamps(), ROOM_ORDER).map((g) => `<div class="roomgrp"><h3>${esc(g.label)}</h3>${g.devices.map((d) => {
-    const on = isOn(d);
-    return `<button type="button" class="lamp${on ? " on" : ""}" data-lamp="${esc(d.id)}" aria-pressed="${on}"><span>${esc(d.name)}</span><span class="sw" aria-hidden="true"></span><span class="bar"><i style="width:${lampLevel(d)}%"></i></span></button>`;
-  }).join("")}</div>`).join("");
-  roomsEl.style.display = "flex"; roomsEl.style.flexDirection = "column"; roomsEl.style.gap = "18px";
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.id : null;
+  const groups = roomGroups(homeLamps(), ROOM_ORDER);
+  GROUP_BY_ROOM.clear();
+  for (const g of groups) GROUP_BY_ROOM.set(g.room, g);
+  // A room at rest is its name, what it is doing, and one dot per lamp. Focused, the count leaves and
+  // the knob and the per-lamp bar take that space: focus changes the parts, not only the colour.
+  roomsEl.innerHTML = groups.map((g) => `<div class="roomgrp">
+    <button type="button" class="roomrow" data-kind="room" data-id="${esc(g.room)}" aria-label="${esc(g.label)}" aria-pressed="${g.on > 0}">
+      <span class="nm">${esc(g.label)}</span><span class="cnt">${esc(roomCount(g))}</span>
+      <span class="knob ${roomPosition(g)}" hidden></span><span class="bars" hidden></span>${pips(g.devices)}
+    </button>
+    <div class="under"><div class="rail"></div><div class="kids">${g.devices.map((d) => `
+      <button type="button" class="lamprow${isReachable(d) ? "" : " away"}" data-kind="lamp" data-id="${esc(d.id)}" aria-pressed="${isOn(d)}">
+        <span class="nm">${esc(d.name)}</span><span class="sw${isOn(d) ? " on" : ""}"></span><span class="bars">${segbar([d])}</span>
+      </button>`).join("")}</div></div>
+  </div>`).join("");
   for (const b of document.querySelectorAll("#scenes [data-scene]")) {
     const armed = b.dataset.scene === MOOD;
     b.classList.toggle("latched", armed);
+    b.classList.toggle("live", armed && homeLamps().some((d) => inMood(d, MOOD)));
     b.setAttribute("aria-pressed", String(armed));
   }
-  if (focusedId) { const el = roomsEl.querySelector(`[data-lamp="${CSS.escape(focusedId)}"]`); if (el) el.focus(); }
+  statusEl.innerHTML = statusLine();
+  if (focused) { const el = roomsEl.querySelector(`[data-id="${CSS.escape(focused)}"]`); if (el) el.focus(); }
+  dressFocus();
+}
+
+/**
+ * The swap a focused room row makes, done after the HTML rather than in it: the count and the dots are
+ * what a room says at rest, the knob and the bar are what it says under the cursor, and only one set is
+ * ever in the row. Re-running it on every focus move costs nothing and keeps the two in one place.
+ */
+function dressFocus() {
+  for (const row of roomsEl.querySelectorAll(".roomrow")) {
+    const g = GROUP_BY_ROOM.get(row.dataset.id);
+    const foc = row === document.activeElement;
+    row.querySelector(".cnt").hidden = foc;
+    row.querySelector(".dots").hidden = foc;
+    row.querySelector(".knob").hidden = !foc;
+    const bars = row.querySelector(".bars");
+    bars.hidden = !foc;
+    if (foc && g) bars.innerHTML = segbar(g.devices);
+  }
+  hintEl.innerHTML = `${hintLine()}<br>Back returns to the block`;
 }
 function renderChip() {
   const on = homeLamps().filter(isOn).length;
@@ -1837,8 +1921,40 @@ const lampDim = (d, step) => {
   return lampAct(d, { type: "brightness", value: b }, { on: true, brightness: b });
 };
 const lampById = (id) => DEVICES.get(id);
-roomsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-lamp]"); if (!b) return; const d = lampById(b.dataset.lamp); if (d) lampToggle(d); });
-roomsEl.addEventListener("focusin", (e) => { const b = e.target.closest("[data-lamp]"); LAMPS.forEach((l) => { l.focus = !!b && l.did === b.dataset.lamp; }); });
+
+/**
+ * A room press is its lamps pressed together: lit ones go off, otherwise every lamp that answers comes
+ * on. There is no room device on the bridge — a room is a name several lamps share — so this is one
+ * action each, and the mood follow-up happens per lamp exactly as it would from a single press.
+ */
+const roomDevices = (room) => { const g = GROUP_BY_ROOM.get(room); return g ? g.devices.filter(isReachable) : []; };
+function roomToggle(room) {
+  const ds = roomDevices(room), on = ds.some(isOn);
+  return Promise.all(ds.map((d) => (isOn(d) === !on ? null : lampAct(d, { type: "power", on: !on }, { on: !on }))));
+}
+/** Dimming a room moves the lamps that are lit. It is a level control, not a second way to switch on. */
+function roomDim(room, step) {
+  return Promise.all(roomDevices(room).filter(isOn).map((d) => lampDim(d, step)));
+}
+
+const rowAct = (el) => {
+  if (el.dataset.kind === "room") return roomToggle(el.dataset.id);
+  const d = lampById(el.dataset.id);
+  return d ? lampToggle(d) : null;
+};
+const rowDim = (el, step) => {
+  if (el.dataset.kind === "room") return roomDim(el.dataset.id, step);
+  const d = lampById(el.dataset.id);
+  return d ? lampDim(d, step) : null;
+};
+roomsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) rowAct(b); });
+// The model answers the panel: whatever is focused pulses a ring on the floor under it, and a room
+// under the cursor rings every lamp in it at once.
+drawer.addEventListener("focusin", (e) => {
+  const b = e.target.closest("[data-kind]"), room = b && b.dataset.kind === "room" ? b.dataset.id : null;
+  LAMPS.forEach((l) => { l.focus = !!b && (room ? ROOM_NAME.get(l.room) === room : l.did === b.dataset.id); });
+  dressFocus();
+});
 document.getElementById("scenes").addEventListener("click", (e) => {
   const b = e.target.closest("[data-scene]"); if (!b) return;
   pressScene(b.dataset.scene);
@@ -1871,8 +1987,11 @@ function simulateScene(id) {
 chip.addEventListener("click", openHome);
 document.getElementById("back").addEventListener("click", closeHome);
 const apps = [...document.querySelectorAll(".app")];
-function focusDrawer(i) { const items = drawerItems(); (items[i] || items[0]).focus(); }
-const drawerItems = () => [...drawer.querySelectorAll(".pill, .lamp")];
+function focusDrawer(i) { const items = drawerItems(); if (items.length) (items[i] || items[0]).focus(); }
+function focusFirstRoom() { const el = roomsEl.querySelector(".roomrow") || drawerItems()[0]; if (el) el.focus(); }
+// One column: the pills, then each room followed by its own lamps. ↑↓ walks it; there is no second
+// level and nothing to drill into.
+const drawerItems = () => [...drawer.querySelectorAll(".pill, .roomrow, .lamprow")];
 addEventListener("keydown", (e) => {
   const k = e.key;
   if (mode === "poi" && poi && poi.id === "music" && !flying && musicKey(k)) { e.preventDefault(); return; }
@@ -1897,8 +2016,10 @@ addEventListener("keydown", (e) => {
       if (k === "ArrowDown") j = i < pills.length ? pills.length : i + 1; else j = i <= pills.length ? 0 : i - 1;
       focusDrawer(clamp(j, 0, items.length - 1));
     } else if (k === "ArrowLeft" || k === "ArrowRight") {
-      const el = document.activeElement;
-      if (el && el.classList.contains("lamp")) { e.preventDefault(); const d = lampById(el.dataset.lamp); if (d) lampDim(d, k === "ArrowRight" ? 10 : -10); }
+      const el = document.activeElement, step = k === "ArrowRight" ? 10 : -10;
+      // One rule down the whole column: ←→ dims whatever is focused, a room exactly as a lamp. On the
+      // pills, where there is no level, it is how you walk the row.
+      if (el && el.dataset && el.dataset.kind) { e.preventDefault(); rowDim(el, step); }
       else if (el && el.classList.contains("pill")) { e.preventDefault(); const pills = items.filter((x) => x.classList.contains("pill")); focusDrawer(clamp(i + (k === "ArrowRight" ? 1 : -1), 0, pills.length - 1)); }
     }
     return;

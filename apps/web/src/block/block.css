@@ -11,6 +11,8 @@
   --bike-blue: #1d64c4;
   --warm: #ffcf7a;
   --focus: #ffe08a;
+  /* A lamp's own level, on a bar. Warm is reserved for a lamp carrying the armed mood's colour. */
+  --amber: #e2a73a;
   /* The map cards let the block through a little — enough that they sit in the scene rather than on it,
      far short of the glass of the lights chip and the music card, because they carry ink-coloured text
      and plain alpha is all the TV can afford here (no backdrop-filter, see the note further down). */
@@ -166,28 +168,93 @@ body { background: var(--night); color: var(--paper); overflow: hidden; }
 /* Drawer: the home's controls, as a card that floats in the frame the way the map cards do — inset on
    every side, round-cornered, with the scene visible around it. It used to be a page-high slab butted
    into the right edge with a hard border down its spine, which read less like a panel on the home than
-   like the page had broken. It arrives with the room rather than over the street (see `openHome`). */
-#drawer { position: absolute; top: 56px; right: 44px; bottom: 56px; width: 420px; background: linear-gradient(180deg, #fffdf5, var(--paper) 42%, var(--paper-2)); color: var(--ink); border: 2px solid var(--ink); border-radius: 30px; box-shadow: 0 24px 50px rgba(34, 24, 14, 0.45); transform: translateX(calc(100% + 64px)); transition: transform 560ms cubic-bezier(.2, .9, .26, 1); display: flex; flex-direction: column; padding: 34px 30px 26px; gap: 20px; font-family: var(--font-display); }
+   like the page had broken. It arrives with the room rather than over the street (see `openHome`).
+   The card is 500 wide so its content column is 428 — the same 428 the room rows are everywhere else,
+   and the same width as the launcher's native panel (250 dp at the TV's density 2.0). */
+#drawer { position: absolute; top: 56px; right: 44px; bottom: 56px; width: 500px; background: linear-gradient(180deg, #fffdf5, var(--paper) 42%, var(--paper-2)); color: var(--ink); border: 2px solid var(--ink); border-radius: 30px; box-shadow: 0 24px 50px rgba(34, 24, 14, 0.45); transform: translateX(calc(100% + 64px)); transition: transform 560ms cubic-bezier(.2, .9, .26, 1); display: flex; flex-direction: column; padding: 36px 36px 26px; font-family: var(--font-display); }
 #drawer.open { transform: translateX(0); }
-#drawer h2 { margin: 0; font-size: 38px; line-height: 1; display: flex; align-items: center; gap: 12px; }
-/* A rule under the header, so the title is a masthead and not the first item in the list. */
-#drawer .addr { font-size: 19px; color: var(--muted); margin-top: 8px; padding-bottom: 18px; border-bottom: 2px solid rgba(59, 51, 40, 0.15); }
-.scenes { display: flex; gap: 12px; }
-.pill { font: 600 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 12px 18px; cursor: pointer; }
+#drawer h2 { margin: 0; font: 700 38px/1 var(--font-display); }
+/* What is true right now, in words: "6 lights · 3 on · Relax on 2 of 3". The armed mood is named here
+   and nowhere else, because a dot on a pill across a room is not a sentence. */
+#drawer .status { font: 500 19px/1.35 var(--font-display); color: var(--muted); margin: 8px 0 20px; }
+#drawer .status b { color: var(--ink); font-weight: 600; }
+.scenes { display: flex; gap: 12px; margin-bottom: 22px; }
+.pill { position: relative; font: 600 22px/1 var(--font-display); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 16px; box-shadow: var(--lift); padding: 12px 18px; cursor: pointer; white-space: nowrap; }
 .pill:focus-visible, .pill.focus { outline: none; background: var(--focus); }
-.roomgrp { display: flex; flex-direction: column; gap: 8px; }
-.roomgrp h3 { margin: 0; font-size: 20px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-.lamp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 14px; text-align: left; font: 500 22px/1.1 var(--font-display); color: var(--ink); background: transparent; border: 3px solid transparent; border-radius: 10px; padding: 10px 12px; cursor: pointer; }
-.lamp:focus-visible, .lamp.focus { outline: none; background: var(--ink); color: var(--paper); }
-.lamp .bar { grid-column: 1 / -1; height: 6px; background: rgba(28, 26, 36, 0.15); }
-.lamp.focus .bar, .lamp:focus-visible .bar { background: rgba(251, 246, 234, 0.25); }
-.lamp .bar i { display: block; height: 100%; background: #e2a73a; }
-.sw { width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); border-radius: 10px; position: relative; }
+/* Armed and running are different facts: a hollow ring means the mood is waiting with nothing in it,
+   a filled one means it is on lamps now. */
+.pill.latched { padding-left: 32px; }
+.pill.latched::before { content: ""; position: absolute; left: 13px; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; border: 2.5px solid var(--ink); }
+.pill.latched.live::before { background: var(--ink); }
+
+/* The focus swap hides the half of a room row that is not in use, and `display: flex` on a class
+   out-specifies the browser's `[hidden]` rule — so say it again, as `#mock` has to further down. */
+#drawer [hidden] { display: none; }
+#rooms { display: flex; flex-direction: column; gap: 20px; }
+.roomgrp { display: flex; flex-direction: column; }
+/* A room row: name, then what it is doing, then its lamps as dots. No switch and no bar at rest — one
+   number for several brightnesses would be a lie, and a label only sometimes allowed to appear changes
+   width as you dim. */
+.roomrow { position: relative; width: 100%; height: 72px; display: flex; align-items: center; gap: 14px; text-align: left; padding: 10px 14px; background: var(--paper-2); color: var(--ink); border: 2px solid var(--ink); border-radius: 10px; cursor: pointer; }
+.roomrow .nm { flex: 1; min-width: 0; font: 600 30px/1 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roomrow .cnt { font: 500 19px/1 var(--font-display); color: var(--muted); white-space: nowrap; }
+.roomrow .bars { position: absolute; left: 14px; right: 14px; bottom: 8px; }
+/* Focus swaps the parts, not only the colour: the count leaves and the knob and the per-lamp bar take
+   its place. That is what makes a mis-press visible before it is a press. */
+.roomrow:focus-visible, .roomrow.focus { outline: none; background: var(--ink); color: var(--paper); }
+.under { display: flex; margin-top: 8px; }
+.rail { flex: none; width: 3px; margin-left: 20px; border-radius: 2px; background: rgba(59, 51, 40, 0.28); }
+/* 48 in on the left past the rail, 28 in on the right: a lamp row is 352 against the room's 428, and
+   the indent alone says which room it is under. */
+.kids { flex: 1; margin: 0 28px 0 25px; display: flex; flex-direction: column; gap: 8px; }
+.lamprow { position: relative; height: 60px; display: flex; align-items: center; gap: 14px; text-align: left; font: 500 22px/1 var(--font-display); color: var(--ink); background: transparent; border: 3px solid transparent; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.lamprow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lamprow .bars { position: absolute; left: 12px; right: 12px; bottom: 6px; }
+.lamprow:focus-visible, .lamprow.focus { outline: none; background: var(--ink); color: var(--paper); }
+/* A lamp that stopped answering keeps its row. Dropping it would make a named room lie about how many
+   lights it has, and move every row under the thumb. */
+.lamprow.away { opacity: 0.45; }
+
+.dots { display: flex; gap: 8px; flex: none; }
+.pip { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); }
+.pip.on { background: var(--amber); }
+.pip.on.sc { background: var(--warm); }
+.pip.away { opacity: 0.4; }
+/* One cell per lamp, in the order of the rows directly beneath, so the bar is a legend for them. */
+.segbar { display: flex; gap: 3px; height: 8px; }
+.lamprow .segbar { height: 6px; }
+.segbar .cell { flex: 1; position: relative; overflow: hidden; border-radius: 1px; background: rgba(28, 26, 36, 0.15); }
+.segbar .cell i { display: block; height: 100%; background: var(--amber); }
+.segbar .cell i.sc { background: var(--warm); }
+/* Where the mood itself sits, on a lamp pushed off it by hand — so you can press back to it. */
+.segbar .cell b { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; background: var(--ink); }
+.segbar .cell.away { background: transparent; border: 1px solid rgba(59, 51, 40, 0.35); }
+.lamprow.focus .segbar .cell, .lamprow:focus-visible .segbar .cell,
+.roomrow.focus .segbar .cell, .roomrow:focus-visible .segbar .cell { background: rgba(251, 246, 234, 0.25); }
+.lamprow.focus .segbar .cell i, .lamprow:focus-visible .segbar .cell i,
+.roomrow.focus .segbar .cell i, .roomrow:focus-visible .segbar .cell i { background: var(--paper); }
+.lamprow.focus .segbar .cell i.sc, .lamprow:focus-visible .segbar .cell i.sc,
+.roomrow.focus .segbar .cell i.sc, .roomrow:focus-visible .segbar .cell i.sc { background: var(--warm); }
+.roomrow.focus .segbar .cell b, .roomrow:focus-visible .segbar .cell b,
+.lamprow.focus .segbar .cell b, .lamprow:focus-visible .segbar .cell b { background: var(--paper); }
+
+/* A lamp switch is never centred, so a centred thumb is proof you are on a room and not on a lamp. */
+.knob { flex: none; width: 60px; height: 32px; background: #b9b1a0; border: 3px solid var(--ink); border-radius: 10px; position: relative; }
+.knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: var(--ink); border-radius: 3px; transition: left 140ms ease; }
+.knob.mix { background: var(--warm); }
+.knob.mix::after { left: 18px; }
+.knob.on { background: #f0b542; }
+.knob.on::after { left: 33px; }
+.sw { flex: none; width: 52px; height: 28px; background: #b9b1a0; border: 3px solid var(--ink); border-radius: 10px; position: relative; }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: var(--ink); transition: left 140ms ease; }
-.lamp.on .sw { background: #f0b542; }
-.lamp.on .sw::after { left: 27px; }
-.lamp.focus .sw::after, .lamp:focus-visible .sw::after { background: var(--paper); }
-#drawer .hint { margin-top: auto; font-size: 18px; color: var(--muted); line-height: 1.4; }
+.sw.on { background: #f0b542; }
+.sw.on::after { left: 27px; }
+.roomrow.focus .knob, .roomrow:focus-visible .knob, .lamprow.focus .sw, .lamprow:focus-visible .sw { border-color: var(--paper); }
+.roomrow.focus .knob::after, .roomrow:focus-visible .knob::after,
+.lamprow.focus .sw::after, .lamprow:focus-visible .sw::after { background: var(--paper); }
+.roomrow.focus .pip, .roomrow:focus-visible .pip { border-color: var(--paper); }
+.roomrow.focus .pip.on, .roomrow:focus-visible .pip.on { background: var(--warm); }
+#drawer .hint { margin-top: auto; padding-top: 14px; font: 500 17px/1.45 var(--font-display); color: var(--muted); }
 
 /* Mock controls: outside the design, for trying weather and time. */
 #mock { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; font: 500 16px/1 var(--font-ui); color: var(--paper); background: rgba(14, 12, 24, 0.8); border: 2px dashed rgba(251, 246, 234, 0.5); padding: 12px 14px; transition: opacity 300ms ease; }
