@@ -570,9 +570,9 @@ class MainActivity : Activity() {
     /**
      * What the home is playing, under the lamps: the track, then a row of transport keys. ↓ off the last lamp
      * lands on the title, which opens the app the music comes from; ↓ again is the row that pauses it, skips,
-     * or opens the rooms and their volumes. It is hidden outright when nothing is on, so it never leaves a
-     * blank shelf — and the keys that the source does not allow (a TV stream has none, radio cannot skip) are
-     * hidden one by one rather than shown dead.
+     * or opens the rooms and their volumes. When the house is silent the card stays, naming a room that can
+     * be started, so ▶ always has somewhere to go — and the keys that the source does not allow (a TV stream
+     * has none, radio cannot skip, a silent room has nothing to skip to) are hidden rather than shown dead.
      */
     private fun buildNowPlaying(): LinearLayout {
         npTitle = TextView(this).apply {
@@ -637,22 +637,25 @@ class MainActivity : Activity() {
     }
 
     /**
-     * The one speaker group worth showing: playing before paused, then whichever fills the most rooms.
+     * The one speaker group worth showing: a room the remote can actually drive first — the TV's own sound
+     * is a stream with no transport, so it loses to music even when it is the loud thing in the room — then
+     * something loaded before something silent, playing before paused, then whichever fills the most rooms.
      * Re-run on every change from the bridge, so the card follows the music from room to room.
      */
     private fun renderPlaying() {
-        val np = playing.values.maxWithOrNull(compareBy({ it.playing }, { it.rooms }, { it.title }))
+        val np = playing.values.maxWithOrNull(compareBy({ it.canPlayPause }, { !it.idle }, { it.playing }, { it.rooms }, { it.title }))
         nowPlaying = np
         npCard.visibility = if (np == null) View.GONE else View.VISIBLE
         if (np == null) return hideSpeakers()
-        npTitle.text = "${if (np.playing) "♪" else "❚❚"} ${np.title}"
+        npTitle.text = if (np.idle) getString(R.string.np_nothing) else "${if (np.playing) "♪" else "❚❚"} ${np.title}"
         // Only a track that leads somewhere takes the remote; otherwise ↓ off the lamps goes straight to the keys.
         npTitle.isFocusable = np.app in MUSIC_APPS
         val where = if (np.rooms > 1) getString(R.string.np_rooms, np.where, np.rooms) else np.where
         npSub.text = if (np.artist.isEmpty()) where else "${np.artist} · $where"
-        npPrev.visibility = if (np.canPrevious) View.VISIBLE else View.GONE
+        // Nothing is loaded, so there is nothing to skip past: ▶ is the only thing that means anything.
+        npPrev.visibility = if (np.canPrevious && !np.idle) View.VISIBLE else View.GONE
         npPlay.visibility = if (np.canPlayPause) View.VISIBLE else View.GONE
-        npNext.visibility = if (np.canNext) View.VISIBLE else View.GONE
+        npNext.visibility = if (np.canNext && !np.idle) View.VISIBLE else View.GONE
         npPlay.text = if (np.playing) "❚❚" else "▶"
         if (speakersView.visibility == View.VISIBLE) speakers.setSpeakers(np.title, groupOf(np))
     }
@@ -666,7 +669,8 @@ class MainActivity : Activity() {
         val np = nowPlaying ?: return
         val base = store.url ?: return
         val token = store.token ?: return
-        if (command == "playPause") {
+        // A silent room has no "other" state to show early: wait for the bridge to say what it started.
+        if (command == "playPause" && !np.idle) {
             playing[np.id] = np.copy(playing = !np.playing)
             renderPlaying()
         }

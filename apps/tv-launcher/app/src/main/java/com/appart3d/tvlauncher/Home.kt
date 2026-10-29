@@ -83,6 +83,11 @@ data class Playing(
     val where: String,
     val rooms: Int,
     val playing: Boolean,
+    /**
+     * Nothing is loaded in this room — it is kept only because it *can* be started, so the card has
+     * something to offer when the house is silent. `title` and `artist` then name the last source.
+     */
+    val idle: Boolean,
     /** This room's volume 0..100, null when the speaker does not report one. */
     val volume: Int?,
     /** What the source allows right now: a TV or line-in stream has no transport, radio has no skipping. */
@@ -94,18 +99,23 @@ data class Playing(
         /** True of any speaker, playing or not — so one falling silent can clear the card. */
         fun isSpeaker(d: JSONObject) = d.optString("kind") == "speaker"
 
-        /** What this speaker is playing, or null when it is unreachable or has nothing on. */
+        /**
+         * What this speaker is playing — or, when it has nothing on, the speaker itself as long as it
+         * can be started. Null for an unreachable one, and for a silent one with no transport at all
+         * (a TV or line-in input), which would be a dead row.
+         */
         fun parse(d: JSONObject): Playing? {
             if (!isSpeaker(d)) return null
             val st = d.optJSONObject("state") ?: return null
             if (!st.optBoolean("reachable", true)) return null
             val m = st.optJSONObject("media") ?: return null
             val state = m.optString("state")
-            if (state != "playing" && state != "paused") return null
+            if (state != "playing" && state != "paused" && state != "idle") return null
             val group = m.optJSONArray("group")
             val app = m.optString("app")
             val caps = d.optJSONObject("capabilities")?.optJSONArray("media")
             val controls = (0 until (caps?.length() ?: 0)).map { caps!!.optString(it) }
+            if (state == "idle" && "play" !in controls) return null
             return Playing(
                 id = d.getString("id"),
                 name = d.optString("name"),
@@ -115,6 +125,7 @@ data class Playing(
                 where = group?.optString(0)?.takeIf { it.isNotEmpty() } ?: d.optString("name"),
                 rooms = group?.length() ?: 1,
                 playing = state == "playing",
+                idle = state == "idle",
                 volume = if (st.has("volume")) st.optInt("volume").coerceIn(0, 100) else null,
                 canPlayPause = "play" in controls || "pause" in controls,
                 canNext = "next" in controls,
