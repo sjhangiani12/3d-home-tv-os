@@ -1188,6 +1188,7 @@ const REACH = 4.6;  // how short the rope is reeled before he catches the ledge 
 // hangs HAND * SCALE below the end of the rope, so SPIDEY.clear has to cover that or the arc solver
 // will happily route his feet through a roof it thinks the rope clears.
 const SCALE = 5.4;
+const HANG = HAND * SCALE;  // how far his feet sit below the end of the rope
 // He lets go near the bottom of the arc rather than riding the rope all the way in. Integrating a
 // reeling pendulum down to θ = 0 is what produced the whip: the rope is shortest exactly where he is
 // fastest, so the last fifth of the arc arrived in two frames and read as a teleport. Letting go at
@@ -1197,13 +1198,13 @@ const TH_LET = 0.52, LAND_T = 0.6;
 const SETTLE = 1.2;
 // The exit, counted back from the moment the thread leaves his hand. Four beats, one at a time:
 //
-//   STAND_T  he pulls himself back off the lip and comes up out of the sit
+//   STAND_T  he comes up out of the sit and takes the last stride out onto the lip
 //   TURN     he turns on the spot to face the next anchor
 //   ARM_T    the arm comes up and points at it
 //   RISE     two frames of the point held, and the web goes
 //
 // They were overlapping before, and that was the thing that looked wrong. He stood up out of the
-// sit over half a second while the slide back from the lip took three times as long, so for most of
+// sit over half a second while a slide back from the lip took three times as long, so for most of
 // standing up his feet were planted on thin air out past the parapet. And he began turning on the
 // frame he began standing, which is a seated man starting to rotate.
 //
@@ -1403,10 +1404,25 @@ function buildHops() {
   }
 }
 
-const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
+const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
-const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3();
-const atV = new THREE.Vector3(), sitV = new THREE.Vector3();
+const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3(), upV = new THREE.Vector3();
+// Which way is up for a man on a rope. Along the rope once the anchor is above him; upright with a
+// forward pitch while it is still below, because the second hop leaves a ninety-six-metre tower for
+// a fifty-metre roof and for the first third of that arc the anchor is *under* him — orienting along
+// the rope there turns him upside down on the way out of the perch, which is the thing that looked
+// broken. Over that stretch he is not swinging, he is diving with the line already out, and bolt
+// upright in mid-air is a man in a lift, so he leads with the head and trails the legs.
+// The blend finishes once the anchor is about fifteen degrees above him, around the bottom of the arc.
+// Shared by the clasp and the swing: the tip off the lip has to end on exactly the axis the first
+// swung frame begins on, or he snaps into the hang.
+function hangAxis(out, ropeV, face) {
+  out.copy(ropeV).normalize();
+  const hang = clamp(out.y * 4, 0, 1);
+  out.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
+  return out.addScaledVector(face, (1 - hang) * 0.85).normalize();
+}
+const atV = new THREE.Vector3(), sitV = new THREE.Vector3(), depV = new THREE.Vector3();
 function aim(up, fwd) {
   by.copy(up).normalize();
   bx.copy(fwd).addScaledVector(by, -fwd.dot(by));
@@ -1426,10 +1442,11 @@ function setWeb(from, to) {
 function startHop() {
   const h = HOPS[spid.hop];
   spid.th = h.th0; spid.w = 0;
+  // The swing begins off the lip of the roof. He is already standing there: the dwell walked him out
+  // to this exact point while he was getting up, so nothing moves between the point and the drop.
+  // It used to slide him out here in the fifth of a second after the web bit, and a man holding a
+  // pose while the roof travels under him is the one thing in this whole sequence that looked fake.
   const q = h.at(h.th0, h.pow);
-  // The swing begins off the lip of the roof, a stride outside where he was standing: he leans out
-  // over it while the line is in the air. On the entrance there is nowhere to lean from.
-  if (spid.hop > 0) spid.stand.copy(spid.pos); else spid.stand.set(q.x, q.y, q.z);
   spid.pos.set(q.x, q.y, q.z);
   spid.face.subVectors(h.A, spid.pos).setY(0).normalize();
   // A thread that crosses a block takes longer to get there than one that crosses a street. At a
@@ -1450,20 +1467,30 @@ function updateSpidey(dt) {
     return;
   }
   if (spid.phase === "shoot" || spid.phase === "clasp") {
-    // Three beats, because that is how the thing reads as an action rather than a state change.
+    // Two beats, because that is how the thing reads as an action rather than a state change.
     // First the reach: the thread grows out of his fist along the line he is pointing, slowly enough
     // that you watch it travel, with a short stretch hanging in the air attached to nothing yet.
-    // Then the clasp: it is on the corner, he is still on his roof, and for a fifth of a second
-    // nothing moves but the rope going taut. Only then does he lean off the lip and fall into it.
+    // Then the clasp: it is on the corner, and for a fifth of a second nothing moves at all but the
+    // rope going taut. He does not travel in either beat — he is planted on the lip from the moment
+    // he points until the moment he falls off it.
     const shooting = spid.phase === "shoot";
     const k = clamp(spid.t / (shooting ? spid.shoot : SPIDEY.clasp), 0, 1);
-    // He holds his ground while the line is out and only leans once it has bitten.
-    spidey.position.copy(spid.stand);
-    if (!shooting) spidey.position.lerp(spid.pos, k * k * (3 - 2 * k));
-    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE);
-    hand.y += FIST[1] * SCALE;
-    aim(UPV, spid.face);
-    pose("perch"); spidey.visible = true;
+    // Through the shot his feet are on `spid.pos` and nothing about him moves. Through the clasp his
+    // weight comes off the roof and onto the line. The pendulum's first point is that same spot —
+    // the rope starts where he was standing — so hanging from it leaves him a body length lower, and
+    // that used to happen in the single frame the swing began: he dropped his own height instantly.
+    // Now it is the clasp. He is still not travelling anywhere; the only thing changing is how much
+    // of him is still on the roof. Squared, because what takes his weight is gravity.
+    const tipk = shooting ? 0 : k * k;
+    hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
+    upV.copy(UPV).lerp(tmp, tipk).normalize();
+    spidey.position.copy(spid.pos).addScaledVector(tmp, -HANG * tipk);
+    // His fist sits at FIST[1] = HAND along his own up axis, which is why the thread leaves his hand
+    // whatever that axis is — and why at the end of the tip the hand is back on `spid.pos`, exactly
+    // where the swing expects to find the rope end.
+    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE).addScaledVector(upV, FIST[1] * SCALE);
+    aim(upV, spid.face);
+    pose(shooting ? "perch" : "swing", SPIDEY.clasp); spidey.visible = true;
     web.visible = true;
     // Barely eased: a cubic ease-out spends most of the shot already arrived, which looks like the
     // web snapping on. Nearly constant speed with a little settle at the end is a thread flying.
@@ -1487,24 +1514,10 @@ function updateSpidey(dt) {
     const q = h.at(spid.th, h.pow);
     spid.pos.set(q.x, q.y, q.z);
     pose("swing"); spidey.visible = true;
-    rope.subVectors(h.A, spid.pos);
-    // Hanging from the line only makes sense while the line goes *up*. The second hop leaves a
-    // ninety-six-metre tower for a fifty-metre roof, so for the first third of that arc the anchor is
-    // below him — and orienting his body along the rope then turns him upside down on the way out of
-    // the perch, which is the thing that looked broken. Over that stretch he is not swinging, he is
-    // dropping with the line already out, so he stays upright and the thread trails down out of his
-    // fist to the corner it has bitten. The blend finishes by the time the anchor is fifteen degrees
-    // above him, which is around the bottom of the arc, where hanging is what it reads as.
-    // `tmp` ends up as his up axis, and the fist sits on that axis at y = HAND, so whatever this
+    // `tmp` is his up axis, and the fist sits on that axis at y = HAND, so whatever `hangAxis`
     // chooses the hand stays exactly on the rope end and the thread still leaves his hand.
-    tmp.copy(rope).normalize();
-    const hang = clamp(tmp.y * 4, 0, 1);
-    tmp.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
-    // And while he is dropping he pitches into it. Bolt upright in mid-air is a man in a lift; the
-    // dive out of a tall roof in the game leads with the head and trails the legs, and that lean is
-    // most of what separates falling with purpose from falling.
-    tmp.addScaledVector(spid.face, (1 - hang) * 0.85).normalize();
-    spidey.position.copy(spid.pos).addScaledVector(tmp, -HAND * SCALE);
+    hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
+    spidey.position.copy(spid.pos).addScaledVector(tmp, -HANG);
     aim(tmp, spid.face);
     web.visible = true;
     setWeb(spid.pos, h.A);
@@ -1515,6 +1528,16 @@ function updateSpidey(dt) {
       spid.from.copy(spid.pos);
       spid.m0.set(q0.x - q1.x, q0.y - q1.y, q0.z - q1.z).normalize()
         .multiplyScalar(spid.from.distanceTo(h.LAND) * 0.6);
+      // And where the curve is going once it is over the parapet. He does not stop on the ledge: the
+      // shuffle out to the lip is the end of the same movement, so the toss has to arrive carrying
+      // exactly the speed that shuffle leaves with, or he halts on the deck and then starts again,
+      // which is the little dead beat that made the landing read as teleport-then-slide. Matching
+      // them is arithmetic: the shuffle covers (sit − at) over SETTLE with an ease-out that opens at
+      // twice its average speed, and a Hermite end tangent is a displacement per LAND_T, so they
+      // agree at m1 = (sit − at)·2·LAND_T/SETTLE.
+      const np = SPIDEY.perches[spid.hop];
+      if (np) spid.m1.fromArray(np.sit).sub(atV.fromArray(np.at)).multiplyScalar(2 * LAND_T / SETTLE);
+      else spid.m1.set(0, 0, 0);
       spid.phase = "land"; spid.t = 0;
     }
     return;
@@ -1525,8 +1548,15 @@ function updateSpidey(dt) {
     const k = clamp(spid.t / LAND_T, 0, 1), k2 = k * k, k3 = k2 * k;
     spid.pos.copy(spid.from).multiplyScalar(2 * k3 - 3 * k2 + 1)
       .addScaledVector(spid.m0, k3 - 2 * k2 + k)
-      .addScaledVector(h.LAND, -2 * k3 + 3 * k2);
+      .addScaledVector(h.LAND, -2 * k3 + 3 * k2)
+      .addScaledVector(spid.m1, k3 - k2);
     spidey.position.copy(spid.pos);
+    // He turns in the air, not on the deck. Landing facing the way he came and then rotating on the
+    // spot to face the view is a turret traversing; twisting on the way over the parapet and putting
+    // the feet down already looking out over it is a man landing. Twice the ground rate, because it
+    // has to be finished by the time he is down and because a twist in mid-air costs him nothing.
+    const np = SPIDEY.perches[spid.hop];
+    if (np) turnTo(spid.face, tmp.set(np.look[0], 0, np.look[2]).normalize(), TURN_RATE * 2 * dt);
     aim(UPV, spid.face);
     // He lets go and *sails* before he reaches. Switching to the reaching crouch on the frame the
     // rope drops spends the whole half-second between buildings in a landing pose, which is the one
@@ -1544,28 +1574,36 @@ function updateSpidey(dt) {
     }
     return;
   }
-  // The dwell, in four beats: he comes out of the landing crouch, shuffles to the lip and sits with
-  // his legs over it; he sits there for nearly all of it; he gets up and steps back off the edge
-  // while turning to the next anchor; the arm goes up. Nothing bobs — he is on a roof, and a figure
-  // that drifts up and down on a rooftop is a figure that is not on one.
+  // The dwell, in four beats: he carries the landing out to the lip and sits with his legs over it;
+  // he sits there for nearly all of it; he gets up and steps out onto the lip while turning to the
+  // next anchor; the arm goes up. Nothing bobs — he is on a roof, and a figure that drifts up and
+  // down on a rooftop is a figure that is not on one.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
   const rise = p.dwell - EXIT;
-  // He sits looking out along `look` and only turns to the next anchor once he is on his feet. This
-  // is not decoration: the anchors sit nearly dead away from this camera, and a seated figure seen
-  // from behind is a shapeless lump. `look` is the one angle at which the hang of the legs and the
-  // arm on the knee survive at forty pixels, which is why it is authored per corner and not derived.
-  if (spid.t >= rise + STAND_T) tmp.subVectors(next.A, atV.fromArray(p.at));
+  // One direction, the whole dwell: in off the ledge, out to the lip, off the lip. `at` is set by
+  // where the crouch's planted fist lands, a stride inside the parapet; `sit` is a metre from it,
+  // because a sit is only a sit if the legs are over the drop; and the departure point is one more
+  // stride out, over nothing. He used to walk back in to `at` to stand up and then be slid out past
+  // `sit` again after the web bit — a pace forward, a pace back, a pace forward, which is pacing,
+  // not leaving. Now standing up and stepping off are the same stride.
+  // The shuffle to the lip is ease-OUT only: it opens at the speed the landing arc hands it (see
+  // `m1` above) and dies into the sit, so touching down and sitting are one movement.
+  const ks = clamp(spid.t / SETTLE, 0, 1);
+  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), 1 - (1 - ks) * (1 - ks));
+  // `edge` is the departure point exactly: the pendulum at its start angle is at the point the hop
+  // was solved *from*, and `buildHops` solves every hop from this perch's `edge`.
+  if (spid.t >= rise) spid.pos.lerp(depV.fromArray(p.edge), smooth(clamp((spid.t - rise) / STAND_T, 0, 1)));
+  spidey.position.copy(spid.pos);
+  // He arrived already looking out along `look` — the twist happened in the air — and only turns to
+  // the next anchor once he is on his feet. This is not decoration: the anchors sit nearly dead away
+  // from this camera, and a seated figure seen from behind is a shapeless lump. `look` is the one
+  // angle at which the hang of the legs and the arm on the knee survive at forty pixels, which is
+  // why it is authored per corner and not derived. The turn is measured from where he is standing
+  // at that moment, which is out on the lip, not from the ledge he came down on.
+  if (spid.t >= rise + STAND_T) tmp.subVectors(next.A, spid.pos);
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
-  // Out to the lip and back again. `at` is set by where the crouch's planted fist lands, a stride
-  // inside the parapet; `sit` is a metre from it, because a sit is only a sit if the legs are over
-  // the drop. Sliding between them is what makes the sit something he does rather than somewhere he
-  // appears. Coming back takes exactly as long as standing up does, so the feet arrive on the deck
-  // on the frame they become feet that are standing on it.
-  const k = spid.t < SETTLE ? smooth(spid.t / SETTLE) : 1 - smooth(clamp((spid.t - rise) / STAND_T, 0, 1));
-  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), k);
-  spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
   // The crouch is only the hinge between standing and sitting at either end; the long middle of the
   // dwell is the sit. Each of these is asked for early enough that it *arrives* on its beat rather
@@ -1578,7 +1616,6 @@ function updateSpidey(dt) {
   spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }
-
 // ---------- signs and street names (HTML over the canvas)
 const labels = document.getElementById("labels");
 const signs = [];
