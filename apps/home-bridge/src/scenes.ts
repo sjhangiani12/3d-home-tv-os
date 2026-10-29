@@ -101,6 +101,11 @@ export function planScene(
         plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
       break;
     }
+    case "off":
+      // "All off" of the panels: the lamps, and only them — the TV keeps playing and the music keeps
+      // going, unlike « away ». Not a mood, so running it disarms the armed one (Hub.runScene).
+      for (const d of lights) plan.push(off(d));
+      break;
     case "movie":
       for (const d of lights) {
         if (d.id === strip?.id) plan.push({ deviceId: d.id, actions: lightOn(d, 25, { hex: SCENE_COLORS.movie }) });

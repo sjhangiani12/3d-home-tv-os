@@ -12,10 +12,12 @@
         <item quantity="one">%d allumée</item>
         <item quantity="other">%d allumées</item>
     </plurals>
-    <string name="unreachable">Injoignable</string>
-    <string name="fan_speed">%1$s · vitesse %2$d</string>
-    <string name="fan_stopped">%1$s · arrêté</string>
-    <string name="room_brightness">%1$s · %2$d %%</string>
+    <string name="room_on_count">%1$d sur %2$d allumées</string>
+    <string name="room_off">Éteint</string>
+    <string name="room_away">%1$s · %2$d injoignable(s)</string>
+    <string name="mood_armed">%s armée</string>
+    <string name="mood_adjusted">%1$s · %2$d ajustée(s)</string>
+    <string name="mood_partly">%1$s sur %2$d des %3$d allumées</string>
     <string name="settings">Réglages</string>
 
     <string name="searching_bridge">Recherche de la maison sur le Wi-Fi…</string>

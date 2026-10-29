@@ -22,6 +22,8 @@ data class Lamp(
     val fanLight: Boolean = false,
     /** 1..100 for dimmable lights, null otherwise. */
     val brightness: Int? = null,
+    /** White temperature in kelvin, when the lamp reports one: how the panel tells a mood is on it. */
+    val kelvin: Int? = null,
     /** Ceiling fan: motor speed step 0 (stopped) ..fanSteps, null for lamps. */
     val fanSpeed: Int? = null,
     val fanSteps: Int = 6,
@@ -57,6 +59,7 @@ data class Lamp(
                 reachable = st.optBoolean("reachable", true),
                 color = color,
                 brightness = if (dimmable) st.optInt("brightness").coerceIn(1, 100) else null,
+                kelvin = if (st.has("kelvin")) st.optInt("kelvin").takeIf { it > 0 } else null,
             )
         }
     }
@@ -147,6 +150,12 @@ class HomeFeed(
     /** Solar elevation (degrees) from each snapshot, null when the bridge has none. */
     private val onSun: (Double?) -> Unit = {},
     private val onScenes: (List<Scene>) -> Unit = {},
+    /**
+     * The mood the bridge holds armed ("relax" / "read"), or null. It lives there, not here, so a press
+     * on this panel and a press on the phone cannot leave the house in two states — and only a snapshot
+     * carries it, which is why the bridge pushes one whenever it changes.
+     */
+    private val onMood: (String?) -> Unit = {},
     /** Every speaker with something on, from each snapshot (the others are simply absent). */
     private val onPlaying: (List<Playing>) -> Unit = {},
     /** One speaker changed: what it plays now, or null when it went quiet or out of reach. */
@@ -212,6 +221,7 @@ class HomeFeed(
             "snapshot" -> {
                 val snapshot = ev.optJSONObject("snapshot") ?: return
                 onSun(snapshot.optJSONObject("sun")?.optDouble("elevation")?.takeIf { !it.isNaN() })
+                onMood(snapshot.optString("activeScene").takeIf { it.isNotEmpty() && !snapshot.isNull("activeScene") })
                 snapshot.optJSONArray("scenes")?.let { a ->
                     onScenes((0 until a.length()).map { a.getJSONObject(it) }.map { Scene(it.getString("id"), it.optString("name")) })
                 }

@@ -13,10 +13,15 @@
         <item quantity="one">%d on</item>
         <item quantity="other">%d on</item>
     </plurals>
-    <string name="unreachable">Unreachable</string>
-    <string name="fan_speed">%1$s · speed %2$d</string>
-    <string name="fan_stopped">%1$s · off</string>
-    <string name="room_brightness">%1$s · %2$d%%</string>
+    <!-- A room row: what its lamps are doing. Never a percentage — one number standing for several
+         brightnesses would be a lie. -->
+    <string name="room_on_count">%1$d of %2$d on</string>
+    <string name="room_off">Off</string>
+    <string name="room_away">%1$s · %2$d away</string>
+    <!-- How far the armed mood (Relax, Read) has got, said in the subtitle and nowhere else. -->
+    <string name="mood_armed">%s armed</string>
+    <string name="mood_adjusted">%1$s · %2$d adjusted</string>
+    <string name="mood_partly">%1$s on %2$d of %3$d lit</string>
     <string name="settings">Settings</string>
 
     <string name="searching_bridge">Looking for your home on the Wi-Fi…</string>
@@ -75,7 +80,7 @@
     <string name="chip_on">Lights · %d on</string>
     <string name="chip_all_off">Lights · all off</string>
     <string name="home_title">Home</string>
-    <string name="home_hint">OK turns a lamp on or off · ← → dims it · Back returns to the block</string>
+    <string name="home_hint">OK turns a room or a lamp on or off · ← → dims it · Back returns to the block</string>
     <string name="np_rooms">%1$s · %2$d rooms</string>
     <string name="np_nothing">Nothing playing</string>
     <string name="speaker_lead">%s · from here</string>

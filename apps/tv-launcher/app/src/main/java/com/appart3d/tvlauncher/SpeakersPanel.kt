@@ -23,7 +23,8 @@ class SpeakersPanel(
     context: Context,
     private val onVolume: (Playing, Int) -> Unit,
 ) : LinearLayout(context) {
-    private val pixel: Typeface = runCatching { context.resources.getFont(R.font.pixelify_sans) }.getOrDefault(Typeface.DEFAULT_BOLD)
+    private val bold: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
+    private val body: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     private val heading = TextView(context)
     private val list = LinearLayout(context)
     private val rows = LinkedHashMap<String, Row>()
@@ -34,7 +35,7 @@ class SpeakersPanel(
         addView(heading.apply {
             setTextColor(INK)
             textSize = 17f
-            typeface = pixel
+            typeface = bold
             setPadding(dp(8), 0, dp(4), dp(6))
         })
         list.orientation = VERTICAL
@@ -88,7 +89,7 @@ class SpeakersPanel(
                 orientation = VERTICAL
                 addView(name.apply {
                     textSize = 13f
-                    typeface = pixel
+                    typeface = bold
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                 })
@@ -97,7 +98,7 @@ class SpeakersPanel(
             }, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(8) })
             addView(level.apply {
                 textSize = 11f
-                typeface = pixel
+                typeface = body
             })
             setOnKeyListener { _, keyCode, event ->
                 val step = when (keyCode) {

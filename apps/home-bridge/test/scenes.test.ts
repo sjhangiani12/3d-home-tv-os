@@ -68,6 +68,13 @@ describe("planScene", () => {
     expect(p["hue:light:8"]).toBeUndefined(); // already off
   });
 
+  it("All off: the lamps go out and nothing else does — the TV and the fan are left alone", () => {
+    const p = byId(planScene("off", devices, opts));
+    expect(Object.keys(p).sort()).toEqual(["hue:light:12", "hue:light:17", "hue:light:9"]);
+    expect(p["hue:light:12"]).toEqual([{ type: "power", on: false }]);
+    expect(p["hue:light:18"]).toBeUndefined(); // already off
+  });
+
   it("never sends an IR power toggle to a TV whose state is unknown", () => {
     const tv: Device = { ...devices[6]!, id: "robot:tv", source: "robot", state: { on: null, reachable: true } };
     expect(byId(planScene("away", [tv], opts))["robot:tv"]).toBeUndefined();
