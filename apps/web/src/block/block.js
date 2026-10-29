@@ -1021,7 +1021,10 @@ const SPIDEY = {
   // isometric, and a crouch seen head-on or from behind is a man standing up — the bent knee and the
   // planted arm are only legible in profile. Each of these is the roof direction that projects
   // closest to horizontal on screen *and* points off the building, so he is also looking at something.
-  // The avenue tower first, then one block over the street, then the roof up by the clock.
+  // All three are on the west parapet of the same run of roofs down the avenue, because that is the
+  // one line of buildings this camera sees the near face of: a perch on the far side of the street is
+  // a figure behind a facade for most of the dwell. The avenue tower first, then two roofs a third of
+  // its height, each a block further down.
   // `sit` is where he spends nearly all of the dwell, and it is a different point again: a sit only
   // works if his backside is on the lip and his legs are out over nothing, so it sits a metre inside
   // the parapet along `look` rather than four. He stands up and steps back to `at` for the launch.
@@ -1029,12 +1032,12 @@ const SPIDEY = {
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
     // leaves him behind ninety-six metres of his own building for a third of the arc. Here the outward
     // diagonal happens to be the flat one — it projects to almost exactly screen-left.
-    { grip: [18.5, 95.7, 106.6], sit: [19.1, 95.7, 107.2], at: [21.3, 95.7, 109.4], edge: [17.0, 95.7, 105.1], look: [-1, 0, -1], dwell: 15 },
+    { grip: [18.5, 95.7, 120.7], sit: [19.1, 95.7, 121.3], at: [21.3, 95.7, 123.5], edge: [17.0, 95.7, 119.2], look: [-1, 0, -1], dwell: 15 },
     // On these two the outward diagonal runs down the screen, which is straight at the camera, so he
     // looks out along -x instead: the same lip, read from the side. Sitting, that also means sitting
     // along the x face a couple of metres back from the corner rather than astride it — on the corner
     // itself half of him hangs off the other edge as well.
-    { grip: [66.9, 49.5, 35.6], sit: [67.5, 49.5, 33.6], at: [70.5, 49.5, 32.8], edge: [65.4, 49.5, 37.0], look: [-1, 0, 0], dwell: 8.5 },
+    { grip: [18.5, 46.2, 24.6], sit: [19.1, 46.2, 22.6], at: [22.0, 46.2, 21.8], edge: [17.0, 46.2, 26.1], look: [-1, 0, 0], dwell: 8.5 },
     { grip: [18.5, 49.5, -41.5], sit: [19.1, 49.5, -43.5], at: [22.0, 49.5, -44.3], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
   ],
   // Low and well in front of the block, far enough toward the camera to start about a hundred and
