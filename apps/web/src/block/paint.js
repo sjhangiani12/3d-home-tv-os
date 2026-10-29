@@ -34,7 +34,8 @@ export function repaint(M) {
   const set = (mat, c) => mat && mat.color.set(c);
   set(M.glass, "#a8d2dd"); set(M.dock, "#7d7a6e"); set(M.tile, "#f3ead4"); set(M.tileBand, "#4f8f63");
   set(M.platform, "#cabfa8"); set(M.rail, "#4d463c"); set(M.trackbed, "#5c5245");
-  set(M.wood, "#9a7850"); set(M.woodRoof, "#7a5c3e"); set(M.stoop, "#c3b298"); set(M.door, "#5a4030");
+  set(M.wood, "#9a7850"); set(M.woodRoof, "#7a5c3e"); set(M.stoop, "#c3b298");
+  set(M.door, "#3d7a56"); set(M.doorPanel, "#2f6347");
   set(M.pole, "#5a564c");
   ["#4f8f63", "#c2564a", "#3f6e9e", "#dba94a", "#7f5e96"].forEach((c, i) => set(M.awning[i], c));
 }

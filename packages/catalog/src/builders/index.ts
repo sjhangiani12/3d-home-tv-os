@@ -70,6 +70,7 @@ export const MODELS: Record<ItemCategory, VariantDef[]> = {
     { key: "chair/wood", label: "Wooden chair", build: seat.chairWood },
     { key: "chair/upholstered", label: "Upholstered chair", build: seat.chairUpholstered, defaultColor: "#e3b55b" },
     { key: "chair/stool", label: "Stool", build: seat.chairStool, defaultColor: "#d9774f", defaultDimensions: [0.38, 0.65, 0.38] },
+    { key: "chair/stool-records", label: "Stool with records", build: seat.chairStoolRecords, defaultColor: "#d9774f", defaultDimensions: [0.4, 0.72, 0.4] },
     { key: "chair/office", label: "Office chair", build: seat.chairOffice, defaultColor: "#5b7fa6", defaultDimensions: [0.62, 1.05, 0.62] },
     { key: "chair/office-light", label: "Office chair (light frame)", build: seat.chairOfficeLight, defaultColor: "#6b7350", defaultDimensions: [0.66, 1.08, 0.62] },
   ],
@@ -102,12 +103,15 @@ export const MODELS: Record<ItemCategory, VariantDef[]> = {
     { key: "floorLamp/drum", label: "Floor lamp", build: deco.floorLampDrum },
     { key: "floorLamp/evedal", label: "EVEDAL floor lamp (smoked glass)", build: deco.floorLampEvedal, defaultDimensions: [0.32, 1.5, 0.32] },
     { key: "floorLamp/arc", label: "Arc floor lamp", build: deco.floorLampArc, defaultDimensions: [1.3, 1.9, 0.4] },
+    { key: "floorLamp/squiggle", label: "Squiggle floor lamp", build: deco.floorLampSquiggle, defaultColor: "#f3e7d3", defaultDimensions: [0.42, 1.55, 0.3] },
   ],
   plant: [
     { key: "plant/bush", label: "Bushy plant", build: deco.plantBush },
     { key: "plant/leafy", label: "Large-leaf plant", build: deco.plantLeafy, defaultColor: "#4f8f5f", defaultDimensions: [0.8, 0.9, 0.8] },
     { key: "plant/cactus", label: "Cactus", build: deco.plantCactus, defaultColor: "#79a86f", defaultDimensions: [0.3, 0.6, 0.3] },
     { key: "plant/tree", label: "Small tree", build: deco.plantTree, defaultColor: "#6aa36f", defaultDimensions: [0.7, 1.8, 0.7] },
+    { key: "plant/trailing", label: "Trailing plant (pothos)", build: deco.plantTrailing, defaultColor: "#5f9e63", defaultDimensions: [0.34, 0.4, 0.34] },
+    { key: "plant/hanging", label: "Hanging plant", build: deco.plantHanging, defaultColor: "#5f9e63", defaultDimensions: [0.45, 1.0, 0.45] },
   ],
   rug: [
     { key: "rug/rect", label: "Rectangular rug", build: deco.rugRect },
@@ -155,6 +159,7 @@ export const MODELS: Record<ItemCategory, VariantDef[]> = {
   coatRack: [
     { key: "coatRack/pole", label: "Standing coat rack", build: ex.coatRackPole },
     { key: "coatRack/hanging", label: "Coat rack with coats", build: ex.coatRackHanging, defaultDimensions: [0.6, 1.8, 0.6] },
+    { key: "coatRack/garment", label: "Rolling garment rack", build: ex.coatRackGarment, defaultColor: "#c3c8cc", defaultDimensions: [1.1, 1.75, 0.55] },
   ],
   pendantLamp: [
     { key: "pendantLamp/cage", label: "Rattan pendant", build: ex.pendantCage },

@@ -1,3 +1,4 @@
+import { rng } from "../parts";
 import { type Build, type Ctx, Parts, clamp, darken, lighten, palette, legs, cornerPts, ACCENTS, fitToBox } from "./common";
 
 interface SofaStyle {
@@ -245,10 +246,10 @@ export const chairUpholstered: Build = (c) => {
   return p;
 };
 
-export const chairStool: Build = (c) => {
-  const p = new Parts();
-  const { w, h, d, color } = c;
-  const seatT = clamp(h * 0.07, 0.03, 0.05);
+/** Round stool whose seat top is at `seatTop` — the seat is what fills the footprint. */
+function stool(p: Parts, c: Ctx, seatTop: number): void {
+  const { w, d, color } = c;
+  const seatT = clamp(seatTop * 0.07, 0.03, 0.05);
   const rx = w / 2;
   const rz = d / 2;
   const legC = darken(color, 0.35);
@@ -260,13 +261,46 @@ export const chairStool: Build = (c) => {
     [1, -1],
     [-1, -1],
   ] as const) {
-    p.cyl(sx * rx * k * 0.85, sz * rz * k * 0.85, 0, h - seatT + 0.005, lr, lr, legC, { seg: 6 });
+    p.cyl(sx * rx * k * 0.85, sz * rz * k * 0.85, 0, seatTop - seatT + 0.005, lr, lr, legC, { seg: 6 });
   }
   // foot ring
-  const ringY = h * 0.32;
+  const ringY = seatTop * 0.32;
   const ringR = rx * k * 0.85;
   p.add({ kind: "torus", R: ringR, r: lr * 0.7, seg: 16 }, [0, ringY, 0], legC, { rot: [Math.PI / 2, 0, 0], scale: [1, rz / rx, 1] });
-  p.cyl(0, 0, h - seatT, h, rx, rz, color, { seg: 20 });
+  p.cyl(0, 0, seatTop - seatT, seatTop, rx, rz, color, { seg: 20 });
+}
+
+export const chairStool: Build = (c) => {
+  const p = new Parts();
+  stool(p, c, c.h);
+  return p;
+};
+
+/**
+ * The same stool with a stack of records on it: the box's height is the top of the stack, so the
+ * seat sits a stack lower than the plain variant. The sleeves are narrower than the seat, so the
+ * seat still defines the four sides of the box.
+ */
+export const chairStoolRecords: Build = (c) => {
+  const p = new Parts();
+  const { w, h, d, seed } = c;
+  const n = 6;
+  const stackH = clamp(h * 0.14, 0.04, 0.13);
+  const seatTop = h - stackH;
+  stool(p, c, seatTop);
+  const rand = rng(seed + 5);
+  const s = Math.min(w, d) * 0.78;
+  const st = stackH / n;
+  for (let i = 0; i < n; i++) {
+    const y = seatTop + i * st;
+    // each sleeve a little off-square from the one under it, as a stack that has been flicked through
+    const ang = (rand() - 0.5) * 0.24;
+    const off = (rand() - 0.5) * s * 0.05;
+    const sleeve = i === n - 1 ? palette.ink : (ACCENTS[(i + seed) % ACCENTS.length] as string);
+    p.add({ kind: "box", size: [s, st, s] }, [off, y + st / 2, off * 0.6], sleeve, { rot: [0, ang, 0] });
+  }
+  // the top sleeve's label, a disc flush with the top of the stack
+  p.cyl(0, 0, h - st * 0.12, h, s * 0.2, s * 0.2, palette.mustard, { seg: 16 });
   return p;
 };
 
