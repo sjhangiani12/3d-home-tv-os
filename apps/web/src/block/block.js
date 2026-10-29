@@ -178,7 +178,10 @@ const M = {
   sidewalk: lam(BASE.sidewalk), yard: lam(BASE.yard), roof: lam(BASE.roof), roof2: lam(BASE.roof2),
   mark: lam(BASE.mark), yellow: lam(BASE.yellow), bikeLane: lam(BASE.bikeLane), dock: lam("#6d6f75"),
   tile: lam("#efe8d6", { emissive: "#fff3d6", emissiveIntensity: 0.35 }), tileBand: lam("#2f7d4f", { emissive: "#2f7d4f", emissiveIntensity: 0.4 }), platform: lam("#b3ada2", { emissive: "#ffffff", emissiveIntensity: 0.12 }), rail: lam("#3a3532"), trackbed: lam("#4c443d"),
-  wood: lam("#8a6a4a"), woodRoof: lam("#6b5038"), stoop: lam("#8c7f72"), door: lam("#3a2a22"),
+  wood: lam("#8a6a4a"), woodRoof: lam("#6b5038"), stoop: lam("#8c7f72"),
+  // The street door is green; its recessed panels are the same green a shade down, which is all the
+  // relief a flat-shaded leaf needs at this distance.
+  door: lam("#2f5d45"), doorPanel: lam("#255041"),
   pole: lam("#3b3d44"), lampHead: new THREE.MeshBasicMaterial({ color: "#fff0c4" }),
   globe: new THREE.MeshBasicMaterial({ color: "#3fd37a" }), awning: ["#2f6e4f", "#a33a32", "#24486e", "#c08a2c", "#5b3e6e"].map((c) => lam(c)),
 };
@@ -208,7 +211,13 @@ function box(acc, x0, x1, y0, y1, z0, z1, o) {
   const w = x1 - x0, d = z1 - z0;
   if (!o.noSides) {
     acc.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], [U(0), V(y0)], [U(w), V(y0)], [U(w), V(y1)], [U(0), V(y1)]);
-    acc.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], [U(0), V(y0)], [U(w), V(y0)], [U(w), V(y1)], [U(0), V(y1)]);
+    // The street face, in one piece — or in four, around a doorway (`o.hole = [x0, x1, y0, y1]`), so the
+    // way in is a hole in the wall with somewhere behind it rather than a leaf painted on a solid box.
+    const face = (xa, xb, ya, yb) => acc.quad([xb, ya, z0], [xa, ya, z0], [xa, yb, z0], [xb, yb, z0], [0, 0, -1],
+      [U(x1 - xb), V(ya)], [U(x1 - xa), V(ya)], [U(x1 - xa), V(yb)], [U(x1 - xb), V(yb)]);
+    const h = o.hole;
+    if (!h) face(x0, x1, y0, y1);
+    else { face(x0, h[0], y0, y1); face(h[1], x1, y0, y1); face(h[0], h[1], y0, h[2]); face(h[0], h[1], h[3], y1); }
     acc.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], [U(0), V(y0)], [U(d), V(y0)], [U(d), V(y1)], [U(0), V(y1)]);
     acc.quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], [U(0), V(y0)], [U(d), V(y0)], [U(d), V(y1)], [U(0), V(y1)]);
   }
@@ -369,51 +378,166 @@ for (const [kx, kz] of kiosks) {
 }
 
 // ---------- our building: separate meshes so it can open up when the camera flies in
+// The doorway is a real hole in the façade, with a hall behind it. The hole is a shade *smaller* than the
+// leaf, so a shut door overlaps the brick by a couple of centimetres. A hole wider than its door, which is
+// what a real jamb is, leaves a slit of unlit interior all round it, and against the brick that reads as a
+// black outline drawn on the door rather than as a reveal.
+const DOOR_W = 1.6, DOOR_Y0 = CURB + 1.2, DOOR_Y1 = CURB + 3.6;
+const JAMB = [HX - DOOR_W / 2 + 0.02, HX + DOOR_W / 2 - 0.02, DOOR_Y0, DOOR_Y1 - 0.02];
 const homeMat = lam("#e8c98f", { map: WT.map });
 const homeAcc = new Acc(), homeRoofAcc = new Acc();
-box(homeAcc, HOME.x0, HOME.x1, CURB, HOME.floors * FH, HOME.z0, HOME.z1, { top: homeRoofAcc, ou: 3, ov: 0 });
+box(homeAcc, HOME.x0, HOME.x1, CURB, HOME.floors * FH, HOME.z0, HOME.z1, { top: homeRoofAcc, ou: 3, ov: 0, hole: JAMB });
 box(homeRoofAcc, HOME.x0 - 0.3, HOME.x1 + 0.3, HOME.floors * FH, HOME.floors * FH + 0.6, HOME.z0 - 0.3, HOME.z1 + 0.3);
 const homeMesh = homeAcc.mesh(homeMat, { cast: true });
 const homeRoofMat = lam("#c0643f");
 const homeRoof = homeRoofAcc.mesh(homeRoofMat, { cast: true });
-// stoop and door on the street. The door hangs on a hinge of its own rather than being baked into the
-// building, so the walk in can open it: a group at the jamb, the leaf built off to one side of it, and
-// `swingDoor` turns the group. Behind it, a plain dark panel — the hall, unlit — so that what opens
-// reveals somewhere to go instead of the wall of the façade.
-const DOOR_W = 1.6, DOOR_Y0 = CURB + 1.2, DOOR_Y1 = CURB + 3.6;
-const doorPivot = new THREE.Group();
+// The stoop and the way in, which is two doors, not one: the green street door, a vestibule with the
+// mailboxes down its left-hand wall, then the white glass door with the basket of flowers on it, and the
+// stairs behind that. Both leaves hang on hinges of their own rather than being baked into the building,
+// so the walk in can open them: a group at each jamb, the leaf built off to one side of it, and
+// `swingDoor` turns both.
+const doorPivot = new THREE.Group(), innerPivot = new THREE.Group();
 {
   const sx = HX, z = HOME.z0;
   const st = new Acc();
   for (let i = 0; i < 4; i++) box(st, sx - 1.5, sx + 1.5, CURB, CURB + 0.3 * (i + 1), z - 2.4 + i * 0.6, z);
   st.mesh(M.stoop, { cast: true });
-  // Both panels sit just *in front* of the façade: the wall of the building is one solid box with no
-  // hole in it, so anything at or behind `z` is swallowed by its front face.
-  const hall = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_W, DOOR_Y1 - DOOR_Y0), new THREE.MeshBasicMaterial({ color: "#15100d" }));
-  hall.position.set(sx, (DOOR_Y0 + DOOR_Y1) / 2, z - 0.04); hall.rotation.y = Math.PI; scene.add(hall);
-  doorPivot.position.set(sx - DOOR_W / 2, DOOR_Y0, z - 0.1);
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_Y1 - DOOR_Y0, 0.08), M.door);
-  leaf.position.set(DOOR_W / 2, (DOOR_Y1 - DOOR_Y0) / 2, 0);
-  leaf.castShadow = true; leaf.receiveShadow = true;
-  doorPivot.add(leaf); scene.add(doorPivot);
+
+  // ---- everything behind the façade, seen from inside it: every face is drawn inward (the camera is in
+  // the box, not outside it), and every material is basic. A lamp in here would mean one more light in
+  // every Lambert shader on the block, which is frames on the TV, for two rooms that are on screen for
+  // three seconds. Flat warm colour against the sun-lit brick reads as lit from within anyway.
+  const inFloor = (a, x0, x1, z0, z1, y) => a.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], [0, 1, 0], Z2, Z2, Z2, Z2);
+  const inCeil = (a, x0, x1, z0, z1, y) => a.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], [0, -1, 0], Z2, Z2, Z2, Z2);
+  const inSide = (a, x, y0, y1, z0, z1, s) => s > 0
+    ? a.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], [1, 0, 0], Z2, Z2, Z2, Z2)
+    : a.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], [-1, 0, 0], Z2, Z2, Z2, Z2);
+  const inBack = (a, x0, x1, y0, y1, z) => a.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], [0, 0, -1], Z2, Z2, Z2, Z2);
+  const hallW = new Acc(), hallF = new Acc(), tread = new Acc(), riser = new Acc(), deep = new Acc();
+  const DH = DOOR_Y1 - DOOR_Y0, T = 0.08;
+  const f0 = DOOR_Y0, f1 = f0 + 2.6, vx0 = sx - 1.35, vx1 = sx + 1.35;
+  // zi is the vestibule's far wall and the inner door's plane; vz1 is the back of the stair hall.
+  const zi = z + 1.95, vz1 = z + 5.2;
+  inFloor(hallF, vx0, vx1, z, vz1, f0);
+  inCeil(hallW, vx0, vx1, z, vz1, f1);
+  inSide(hallW, vx0, f0, f1, z, vz1, 1); inSide(hallW, vx1, f0, f1, z, vz1, -1);
+  inBack(deep, vx0, vx1, f0, f1, vz1);
+  // The wall between the two, with its own doorway: left of it, right of it, over it. Undersized like the
+  // hole in the façade, for the same reason — the leaf must cover it, not sit inside it.
+  const jx0 = sx - DOOR_W / 2 + 0.02, jx1 = sx + DOOR_W / 2 - 0.02;
+  inBack(hallW, vx0, jx0, f0, f1, zi); inBack(hallW, jx1, vx1, f0, f1, zi); inBack(hallW, jx0, jx1, f0 + DH - 0.02, f1, zi);
+  // The mailboxes: a strip of little brass doors down the left-hand wall of the vestibule, two rows of
+  // five, which is the first thing in the frame once the green door is out of the way. Left-hand means
+  // `vx1`: the camera walks in along +z, so its left is +x and what is on +x is on the left of the screen.
+  const boxes = new Acc(), boxBack = new Acc();
+  inSide(boxBack, vx1 - 0.02, f0 + 0.88, f0 + 1.6, z + 0.2, z + 1.24, -1);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) {
+    const by = f0 + 0.93 + r * 0.33, bz = z + 0.25 + c * 0.195;
+    inSide(boxes, vx1 - 0.05, by, by + 0.28, bz, bz + 0.165, -1);
+  }
+  // Ten steps climbing away into the dark of the landing — what the glass door opens on.
+  const RISE = 0.19, RUN = 0.28, STEPS = 10, sz = vz1 - RUN * STEPS;
+  for (let i = 0; i < STEPS; i++) {
+    const y = f0 + RISE * (i + 1), sz0 = sz + RUN * i;
+    inBack(riser, sx - 0.75, sx + 0.75, y - RISE, y, sz0);
+    inFloor(tread, sx - 0.75, sx + 0.75, sz0, sz0 + RUN, y);
+  }
+  hallW.mesh(new THREE.MeshBasicMaterial({ color: "#c9ad82" }));
+  hallF.mesh(new THREE.MeshBasicMaterial({ color: "#7d6244" }));
+  tread.mesh(new THREE.MeshBasicMaterial({ color: "#9a7a52" }));
+  riser.mesh(new THREE.MeshBasicMaterial({ color: "#5e4a35" }));
+  deep.mesh(new THREE.MeshBasicMaterial({ color: "#241b14" }));
+  boxBack.mesh(new THREE.MeshBasicMaterial({ color: "#4a4038" }));
+  boxes.mesh(new THREE.MeshBasicMaterial({ color: "#b9924c" }));
+  const lantern = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), new THREE.MeshBasicMaterial({ color: "#ffd9a0" }));
+  lantern.position.set(sx, f0 + 2.05, z + 2.6); scene.add(lantern);
+  const cord = new Acc();
+  box(cord, sx - 0.015, sx + 0.015, f0 + 2.15, f1, z + 2.585, z + 2.615);
+  cord.mesh(new THREE.MeshBasicMaterial({ color: "#3a2f24" }));
+
+  // ---- the leaves. Both are built in their pivot's own coordinates — x running from the hinge, y 0 at the
+  // threshold — so turning the group turns the lot. `face` lays a rectangle on both sides of a leaf, a hair
+  // proud of it: a panel or a pane from the street and the same from behind, two quads, no hole to cut.
+  const face = (a, x0, x1, y0, y1, d) => {
+    a.quad([x1, y0, -T / 2 - d], [x0, y0, -T / 2 - d], [x0, y1, -T / 2 - d], [x1, y1, -T / 2 - d], [0, 0, -1], Z2, Z2, Z2, Z2);
+    a.quad([x0, y0, T / 2 + d], [x1, y0, T / 2 + d], [x1, y1, T / 2 + d], [x0, y1, T / 2 + d], [0, 0, 1], Z2, Z2, Z2, Z2);
+  };
+  // `Acc.mesh` puts what it builds in the scene; these belong to a door, so take them back.
+  const hang = (pivot, parts) => { for (const p of parts) pivot.add(p); scene.add(pivot); };
+
+  // The street door: green, panelled, hinged on the right of the frame and swinging into the vestibule.
+  doorPivot.position.set(sx - DOOR_W / 2, DOOR_Y0, z + 0.06);
+  {
+    const leafA = new Acc(), paneA = new Acc(), brassA = new Acc();
+    box(leafA, 0, DOOR_W, 0, DH, -T / 2, T / 2);
+    for (const [y0, y1] of [[0.18, 0.86], [0.96, 1.5], [1.6, 2.22]]) face(paneA, 0.16, DOOR_W - 0.16, y0, y1, 0.004);
+    box(brassA, DOOR_W - 0.25, DOOR_W - 0.11, 1.0, 1.14, -T / 2 - 0.05, -T / 2 - 0.01);
+    box(brassA, DOOR_W - 0.43, DOOR_W - 0.13, 1.04, 1.1, -T / 2 - 0.09, -T / 2 - 0.05);
+    hang(doorPivot, [leafA.mesh(M.door, { cast: true }), paneA.mesh(M.doorPanel, { cast: true }), brassA.mesh(lam("#c79b4a"))]);
+  }
+
+  // The vestibule door: white, three panes of glass in a band near the top with the basket of flowers hung
+  // over the middle one. Hinged on the left like the street door and swinging inwards, nearly flat against
+  // the right-hand wall of the stair hall — the one way it can open without standing in the line the camera
+  // walks, and without folding over the mailboxes.
+  innerPivot.position.set(sx - DOOR_W / 2, DOOR_Y0, zi + 0.05);
+  {
+    const leafA = new Acc(), paneA = new Acc(), glassA = new Acc(), brassA = new Acc(), basketA = new Acc();
+    box(leafA, 0, DOOR_W, 0, DH, -T / 2, T / 2);
+    const GI = 0.13, MU = 0.055, PW = (DOOR_W - GI * 2 - MU * 2) / 3;
+    for (let i = 0; i < 3; i++) face(glassA, GI + i * (PW + MU), GI + i * (PW + MU) + PW, 1.42, 2.06, 0.004);
+    face(paneA, 0.17, DOOR_W - 0.17, 0.2, 0.74, 0.003);
+    face(paneA, 0.17, DOOR_W - 0.17, 0.84, 1.3, 0.003);
+    box(brassA, DOOR_W - 0.25, DOOR_W - 0.11, 1.0, 1.14, -T / 2 - 0.05, -T / 2 - 0.01);
+    box(brassA, DOOR_W - 0.43, DOOR_W - 0.13, 1.04, 1.1, -T / 2 - 0.09, -T / 2 - 0.05);
+    box(basketA, 0.57, 1.03, 1.44, 1.7, -T / 2 - 0.21, -T / 2 - 0.02);
+    box(basketA, 0.785, 0.815, 1.7, 2.12, -T / 2 - 0.13, -T / 2 - 0.1);
+    // The blooms: one instanced mesh, a spiral of little faceted balls over the basket, pinks and creams
+    // and yellows with some leaf green among them. One draw call for the whole bunch.
+    const N = 26, BLOOM = ["#f3a7bf", "#fbe7ef", "#f7d774", "#e86f9a", "#fdf6e6", "#7fae6a", "#5f8f55"];
+    const blooms = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.052, 0), new THREE.MeshBasicMaterial(), N);
+    const mx = new THREE.Matrix4(), bc = new THREE.Color(), bs = new THREE.Vector3();
+    for (let i = 0; i < N; i++) {
+      const a = i * 2.399, r = Math.sqrt((i + 0.5) / N);
+      mx.makeTranslation(0.8 + Math.cos(a) * r * 0.27, 1.81 + Math.sin(a) * r * 0.17, -T / 2 - 0.1 - (1 - r) * 0.1);
+      mx.scale(bs.setScalar(0.75 + (i % 3) * 0.2));
+      blooms.setMatrixAt(i, mx);
+      blooms.setColorAt(i, bc.set(BLOOM[i % BLOOM.length]));
+    }
+    hang(innerPivot, [
+      leafA.mesh(new THREE.MeshBasicMaterial({ color: "#efe7d8" })),
+      paneA.mesh(new THREE.MeshBasicMaterial({ color: "#dcd2c0" })),
+      glassA.mesh(new THREE.MeshBasicMaterial({ color: "#ffe3b4" })),
+      brassA.mesh(new THREE.MeshBasicMaterial({ color: "#c79b4a" })),
+      basketA.mesh(new THREE.MeshBasicMaterial({ color: "#c79a5e" })),
+      blooms]);
+  }
 }
 /**
- * Swing the door: 0 shut, 1 wide. Outwards, towards the street. Inwards would be the truer thing for a
- * stoop, but there is no hole in the façade for it to swing into: the leaf would pass behind the front
- * face of the building and be eaten by it halfway through the swing. Out, it stays lit, it reads from
- * the camera, and it clears the way in — the hinge is to the left and it never reaches the centre line
- * the camera walks down.
+ * Swing the way in: 0 shut, 1 wide, both leaves at once; the vestibule door follows a beat behind the
+ * street one. Both open inwards, hinged on the same jamb, and both fold onto the right-hand wall — which
+ * leaves the mailboxes on the left in the clear. A leaf swinging out over the stoop was tried first and is
+ * wrong for this shot: it comes at the lens, and at any angle wide enough to clear the doorway it is the
+ * biggest thing on screen. 106° is as far as either can go before its free edge meets the side wall.
  */
-const DOOR_OPEN = 1.1;
-function swingDoor(to, ms) {
-  const from = doorPivot.rotation.y, end = to * DOOR_OPEN;
-  if (!ms) { doorPivot.rotation.y = end; return Promise.resolve(); }
+const DOOR_OPEN = -1.85, INNER_OPEN = -1.85, INNER_LAG = 0.45;
+function swingDoor(to, ms, leaf = "both") {
+  const outer = leaf !== "inner", inner = leaf !== "outer";
+  const fromO = doorPivot.rotation.y, fromI = innerPivot.rotation.y;
+  const endO = to * DOOR_OPEN, endI = to * INNER_OPEN;
+  // Only when the two go together does the inner one wait its turn; asked for on its own it starts at once.
+  const lag = leaf === "both" ? INNER_LAG : 0;
+  const set = (k) => {
+    if (outer) doorPivot.rotation.y = lerp(fromO, endO, k);
+    if (inner) innerPivot.rotation.y = lerp(fromI, endI, clamp((k - lag) / (1 - lag), 0, 1));
+  };
+  if (!ms) { set(1); return Promise.resolve(); }
   return new Promise((res) => {
     const t0 = performance.now();
     const step = () => {
       const k = clamp((performance.now() - t0) / ms, 0, 1);
       // Eased out only: a door is heavy at the start and light by the end, and it must not bounce.
-      doorPivot.rotation.y = lerp(from, end, 1 - Math.pow(1 - k, 3));
+      set(1 - Math.pow(1 - k, 3));
       if (k < 1) requestAnimationFrame(step); else res();
     };
     step();
@@ -1033,13 +1157,15 @@ const dirOf = (az, el) => new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.s
 const PAN = new THREE.Vector3(20.5, 0, 15.9);
 const OVERVIEW = { pos: target.clone().add(PAN).add(dirOf(0.68, 0.79).multiplyScalar(900)), target: target.clone().add(PAN), fov: 13.3 };
 const HIGH = { pos: new THREE.Vector3(HX, 70, -62), target: new THREE.Vector3(HX, 6, 12.5), fov: 32 };
-const STREET = { pos: new THREE.Vector3(HX, 1.8, -5), target: new THREE.Vector3(HX, 5.2, 12.5), fov: 58 };
-const DOOR = { pos: new THREE.Vector3(HX, 1.9, 9.4), target: new THREE.Vector3(HX, 1.9, 14), fov: 72 };
-// A step through the open door, into the dark of the hall, before the black takes over: the walk in ends by
-// going somewhere rather than by stopping dead on the threshold. Close enough to the doorway that the dark
-// panel behind the leaf covers the whole frame — so the fade to black has nothing to cut, it only deepens
-// a dark that is already there.
-const THROUGH = { pos: new THREE.Vector3(HX, 2.3, 12.15), target: new THREE.Vector3(HX, 2.5, 16), fov: 72 };
+const STREET = { pos: new THREE.Vector3(HX, 4.4, -4.5), target: new THREE.Vector3(HX, 3.6, 12.5), fov: 54 };
+// Standing on the stoop, looking slightly down at the whole door. It used to be an eye at y 1.9 with the
+// door spanning 1.38 to 3.78 — the top half of the leaf out of frame, which read as being very short. The
+// eye is above the door's middle now and the aim a touch below it, which with `LIFT` (the frame is pushed
+// up 128px to clear the TV's dock) puts the leaf, its glass and the flowers in the middle of the screen.
+const DOOR = { pos: new THREE.Vector3(HX, 4.0, 9.0), target: new THREE.Vector3(HX, 3.5, 13.2), fov: 58 };
+// A step through the open door into the hall, before the black takes over: the walk in ends by going
+// somewhere — the stairs — rather than by stopping dead on the threshold.
+const THROUGH = { pos: new THREE.Vector3(HX, 3.3, 12.6), target: new THREE.Vector3(HX, 2.9, 16.4), fov: 62 };
 const IN_C = new THREE.Vector3(9.2, 0, 14.3), IN_OFF = new THREE.Vector3(-15.5, 23, 21.5);
 // Where the apartment sits in the frame. On its own it belongs in the middle. With the lights drawer taking
 // the right of the screen the middle is no longer the middle, so camera and target step sideways together
@@ -1115,15 +1241,18 @@ async function openHome() {
   flying = true; goingIn = true; cityHud.forEach((e) => e.classList.add("hide"));
   await tween(HIGH, 1300);
   await tween(STREET, 1000);
-  await tween(DOOR, 650);
-  // The door opens, then the camera steps through it into the dark of the hall — and the black that takes
-  // the screen is that darkness continued, rather than a cut. It also buys the apartment a beat to be set
-  // up behind it.
-  await swingDoor(1, 520);
+  await tween(DOOR, 760);
+  // Two doors, two beats, because that is how the building is: the green one opens on the vestibule and
+  // the frame holds there long enough to read the mailboxes and the white glass door with the basket of
+  // flowers on it — then that one opens on the stairs. Slower than the rest of the dive on purpose: this
+  // is the moment the eye is meant to stay on something, and it buys the apartment time to be set up.
+  await swingDoor(1, 620, "outer");
+  await new Promise((r) => setTimeout(r, 420));
   // The black starts while the camera is still moving, so the last thing on screen is the doorway growing
   // dark rather than a frame held against the jamb. It also buys the apartment a beat to be set up behind it.
-  const push = tween(THROUGH, 560);
-  await new Promise((r) => setTimeout(r, 240));
+  const push = tween(THROUGH, 700);
+  swingDoor(1, 560, "inner");
+  await new Promise((r) => setTimeout(r, 380));
   await Promise.all([push, fade(1)]);
   if (TV) {
     // On the TV the app fades its own apartment in over this page — the real scan, a whole second 3D page.
@@ -1632,6 +1761,8 @@ const UP = new THREE.Vector3(0, 1, 0);
   syncMock();
   if (h === "home") setTimeout(openHome, 300);
   if (h === "street") { flying = true; setPose(STREET); cityHud.forEach((e) => e.classList.add("hide")); }
+  if (h === "door") { flying = true; setPose(DOOR); swingDoor(1, 0, "outer"); cityHud.forEach((e) => e.classList.add("hide")); }
+  if (h === "through") { flying = true; setPose(THROUGH); swingDoor(1, 0); cityHud.forEach((e) => e.classList.add("hide")); }
   if (h === "inside") { mode = "home"; showHouse(true); setPose(INSIDE); cityHud.forEach((e) => e.classList.add("hide")); enterInside(true); drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); }
 }
 applyLook(); updateLamps(); applyCam();
