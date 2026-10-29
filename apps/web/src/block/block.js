@@ -986,32 +986,41 @@ function updateHomeWindows() {
 // what makes him speed up at the bottom and what pulls him onto the ledge instead of past it.
 const SPIDEY = {
   away: 62,           // seconds off-screen between passes
-  shoot: 0.3,          // seconds for the web to fly out and bite
+  thwip: 260,          // metres a second the thread travels, so a long shot visibly takes longer
   // The block's distances are squeezed (see the map), so a true 9.81 against a hundred-metre rope gives
   // a twenty-second period and he just sinks. Gravity is scaled to put the swing back on the clock the
   // geometry implies; the equation of motion, and so the shape of the arc, is unchanged.
   grav: 34,
   vmax: 27,            // metres per second along the arc, so the reel-in cannot fling him
   clear: 7,            // metres he must stay above anything he crosses
-  // Roof corners he perches on. Each one is a step outside its own parapet, on the corner the camera
-  // can see: overhanging the edge is both what he would do and the only way he is certainly not
-  // standing a metre inside the brick. The avenue tower first, then one block over the street, then
-  // the roof up by the clock.
+  // Roof corners he perches on, as three points on the same corner, because the web, his feet and his
+  // launch all want different ones. `grip` is the parapet corner itself, exactly on the building, and
+  // it is where the thread bites — aimed anywhere inside the footprint the last stretch of web
+  // disappears into the roof, which is what makes it look like it went through the wall rather than
+  // caught the edge. `at` is two metres inside, where his feet go, because standing on the corner
+  // itself leaves him hovering beside it. `edge` is a stride outside, the lip he steps off, because
+  // starting a swing from inside the footprint drops him through his own roof.
+  // The avenue tower first, then one block over the street, then the roof up by the clock.
   perches: [
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
     // leaves him behind ninety-six metres of his own building for a third of the arc.
-    { at: [17.0, 95.7, 105.1], dwell: 15 },
-    { at: [65.4, 49.5, 37.0], dwell: 8.5 },
-    { at: [17.0, 49.5, -40.0], dwell: 10 },
+    { grip: [18.5, 95.7, 106.6], at: [20.5, 95.7, 108.6], edge: [17.0, 95.7, 105.1], dwell: 15 },
+    { grip: [66.9, 49.5, 35.6], at: [68.9, 49.5, 33.6], edge: [65.4, 49.5, 37.0], dwell: 8.5 },
+    { grip: [18.5, 49.5, -41.5], at: [20.5, 49.5, -43.6], edge: [17.0, 49.5, -40.0], dwell: 10 },
   ],
-  // Off the left edge and high, so the first web bites the tall tower and he swings the whole width of
-  // the block to reach it — about 1250px of travel, all of it in plain sight. Entering from the right
-  // instead, which is the near side of the tower, hides a third of the approach behind the tower
-  // itself; entering from straight above is clear but reads as a drop, not a swing.
-  enter: [-200, 160, 0],
+  // Low and well in front of the block, far enough toward the camera to start about a hundred and
+  // twenty pixels below the bottom edge: the first web bites the corner of the tall tower and goes up
+  // into frame ahead of him, then he comes through the floor of the picture after it, sweeping right
+  // as he rises, instead of sliding in from the side. Screen-down here is -x and +z together, so both
+  // have to move; the ratio (about 1:1.3) is what keeps the climb under the tower rather than across
+  // it. Pushed further out he is off-screen for four seconds of a six-second swing, which is just a
+  // long wait for nothing.
+  enter: [-140, 95.7, 180],
   // A twenty-five-storey roof just past the left edge, and taller than the roof he leaves from: the
-  // last web goes up and out, so he exits rising rather than sinking out of frame.
-  leave: [-176, 82.5, -114],
+  // last web goes up and out, so he exits rising rather than sinking out of frame. The corner of that
+  // roof, not a point beside it — the old value sat a metre and a half clear of the building on both
+  // axes, so the last thread of the loop ended in open air.
+  leave: [-174.5, 82.5, -115.6],
 };
 
 // Two poses, each one merged vertex-coloured mesh (one draw call), built facing +x with +y up.
@@ -1177,8 +1186,12 @@ function hidden(x, y, z, skip) {
 // One hop, solved once at start-up: the swing plane, the rope, and how hard he has to reel in to clear
 // the block. Bigger `pow` means he hauls himself up sooner, so the arc rides higher.
 const probe = new THREE.Vector3();
-function hop(from, to) {
-  const A = new THREE.Vector3(...to), P = new THREE.Vector3(...from);
+// `to` is where the thread bites — the parapet corner — and `land` is where he ends up standing, two
+// metres in from it. They are a couple of metres apart against a hundred-metre rope, so the arc is the
+// same either way; keeping them separate is what lets the web grip the edge while his feet are on the
+// roof instead of the other way round.
+function hop(from, to, land, floorTest = true) {
+  const A = new THREE.Vector3(...to), P = new THREE.Vector3(...from), LAND = new THREE.Vector3(...(land || to));
   const skip = [roofUnder(P.x, P.z), roofUnder(A.x, A.z)].filter(Boolean);
   const u = new THREE.Vector3(P.x - A.x, 0, P.z - A.z);
   const s0 = u.length(); u.divideScalar(s0 || 1);
@@ -1198,11 +1211,15 @@ function hop(from, to) {
   // The arc is picked by trying reel-in rates until one is both clear of the roofs and in plain sight
   // for nearly all of its visible length. A couple of hidden samples are allowed: the first of them is
   // always the moment he drops past the edge of the tower he is leaving, which is not a glitch.
+  // Only the stretch he actually flies is scored. He lets go at TH_LET, and everything below that
+  // angle lies inside the building he is landing on — scoring it marks a perfectly good arc as hidden
+  // for the sake of samples that never happen.
+  const i0 = Math.max(2, Math.ceil(TH_LET * 30 / th0));
   let pow = 1.4, best = 1.4, bestBad = 1e9;
   for (const p of [1.4, 1.7, 2, 2.4, 2.9, 3.5, 4.2, 5, 6, 7, 8]) {
     pow = p;
     let bad = 0, ok = true;
-    for (let i = 2; i <= 28 && ok; i++) {
+    for (let i = i0; i <= 28 && ok; i++) {
       const q = at(th0 * i / 30, p);
       probe.set(q.x, q.y, q.z).project(camera);
       if (Math.abs(probe.x) > 1 || Math.abs(probe.y) > 1) continue;
@@ -1214,14 +1231,14 @@ function hop(from, to) {
       // draws its own dock over it. An arc that dips that low is behind something whatever the
       // buildings do, so it counts against the arc exactly as a tower would. Reeling in harder is
       // what lifts the bottom of the swing, which is why the list above runs so far.
-      if ((1 - probe.y) / 2 * 1080 > FLOOR) bad++;
+      if (floorTest && (1 - probe.y) / 2 * 1080 > FLOOR) bad++;
     }
     if (!ok) continue;
     if (bad < bestBad) { bestBad = bad; best = p; }
     if (bad <= 2) break;
   }
   pow = best;
-  return { A, u, th0, L0, pow, at, len, dlen: (th) => (L0 - REACH) * pow * Math.pow(th / th0, pow - 1) / th0 };
+  return { A, LAND, u, th0, L0, pow, at, len, dlen: (th) => (L0 - REACH) * pow * Math.pow(th / th0, pow - 1) / th0 };
 }
 // Solved on the first frame rather than here, because the clearance test projects through the camera
 // and the camera is not placed on the overview until further down.
@@ -1231,11 +1248,18 @@ function buildHops() {
   // solved before the first render, when the overview position has been set but not yet baked in.
   camera.updateMatrixWorld(true);
   HOPS = [];
-  const stops = [SPIDEY.enter, ...SPIDEY.perches.map((p) => p.at), SPIDEY.leave];
-  for (let i = 0; i < stops.length - 1; i++) HOPS.push(hop(stops[i], stops[i + 1]));
+  const P = SPIDEY.perches;
+  // The entrance is the one arc that is meant to cross the bottom of the frame, so the screen-floor
+  // test — which exists to keep the other swings above the sign cards and the TV's dock — is off for
+  // it. He comes up past the dock rather than being pushed over it.
+  HOPS.push(hop(SPIDEY.enter, P[0].grip, P[0].at, false));
+  for (let i = 0; i < P.length; i++) {
+    const n = P[i + 1];
+    HOPS.push(hop(P[i].edge, n ? n.grip : SPIDEY.leave, n ? n.at : SPIDEY.leave));
+  }
 }
 
-const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, pos: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
+const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
 const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3();
 function aim(up, fwd) {
@@ -1258,8 +1282,15 @@ function startHop() {
   const h = HOPS[spid.hop];
   spid.th = h.th0; spid.w = 0;
   const q = h.at(h.th0, h.pow);
+  // The swing begins off the lip of the roof, a stride outside where he was standing: he leans out
+  // over it while the line is in the air. On the entrance there is nowhere to lean from.
+  if (spid.hop > 0) spid.stand.copy(spid.pos); else spid.stand.set(q.x, q.y, q.z);
   spid.pos.set(q.x, q.y, q.z);
   spid.face.subVectors(h.A, spid.pos).setY(0).normalize();
+  // A thread that crosses a block takes longer to get there than one that crosses a street. At a
+  // fixed duration every shot was the same quarter-second flicker whatever the distance, which is
+  // what made the web read as appearing rather than being fired.
+  spid.shoot = clamp(spid.pos.distanceTo(h.A) / SPIDEY.thwip, 0.22, 0.55);
   spid.phase = "shoot"; spid.t = 0;
 }
 function updateSpidey(dt) {
@@ -1273,14 +1304,18 @@ function updateSpidey(dt) {
     return;
   }
   if (spid.phase === "shoot") {
-    // He is already hanging off the edge; only the thread moves, out to the roof he has picked.
-    const k = clamp(spid.t / SPIDEY.shoot, 0, 1);
-    hand.copy(spid.pos); hand.y += HAND * SCALE * 0.5;
+    // The thread leaves his fist and flies: fastest as it goes, slowing as it reaches, so there is a
+    // moment where a short line is hanging in the air pointing at nothing yet. That moment is the
+    // whole difference between a web being shot and a web being switched on.
+    const k = clamp(spid.t / spid.shoot, 0, 1);
+    spidey.position.lerpVectors(spid.stand, spid.pos, Math.min(1, k * 1.7));
+    hand.copy(spidey.position).addScaledVector(spid.face, 0.34 * SCALE);
+    hand.y += HAND * SCALE * 0.55;
     aim(UPV, spid.face);
-    spidey.position.copy(spid.pos);
     perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true;
     web.visible = true;
-    setWeb(hand, tip.copy(hand).lerp(h.A, k * k * (3 - 2 * k)));
+    const out = 1 - (1 - k) * (1 - k) * (1 - k);
+    setWeb(hand, tip.copy(hand).lerp(h.A, out));
     if (k >= 1) { spid.phase = "swing"; spid.t = 0; }
     return;
   }
@@ -1310,7 +1345,7 @@ function updateSpidey(dt) {
       const q0 = h.at(spid.th, h.pow), q1 = h.at(Math.min(h.th0, spid.th + 0.02), h.pow);
       spid.from.copy(spid.pos);
       spid.m0.set(q0.x - q1.x, q0.y - q1.y, q0.z - q1.z).normalize()
-        .multiplyScalar(spid.from.distanceTo(h.A) * 0.6);
+        .multiplyScalar(spid.from.distanceTo(h.LAND) * 0.6);
       spid.phase = "land"; spid.t = 0;
     }
     return;
@@ -1321,7 +1356,7 @@ function updateSpidey(dt) {
     const k = clamp(spid.t / LAND_T, 0, 1), k2 = k * k, k3 = k2 * k;
     spid.pos.copy(spid.from).multiplyScalar(2 * k3 - 3 * k2 + 1)
       .addScaledVector(spid.m0, k3 - 2 * k2 + k)
-      .addScaledVector(h.A, -2 * k3 + 3 * k2);
+      .addScaledVector(h.LAND, -2 * k3 + 3 * k2);
     spidey.position.copy(spid.pos);
     aim(UPV, spid.face);
     perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true;
@@ -1329,18 +1364,18 @@ function updateSpidey(dt) {
     if (web.visible) setWeb(spid.pos, h.A);
     if (k >= 1) {
       spid.hop++;
-      spid.pos.copy(h.A);
+      spid.pos.copy(h.LAND);
       if (spid.hop > SPIDEY.perches.length) { spid.phase = "away"; spid.t = 0; spidey.visible = web.visible = false; return; }
       spid.phase = "perch"; spid.t = 0;
     }
     return;
   }
-  // perched: settled on the ledge, looking the way he came from and then the way he is going
+  // perched: standing on the corner, looking the way he is going next. Nothing bobs — his feet are on
+  // the roof, and a figure that drifts up and down on a rooftop is a figure that is not on it.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
   spid.face.subVectors(next.A, spid.pos).setY(0).normalize();
   spidey.position.copy(spid.pos);
-  spidey.position.y += Math.sin(spid.t * 1.3) * 0.06;
   aim(UPV, spid.face);
   perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
