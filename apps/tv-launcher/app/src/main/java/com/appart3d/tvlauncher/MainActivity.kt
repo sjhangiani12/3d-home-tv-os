@@ -566,8 +566,10 @@ class MainActivity : Activity() {
         h.animate().alpha(1f).setDuration(600).withEndAction { if (homeShowing) web.onPause() }.start()
     }
 
-    private fun postToBlock(type: String) {
-        web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post({type:'$type'})", null)
+    /** `panel` tells the page this panel is about to cover the right of the screen, so it can aim off centre. */
+    private fun postToBlock(type: String, panel: Boolean = false) {
+        val extra = if (panel) ",panel:true" else ""
+        web.evaluateJavascript("window.appart3dEmbed && window.appart3dEmbed.post({type:'$type'$extra})", null)
     }
 
     /**
@@ -580,7 +582,7 @@ class MainActivity : Activity() {
         atDoor = false
         ensureHomeWeb()
         dockScroll.animate().alpha(0f).setDuration(220).withEndAction { if (homeShowing) dockScroll.visibility = View.INVISIBLE }.start()
-        postToBlock("openHome")
+        postToBlock("openHome", panel = drawer)
         if (drawer) {
             homePanel.visibility = View.VISIBLE
             homePanel.animate().translationX(0f).setDuration(420).setInterpolator(DecelerateInterpolator()).start()
