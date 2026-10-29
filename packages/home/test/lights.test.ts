@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  HUE_RECIPES, inMood, isMoodScene, isOn, lampLevel, lightColor, moodAdjusted, roomGroups, roomLabel,
-  roomPosition, WARM_WHITE, type Device,
+  HUE_RECIPES, inMood, isMoodScene, isOn, lampLevel, lightColor, moodAdjusted, moodStatus, roomGroups,
+  roomLabel, roomPosition, WARM_WHITE, type Device,
 } from "../src/index.ts";
 
 const light = (id: string, room: string, on: boolean | null, extra: Partial<Device> = {}): Device => ({
@@ -99,6 +99,23 @@ describe("moods", () => {
     expect(inMood(moved, "relax")).toBe(true);
     expect(moodAdjusted(moved, "relax")).toBe(true);
     expect(moodAdjusted(toned(2237, 57), "relax")).toBe(false);
+  });
+
+  it("counts the armed mood against the lamps: armed with nothing lit, partly taken, adjusted", () => {
+    const off = light("b", "Salon", false, { state: { on: false, reachable: true, kelvin: 2237 } });
+    expect(moodStatus([off], "relax")).toEqual({ scene: "relax", lit: 0, inMood: 0, adjusted: 0 });
+    expect(moodStatus([toned(2237, 57), toned(6500, 100)], "relax")).toEqual({ scene: "relax", lit: 2, inMood: 1, adjusted: 0 });
+    expect(moodStatus([toned(2237, 80)], "relax")).toEqual({ scene: "relax", lit: 1, inMood: 1, adjusted: 1 });
+  });
+
+  it("has nothing to say when no mood is armed, or when the scene that ran is not one", () => {
+    expect(moodStatus([toned(2237, 57)], null)).toBeNull();
+    expect(moodStatus([toned(2237, 57)], "movie")).toBeNull();
+  });
+
+  it("counts lamps only — a speaker playing in the room is not a light that is lit", () => {
+    const speaker: Device = { id: "s", name: "s", kind: "speaker", source: "sonos", room: "Salon", state: { on: true, reachable: true, media: { state: "playing" } }, capabilities: {} };
+    expect(moodStatus([toned(2237, 57), speaker], "relax")?.lit).toBe(1);
   });
 });
 

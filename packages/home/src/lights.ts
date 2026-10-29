@@ -74,6 +74,26 @@ export function moodAdjusted(d: Device, scene: string | null | undefined): boole
   return Math.abs(lampLevel(d) - HUE_RECIPES[scene as MoodScene].brightness) > 2;
 }
 
+/** How far the armed mood has got: lamps lit, of those the ones carrying it, of those the ones moved. */
+export interface MoodStatus {
+  scene: MoodScene;
+  lit: number;
+  inMood: number;
+  adjusted: number;
+}
+
+/**
+ * The armed mood counted against the lamps, as numbers rather than a sentence: "Relax is armed" with
+ * nothing lit, "Relax on 2 of 3 lit", "Relax · 1 adjusted" are the same four facts worded for a 428px
+ * row, a phone subtitle and a TV panel. The rules are here; the wording stays with each panel.
+ */
+export function moodStatus(devices: readonly Device[], scene: string | null | undefined): MoodStatus | null {
+  if (!scene || !isMoodScene(scene)) return null;
+  const lit = devices.filter(isLightLike).filter(isOn);
+  const inIt = lit.filter((d) => inMood(d, scene));
+  return { scene, lit: lit.length, inMood: inIt.length, adjusted: inIt.filter((d) => moodAdjusted(d, scene)).length };
+}
+
 /* ------------------------------------------------------------------ colour */
 
 /** Default warm white shown for lights that report neither a colour nor a temperature. */

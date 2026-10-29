@@ -1,10 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ambilightEffectLabel, tvAppButton, type Device, type HomeScene, type TvApp } from "@appart3d/home";
+import { ambilightEffectLabel, isMoodScene, moodStatus, roomPosition, tvAppButton, type Device, type HomeScene, type MoodStatus, type RoomGroup, type TvApp } from "@appart3d/home";
 import { appBrand } from "../lib/tvCard";
 import { useStore } from "../state/store";
 import { useHome } from "../state/home";
 import {
-  ALL_ROOMS,
   canMedia,
   deviceTint,
   formatTime,
@@ -12,16 +11,16 @@ import {
   mediaPosition,
   nowPlaying,
   resolveAsset,
-  devicesInRoom,
   fanStep,
   homeTitle,
   roomLabel,
+  isLightLike,
   isOn,
   isReachable,
   kelvinToHex,
   lightColor,
   lightsSummary,
-  roomCounts,
+  roomGroups,
   sourceLabel,
   stateWord,
   stepToSpeed,
@@ -164,12 +163,11 @@ function HomeList() {
   const home = useHome((s) => s.home);
   const devices = useHome((s) => s.devices);
   const scenes = useHome((s) => s.scenes);
-  const room = useHome((s) => s.room);
   const running = useHome((s) => s.runningScene);
+  const mood = useHome((s) => s.activeScene);
   const compact = useHome((s) => s.compact);
   const organizing = useHome((s) => s.organizing);
-  const counts = useMemo(() => roomCounts(devices), [devices]);
-  const shown = useMemo(() => devicesInRoom(devices, counts.some((c) => c.room === room) ? room : ALL_ROOMS), [devices, room, counts]);
+  const groups = useMemo(() => roomGroups(devices), [devices]);
   const anyOn = devices.some(isOn);
   const h = useHome.getState();
 
@@ -178,7 +176,10 @@ function HomeList() {
       <header className="hp-head">
         <div className="hp-title">
           <h2>{homeTitle(home)}</h2>
-          <p>{lightsSummary(devices)}</p>
+          <p>
+            {lightsSummary(devices)}
+            {moodNote(moodStatus(devices, mood))}
+          </p>
         </div>
         {compact && !organizing && <NightToggle className="hp-night" />}
         {organizing ? (
@@ -200,11 +201,21 @@ function HomeList() {
         </button>
       </header>
 
+      {/* Relax and Read latch: a mood that is armed is a mode the panel is in, not a button that was
+          pressed a moment ago, and pressing it again stops it without changing a light. */}
       <div className="hp-scenes" role="group" aria-label="Scenes">
         {scenes.map((sc) => {
           const Icon = SCENE_ICONS[sc.icon] ?? IconSun;
+          const latched = isMoodScene(sc.id) && mood === sc.id;
           return (
-            <button key={sc.id} className={`hp-scene scene-${sc.icon}${running === sc.id ? " is-running" : ""}`} onClick={() => h.runScene(sc.id)} disabled={!!running}>
+            <button
+              key={sc.id}
+              className={`hp-scene scene-${sc.icon}${running === sc.id ? " is-running" : ""}${latched ? " is-latched" : ""}`}
+              onClick={() => h.runScene(sc.id)}
+              disabled={!!running}
+              aria-pressed={isMoodScene(sc.id) ? latched : undefined}
+              title={latched ? `${sc.name} is armed — press again to stop it` : undefined}
+            >
               <span className="hp-scene-ic">
                 <Icon width={19} height={19} />
               </span>
@@ -214,33 +225,86 @@ function HomeList() {
         })}
       </div>
 
-      <div className="hp-rooms" role="tablist" aria-label="Rooms">
-        {counts.map((c) => (
-          <button key={c.room} role="tab" aria-selected={room === c.room} className={`hp-chip${room === c.room ? " is-active" : ""}`} onClick={() => h.setRoom(c.room)}>
-            {c.room === ALL_ROOMS ? "All" : roomLabel(c.room)}
-            <span className={`hp-chip-count${c.on ? " has-on" : ""}`}>{c.on}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="hp-scroll">
         {organizing && <p className="hp-organize-hint">Drag the tiles to reorder them. The order syncs to the iPhone, iPad and Mac.</p>}
         {organizing ? (
-          <OrganizeGrid devices={shown} />
+          <OrganizeGrid devices={devices} />
         ) : (
-          <div className="hp-grid">
-            {shown.map((d) => (
-              <DeviceTile key={d.id} device={d} />
-            ))}
-          </div>
+          groups.map((g) => <RoomSection key={g.room} g={g} />)
         )}
-        {shown.length === 0 && <p className="hp-empty">No devices in this room.</p>}
+        {devices.length === 0 && <p className="hp-empty">No devices.</p>}
       </div>
 
       {/* Under the lamps, where the TV keeps it: the panel is about the lights, and the music is the
           footer of the room rather than the first thing between you and a switch. */}
       <NowPlayingCard />
     </>
+  );
+}
+
+/** What the armed mood has come to, worded for a subtitle. The counting is in `@appart3d/home`. */
+function moodNote(st: MoodStatus | null): string {
+  if (!st) return "";
+  const name = st.scene === "relax" ? "Relax" : "Read";
+  if (!st.inMood) return ` · ${name} armed`;
+  if (st.adjusted) return ` · ${name} · ${st.adjusted} adjusted`;
+  return st.inMood === st.lit ? ` · ${name}` : ` · ${name} on ${st.inMood} of ${st.lit} lit`;
+}
+
+/**
+ * A room row means the room's lamps, not its TV: a count over the speaker and the television would
+ * be a number nothing in the row can switch. Everything in the room is still listed under it.
+ */
+function lampsOf(g: RoomGroup): RoomGroup {
+  const devices = g.devices.filter(isLightLike);
+  return { ...g, devices, on: devices.filter(isOn).length, reachable: devices.filter(isReachable).length };
+}
+
+/** "2 of 3 on", never a percentage: one number for several brightnesses would be a lie. */
+function roomCount(g: RoomGroup): string {
+  const away = g.devices.length - g.reachable;
+  return (g.on ? `${g.on} of ${g.devices.length} on` : "Off") + (away ? ` · ${away} away` : "");
+}
+
+/**
+ * A room: its name and what its lamps are doing, then the devices in it. The heading is the group
+ * switch — one press puts the whole room out, or brings up every lamp that answers — and a room with
+ * no lamp in it (a TV alone) is a heading with nothing to press.
+ */
+function RoomSection({ g }: { g: RoomGroup }) {
+  const lamps = lampsOf(g);
+  const pos = roomPosition(lamps);
+  const h = useHome.getState();
+  return (
+    <section className="hp-room" aria-label={g.label}>
+      {lamps.devices.length === 0 ? (
+        <h3 className="hp-room-row is-quiet">
+          <span className="hp-room-name">{g.label}</span>
+        </h3>
+      ) : (
+        <button
+          className={`hp-room-row pos-${pos}`}
+          onClick={() => h.roomPower(g.room)}
+          disabled={lamps.reachable === 0}
+          aria-pressed={pos !== "off"}
+          aria-label={`${g.label}: ${roomCount(lamps)} — ${pos === "off" ? "turn the room on" : "turn the room off"}`}
+        >
+          <span className="hp-room-name">{g.label}</span>
+          <span className="hp-room-count">{roomCount(lamps)}</span>
+          <span className="hp-room-pips" aria-hidden>
+            {lamps.devices.map((d) => (
+              <i key={d.id} className={isReachable(d) ? (isOn(d) ? "is-on" : "") : "is-away"} style={isOn(d) ? { ["--tint" as string]: lightColor(d) } : undefined} />
+            ))}
+          </span>
+          <span className="hp-room-knob" aria-hidden />
+        </button>
+      )}
+      <div className="hp-grid">
+        {g.devices.map((d) => (
+          <DeviceTile key={d.id} device={d} />
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -49,7 +49,7 @@ export function applyDevHooks(params: URLSearchParams) {
     s.setPhotoView(photo);
   }
   // Home mode (with ?home=mock): &homeScene=movie runs a scene, &homeOpen=<deviceId|item:itemId> opens a view,
-  // &homeAct=<deviceId>:<json action> sends an action, &homeRoom=Salon picks a room chip.
+  // &homeAct=<deviceId>:<json action> sends an action.
   void import("../state/home").then(({ useHome }) => {
     const run = () => {
       const h = useHome.getState();
@@ -64,13 +64,11 @@ export function applyDevHooks(params: URLSearchParams) {
           /* ignore */
         }
       }
-      const room = params.get("homeRoom");
-      if (room) h.setRoom(room);
       const open = params.get("homeOpen");
       if (open?.startsWith("item:")) h.itemClicked(open.slice(5));
       else if (open) h.openDevice(open);
     };
-    if (["homeScene", "homeOpen", "homeAct", "homeRoom"].some((k) => params.has(k))) run();
+    if (["homeScene", "homeOpen", "homeAct"].some((k) => params.has(k))) run();
   });
   const overlay = params.get("overlay");
   if (overlay === "help" || overlay === "welcome") s.setOverlay(overlay);

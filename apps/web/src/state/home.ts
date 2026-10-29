@@ -2,12 +2,12 @@ import { create } from "zustand";
 import type { Device, DeviceAction, HomeScene, SunInfo } from "@appart3d/home";
 import { DEFAULT_SCENES } from "@appart3d/home";
 import {
-  ALL_ROOMS,
   canMedia,
   applyServerDevice,
   applySnapshot,
   devicesByItem,
   failAction,
+  isLightLike,
   isOn,
   isReachable,
   moveInOrder,
@@ -46,10 +46,14 @@ export interface HomeState extends DevicesState {
   sun: SunInfo | null;
   /** Devices per linked 3D item id. */
   byItem: Map<string, Device[]>;
-  room: string;
   view: HomeView;
   /** Scene being applied (spinner on its button). */
   runningScene: string | null;
+  /**
+   * The mood the bridge holds armed ("relax" / "read"), or null. It lives there, not here, so that a
+   * press on this panel and a press on the TV cannot leave the house in two states.
+   */
+  activeScene: string | null;
   /** Compact single-column layout (widget, phones). */
   compact: boolean;
   /** `?widget=1`: menu-bar popover, no editor at all. */
@@ -62,7 +66,8 @@ export interface HomeState extends DevicesState {
   runScene: (id: string) => void;
   /** Master switch: everything off when something is on, all lights on otherwise. */
   masterPower: () => void;
-  setRoom: (room: string) => void;
+  /** A room pressed as one: its lamps go off when any is lit, else every lamp that answers comes on. */
+  roomPower: (room: string) => void;
   openDevice: (id: string) => void;
   /** Click on a linked 3D item: toggles its device, or lists its devices when it has several. */
   itemClicked: (itemId: string) => void;
@@ -90,9 +95,9 @@ export const useHome = create<HomeState>()((set, get) => ({
   devices: [],
   pending: {},
   byItem: new Map(),
-  room: ALL_ROOMS,
   view: { kind: "list" },
   runningScene: null,
+  activeScene: null,
   compact: false,
   widget: false,
   organizing: false,
@@ -122,7 +127,7 @@ export const useHome = create<HomeState>()((set, get) => ({
     if (!client) return;
     set({ runningScene: id });
     client.scene(id).then(
-      (snap) => set({ ...withDevices(applySnapshot(get(), snap)), runningScene: null }),
+      (snap) => set({ ...withDevices(applySnapshot(get(), snap)), runningScene: null, activeScene: snap.activeScene ?? null }),
       (err: unknown) => {
         set({ runningScene: null });
         useStore.getState().toast(`Scene failed: ${errorText(err)}`, "error");
@@ -147,7 +152,15 @@ export const useHome = create<HomeState>()((set, get) => ({
       for (const d of live) if (d.kind === "light" || d.kind === "plug") act(d.id, { type: "power", on: true });
     }
   },
-  setRoom: (room) => set({ room }),
+  // There is no room device on the bridge — a room is a name several lamps share — so this is one
+  // action each, and a lamp coming on while a mood is armed is re-toned by the bridge exactly as it
+  // would be from a single press.
+  roomPower: (room) => {
+    const { devices, act } = get();
+    const lamps = devices.filter((d) => isLightLike(d) && (d.room || "Other") === room && isReachable(d));
+    const on = !lamps.some(isOn);
+    for (const d of lamps) if (isOn(d) !== on) act(d.id, { type: "power", on });
+  },
   openDevice: (id) => set({ view: { kind: "device", id } }),
   itemClicked: (itemId) => {
     const list = get().byItem.get(itemId);
@@ -250,7 +263,7 @@ export function startHome({ params, embed = false }: HomeBootOptions): void {
 
   const refresh = () =>
     client.snapshot().then((snap) => {
-      useHome.setState((st) => ({ ...withDevices(applySnapshot(st, snap)), home: snap.home, sun: snap.sun ?? null, scenes: snap.scenes?.length ? snap.scenes : DEFAULT_SCENES, status: "online" }));
+      useHome.setState((st) => ({ ...withDevices(applySnapshot(st, snap)), home: snap.home, sun: snap.sun ?? null, scenes: snap.scenes?.length ? snap.scenes : DEFAULT_SCENES, activeScene: snap.activeScene ?? null, status: "online" }));
     });
 
   const connect = () => {
@@ -262,7 +275,7 @@ export function startHome({ params, embed = false }: HomeBootOptions): void {
         let first = true;
         unsubscribe = client.subscribe(
           (e) => {
-            if (e.type === "snapshot") useHome.setState((st) => ({ ...withDevices(applySnapshot(st, e.snapshot)), home: e.snapshot.home, sun: e.snapshot.sun ?? null }));
+            if (e.type === "snapshot") useHome.setState((st) => ({ ...withDevices(applySnapshot(st, e.snapshot)), home: e.snapshot.home, sun: e.snapshot.sun ?? null, activeScene: e.snapshot.activeScene ?? null }));
             else if (e.type === "device") useHome.setState((st) => withDevices(applyServerDevice(st, e.device)));
             else if (e.type === "error") useStore.getState().toast(e.message, "warn");
           },

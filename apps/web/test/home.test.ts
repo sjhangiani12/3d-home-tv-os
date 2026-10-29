@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Device } from "@appart3d/home";
 import {
-  ALL_ROOMS,
   applyServerDevice,
   applySnapshot,
   devicesByItem,
@@ -20,7 +19,7 @@ import {
   screenOnTop,
   predict,
   resolveAction,
-  roomCounts,
+  roomGroups,
   startAction,
   tileLabel,
   type DevicesState,
@@ -72,14 +71,16 @@ describe("tile labels", () => {
   });
 });
 
-describe("room counts", () => {
-  it("counts devices on per room, All first", () => {
-    const counts = roomCounts(mockDevices());
-    // the mock HomePod is playing: it counts as on
-    expect(counts[0]).toEqual({ room: ALL_ROOMS, total: 8, on: 3 });
-    expect(counts.map((c) => c.room)).toEqual([ALL_ROOMS, "Salon", "Cuisine", "Chambre"]);
-    expect(counts.find((c) => c.room === "Salon")).toEqual({ room: "Salon", total: 6, on: 3 });
-    expect(counts.find((c) => c.room === "Chambre")?.on).toBe(0);
+describe("the rooms the panel draws", () => {
+  // How a room is grouped, ordered and counted is one rule for all three panels, tested where it
+  // lives (packages/home/test/lights.test.ts). What matters here is the home this view opens on.
+  it("is every room of the mock home, in the order the panel lists them", () => {
+    const groups = roomGroups(mockDevices());
+    expect(groups.map((g) => [g.label, g.devices.length, g.on])).toEqual([
+      ["Living room", 6, 3],
+      ["Kitchen", 1, 0],
+      ["Bedroom", 1, 0],
+    ]);
   });
 });
 

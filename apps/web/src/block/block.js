@@ -17,7 +17,7 @@ import * as THREE from "three";
 import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction, runScene } from "../shared/feeds.js";
 import {
   canMedia, HUE_RECIPES, inMood, isLightLike, isMoodScene, isOn, isReachable, lampLevel, lightColor,
-  mediaLoaded, mediaRooms, moodAdjusted, nowPlaying, roomGroups, roomPosition,
+  mediaLoaded, mediaRooms, moodAdjusted, moodStatus, nowPlaying, roomGroups, roomPosition,
 } from "@appart3d/home";
 import * as P from "./paint.js";
 import { SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
@@ -1827,12 +1827,13 @@ function roomCount(g) {
 function statusLine() {
   const ls = homeLamps(), lit = ls.filter(isOn);
   let s = `${ls.length} light${ls.length === 1 ? "" : "s"} · ${lit.length ? `${lit.length} on` : "everything is off"}`;
-  if (MOOD) {
-    const name = MOOD_NAME[MOOD] || MOOD, m = lit.filter((d) => inMood(d, MOOD)), a = m.filter((d) => moodAdjusted(d, MOOD));
-    s += !m.length ? ` · <b>${name} is armed</b>`
-      : a.length ? ` · <b>${name}</b> · ${a.length} adjusted`
-      : m.length === lit.length ? ` · <b>${name}</b>`
-      : ` · <b>${name}</b> on ${m.length} of ${lit.length} lit`;
+  const st = moodStatus(ls, MOOD);
+  if (st) {
+    const name = MOOD_NAME[st.scene] || st.scene;
+    s += !st.inMood ? ` · <b>${name} is armed</b>`
+      : st.adjusted ? ` · <b>${name}</b> · ${st.adjusted} adjusted`
+      : st.inMood === st.lit ? ` · <b>${name}</b>`
+      : ` · <b>${name}</b> on ${st.inMood} of ${st.lit} lit`;
   }
   return s;
 }

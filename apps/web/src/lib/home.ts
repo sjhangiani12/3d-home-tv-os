@@ -40,8 +40,6 @@ export {
   type RoomGroup,
 } from "@appart3d/home";
 
-export const ALL_ROOMS = "all";
-
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 /** Fan speed as a discrete step (0..steps) from the 0..100 state value. */
@@ -126,22 +124,6 @@ export function lightsSummary(devices: readonly Device[]): string {
   if (on === 0) return total === 1 ? "The light is off" : "All lights are off";
   if (on === total && total > 1) return "All lights are on";
   return `${on} of ${total} light${total > 1 ? "s" : ""} on`;
-}
-
-export interface RoomCount {
-  room: string;
-  total: number;
-  on: number;
-}
-
-/** The filter chips: "All" first, then the rooms in the order the panels group them. */
-export function roomCounts(devices: readonly Device[]): RoomCount[] {
-  const rooms = roomGroups(devices).map((g) => ({ room: g.room, total: g.devices.length, on: g.on }));
-  return [{ room: ALL_ROOMS, total: devices.length, on: devices.filter(isOn).length }, ...rooms];
-}
-
-export function devicesInRoom(devices: readonly Device[], room: string): Device[] {
-  return room === ALL_ROOMS ? [...devices] : devices.filter((d) => (d.room || "Other") === room);
 }
 
 /** Devices linked to each 3D item (a TV item may carry the TV and the light strip behind it). */
