@@ -5,8 +5,8 @@
  * item's BOTTOM, y up, front +Z): wall pieces have their back on z = -d/2, ceiling pieces touch
  * the ceiling at y = h.
  */
-import type { V2, V3 } from "../parts";
-import { type Build, Parts, clamp, darken, lighten, palette } from "./common";
+import { rng, type V2, type V3 } from "../parts";
+import { ACCENTS, type Build, Parts, clamp, darken, lighten, palette } from "./common";
 
 /** Warm "lit" color for bulbs / shades (the glow role adds the emissive). */
 const BULB = "#ffe7b0";
@@ -377,6 +377,44 @@ export const coatRackHanging: Build = (c) => {
       [0, 0, 0],
       palette.blush,
     );
+  }
+  return p;
+};
+
+/**
+ * Rolling garment rack: two uprights on tube feet, one rail across the top, clothes on hangers.
+ * The rail's ends are the width of the box, the feet its depth, so the frame is what touches the
+ * sides and the clothes always hang inside it.
+ */
+export const coatRackGarment: Build = (c) => {
+  const p = new Parts();
+  const { w, h, d, color, seed } = c;
+  if (w < 0.3 || h < 0.6 || d < 0.15) return tiny(p, w, h, d, color);
+  const r = clamp(Math.min(w, d) * 0.022, 0.009, 0.018);
+  const ex = w / 2 - r * 2.5;
+  const railY = h - r;
+  const metal = lighten(color, 0.1);
+  for (const s of [-1, 1]) {
+    p.cylZ(s * ex, r, -d / 2, d / 2, r, r, darken(color, 0.2), { seg: 10 });
+    p.cyl(s * ex, 0, r, railY, r * 0.85, r * 0.85, color, { seg: 10 });
+    // caster stubs under the ends of each foot
+    for (const t of [-1, 1]) p.cyl(s * ex, t * (d / 2 - r * 1.6), 0, r * 0.6, r * 0.75, r * 0.75, palette.ink, { seg: 8 });
+  }
+  p.cylX(-w / 2, w / 2, railY, 0, r, metal, { seg: 12 });
+  p.cylX(-ex, ex, h * 0.1, 0, r * 0.6, darken(color, 0.1), { seg: 8 });
+  for (const s of [-1, 1]) p.sphere([s * (w / 2 - r), railY, 0], [r, r, r], darken(color, 0.25), { seg: 8 });
+
+  // clothes: hangers along the rail, each a garment hanging from a hook
+  const rand = rng(seed + 11);
+  const n = clamp(Math.round(w / 0.19), 2, 5);
+  const span = ex * 2 - r * 4;
+  const gr = clamp(Math.min(span / n, d * 0.42) / 2, 0.05, 0.17);
+  for (let i = 0; i < n; i++) {
+    const x = -span / 2 + (span * (i + 0.5)) / n;
+    const top = railY - r * 2.2;
+    const len = Math.min(h * (0.4 + rand() * 0.25), railY - h * 0.16);
+    p.add({ kind: "tube", path: [[x, railY - r * 0.2, 0], [x + r, top - gr * 0.1, 0]], r: 0.005, seg: 4, steps: 2 }, [0, 0, 0], palette.steel);
+    coat(p, x, 0, top, len, gr, ACCENTS[(i + seed) % ACCENTS.length] as string, Math.PI / 2);
   }
   return p;
 };

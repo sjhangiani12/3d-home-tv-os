@@ -47,7 +47,7 @@ describe("catalog", () => {
       for (const v of e.variants!) expect(v.key.startsWith(`${e.category}/`), v.key).toBe(true);
     }
     expect(MODELS.pendantLamp.map((v) => v.key)).toEqual(["pendantLamp/cage", "pendantLamp/globe", "pendantLamp/dome", "pendantLamp/bulb"]);
-    expect(MODELS.coatRack.map((v) => v.key)).toEqual(["coatRack/pole", "coatRack/hanging"]);
+    expect(MODELS.coatRack.map((v) => v.key)).toEqual(["coatRack/pole", "coatRack/hanging", "coatRack/garment"]);
     expect(MODELS.curtain.map((v) => v.key)).toEqual(["curtain/pair", "curtain/single"]);
   });
 

@@ -145,6 +145,35 @@ export const floorLampEvedal: Build = (c) => {
   return p;
 };
 
+/**
+ * Squiggle lamp: one wavy pole from a small disc base to a round shade, waving in the X–Y plane
+ * (1.5 periods). The wave's peaks are what touches the sides of the box, so the width is the
+ * squiggle's own amplitude; the base disc is as wide as the depth.
+ */
+export const floorLampSquiggle: Build = (c) => {
+  const p = new Parts();
+  const { w, h, d, color } = c;
+  const tr = clamp(Math.min(w, d) * 0.055, 0.012, 0.026);
+  const baseR = Math.min(w, d) / 2;
+  const baseH = Math.min(clamp(h * 0.025, 0.02, 0.04), h * 0.1);
+  const shadeH = Math.min(clamp(h * 0.1, 0.08, 0.18), h * 0.25);
+  const shadeR = Math.min(w * 0.3, d / 2);
+  const A = w / 2 - tr;
+  const y0 = baseH;
+  const y1 = h - shadeH;
+  p.cyl(0, 0, 0, baseH, baseR, baseR, darken(color, 0.25), { seg: 28, taper: 0.9 });
+  // Sampled densely so the curve hugs the sine: its peaks define the width to the millimetre.
+  const n = 36;
+  const path: V3[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    path.push([Math.sin(t * Math.PI * 3) * A, y0 + (y1 - y0) * t, 0]);
+  }
+  p.add({ kind: "tube", path, r: tr, seg: 8, steps: 48 }, [0, 0, 0], color);
+  p.cyl(0, 0, y1, h, shadeR, shadeR, SHADE, { seg: 20, taper: 0.8, role: "glow" });
+  return p;
+};
+
 export const floorLampArc: Build = (c) => {
   const p = new Parts();
   const { w, h, d, color } = c;
@@ -188,9 +217,10 @@ const POT: V2[] = [
   [0, 0.92],
 ];
 
-function pot(p: Parts, rx: number, rz: number, potH: number, color: string): void {
-  p.add({ kind: "lathe", pts: POT, seg: 14 }, [0, 0, 0], color, { scale: [rx, potH, rz] });
-  p.cyl(0, 0, potH * 0.86, potH * 0.93, rx * 0.84, rz * 0.84, "#6b4a33", { seg: 14 });
+/** `y0` lifts the pot off the floor of the box — a planter hanging from a hook. */
+function pot(p: Parts, rx: number, rz: number, potH: number, color: string, y0 = 0): void {
+  p.add({ kind: "lathe", pts: POT, seg: 14 }, [0, y0, 0], color, { scale: [rx, potH, rz] });
+  p.cyl(0, 0, y0 + potH * 0.86, y0 + potH * 0.93, rx * 0.84, rz * 0.84, "#6b4a33", { seg: 14 });
 }
 
 export const plantBush: Build = (c) => {
@@ -293,6 +323,95 @@ export const plantTree: Build = (c) => {
   p.blob([0, crown0 + H * 0.28, 0], [(w / 2) * 0.55, H * 0.28, (d / 2) * 0.55], darken(color, 0.12));
   return p;
 };
+
+/**
+ * A pot of vines: a leafy crown filling the sides of the box, and strands spilling over the rim.
+ * `hanging` lifts the pot on three cords from a hook at the very top, and the strands then fall all
+ * the way to the floor of the box; otherwise the pot stands on it and the vines only spill over.
+ *
+ * Each strand is sampled densely with y linear in the index, so the smoothed tube cannot dip below
+ * its last point — that is what lets the longest one end exactly on the floor of the box.
+ */
+function vinePlant(c: Ctx, hanging: boolean): Parts {
+  const p = new Parts();
+  const { w, h, d, color, seed } = c;
+  const rand = rng(seed + 7);
+  const prx = (Math.min(w, d) / 2) * 0.46;
+  const potH = clamp(h * (hanging ? 0.14 : 0.3), 0.06, 0.26);
+  // hung low enough that the cords read as part of the plant, not as a detail under the hook
+  const potTop = hanging ? h - clamp(h * 0.42, 0.15, 0.6) : potH;
+  pot(p, prx, prx, potH, hanging ? palette.cream : palette.terracotta, potTop - potH);
+
+  if (hanging) {
+    // hook at the very top, three cords down to the rim
+    const hr = Math.min(w, d) * 0.055;
+    p.add({ kind: "torus", R: hr, r: hr * 0.35, seg: 12 }, [0, h - hr * 1.35, 0], palette.charcoal);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      p.add(
+        { kind: "tube", path: [[0, h - hr * 1.6, 0], [Math.cos(a) * prx * 0.55, potTop + (h - potTop) * 0.45, Math.sin(a) * prx * 0.55], [Math.cos(a) * prx * 0.92, potTop - potH * 0.35, Math.sin(a) * prx * 0.92]], r: 0.004, seg: 4, steps: 6 },
+        [0, 0, 0],
+        palette.cream,
+      );
+    }
+  }
+
+  // crown: four leaf masses, one per side of the box, so the foliage is what defines the footprint
+  const cH = hanging ? Math.min((h - potTop) * 0.55, Math.min(w, d) * 0.7) : h - potTop;
+  const sx = (w / 2) * 0.42;
+  const sz = (d / 2) * 0.42;
+  const sy = cH * 0.4;
+  const yc = potTop + cH * 0.4;
+  const g1 = color;
+  const g2 = lighten(color, 0.16);
+  const g3 = darken(color, 0.14);
+  p.blob([w / 2 - sx, yc, 0], [sx, sy, sz * 1.1], g3, { role: "toon" });
+  p.blob([-w / 2 + sx, yc + cH * 0.06, 0], [sx, sy, sz * 1.1], g1);
+  p.blob([0, yc - cH * 0.04, d / 2 - sz], [sx * 1.1, sy, sz], g2);
+  p.blob([0, yc + cH * 0.08, -d / 2 + sz], [sx * 1.1, sy, sz], g1);
+  if (!hanging) {
+    const ty = cH * 0.3;
+    p.blob([0, h - ty, 0], [(w / 2) * 0.55, ty, (d / 2) * 0.55], g2);
+  }
+
+  // strands: out over the rim, then down. The first one is the long one.
+  const tr = clamp(Math.min(w, d) * 0.012, 0.004, 0.008);
+  const lr = tr * 2.2;
+  const top = potTop - potH * 0.1;
+  const stem = darken(color, 0.28);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + rand() * 0.5;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const out = 0.55 + rand() * 0.3;
+    const long = hanging && i === 0;
+    const floor0 = hanging ? lr * 2 : potH * 0.15;
+    const bottom = long ? floor0 : floor0 + (top - floor0) * (0.2 + rand() * 0.45);
+    const at = (t: number): V3 => {
+      const swing = prx * 0.5 + (Math.min(w, d) / 2 - prx) * out * Math.sin(t * Math.PI * 0.8);
+      return [ca * swing, top + (bottom - top) * t, sa * swing];
+    };
+    const path: V3[] = [];
+    for (let k = 0; k <= 10; k++) path.push(at(k / 10));
+    p.add({ kind: "tube", path, r: tr, seg: 5, steps: 12 }, [0, 0, 0], stem);
+    for (const t of [0.45, 0.82]) {
+      const [lx, ly, lz] = at(t);
+      p.blob([lx, ly, lz], [lr * 1.8, lr, lr * 1.8], t < 0.5 ? g2 : g1);
+    }
+    // the leaf at the tip of the long strand is the floor of the box
+    if (long) {
+      const [tx, , tz] = at(1);
+      p.blob([tx, lr, tz], [lr * 1.6, lr, lr * 1.6], g1);
+    }
+  }
+  return p;
+}
+
+/** A pothos on a shelf or a desk, its vines spilling over the pot. */
+export const plantTrailing: Build = (c) => vinePlant(c, false);
+
+/** The same plant hung from a hook: the box runs from the hook down to the tip of the longest vine. */
+export const plantHanging: Build = (c) => vinePlant(c, true);
 
 /* --------------------------------------------------------------------- rugs */
 
