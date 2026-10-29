@@ -41,6 +41,13 @@ document.querySelector("#clock .place").textContent = NAMES.place;
 document.querySelector("#drawer .addr").textContent = NAMES.address;
 if (!MOCK) document.getElementById("mock").hidden = true;
 const stage = document.getElementById("stage");
+/**
+ * Inside the home rather than over the block. Not `mode === "home"`: the TV reaches the same view with
+ * `mode === "door"`, because there the page is the floor the app's own apartment lands on. Everything that
+ * is about the *frame* (backdrop, room labels, the slow drift) asks this; everything about the *remote*
+ * (which keys the drawer takes) still asks `mode`, since on the TV the app owns the remote.
+ */
+function isInside() { return stage.classList.contains("inside"); }
 function fit() {
   const s = Math.min(innerWidth / W, innerHeight / H);
   stage.style.transform = `translate(${(innerWidth - W * s) / 2}px, ${(innerHeight - H * s) / 2}px) scale(${s})`;
@@ -773,7 +780,7 @@ function applyLook() {
   const dim = wet ? 0.72 : 1;
   // Inside the home the backdrop is the studio one, not the sky; a weather poll landing while you are in
   // there must not paint the block's sky behind the model.
-  if (mode !== "home") scene.background = P.skyTexture(tod, wet);
+  if (!isInside()) scene.background = P.skyTexture(tod, wet);
   hemi.color.set(L.hemiSky); hemi.groundColor.set(L.hemiGround); hemi.intensity = L.hemiI * (wet ? 0.92 : 1) * PI;
   sun.color.set(L.sun); sun.intensity = L.sunI * (wet ? 0.35 : 1) * dim * PI;
   const az = L.az * Math.PI / 180, el = L.el * Math.PI / 180;
@@ -935,7 +942,7 @@ function renderSigns(now) {
 const v3 = new THREE.Vector3();
 function projectSigns() {
   for (const s of signs) {
-    const show = !s.off && (mode === "home" ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
+    const show = !s.off && (isInside() ? !s.city : s.city && mode === "city" && !flying && s.el !== detailHost);
     // A pinned card sits where the CSS puts it; the camera has no say, so don't write a transform over it.
     if (s.pinned) { s.el.style.opacity = show ? "1" : "0"; continue; }
     v3.copy(s.at).project(camera);
@@ -1014,9 +1021,25 @@ async function openHome() {
   await tween(STREET, 1000);
   await tween(DOOR, 650);
   if (TV) {
-    // On the TV the app shows the real apartment (its 3D view) from here; the page waits at the door.
-    mode = "door"; flying = false; goingIn = false;
+    // On the TV the app fades its own apartment in over this page — the real scan, a whole second 3D page.
+    // That page can be seconds from ready, and the app drops it whenever it leaves the screen to save
+    // memory, so a cold press waits for a full load; if it is lost to memory it never arrives at all.
+    // Whatever the page holds in the meantime is therefore the screen, perhaps for good — and it used to
+    // hold the door pose, a blurred close-up of the stoop, which read as something having broken.
+    //
+    // So the page goes inside too, to the same model and the same backdrop as in the browser, and simply
+    // does not open the drawer (the app draws its own panel). The room is there the instant the black
+    // lifts, the real apartment arrives into the same frame and the same colour a moment later, and if it
+    // never arrives the screen is still a finished one.
+    await fade(1);
+    house.visible = true; houseAmb.intensity = 0.55 * PI;
+    enterInside(true);
+    setPose(INSIDE);
+    renderer.compile(scene, camera);
+    mode = "door";
     toNative({ type: "atDoor" });
+    await fade(0);
+    flying = false; goingIn = false;
     if (wantClose) { wantClose = false; closeHome(); }
     return;
   }
@@ -1042,7 +1065,14 @@ async function openHome() {
 async function closeHome() {
   if (flying) { wantClose = true; return; }
   if (mode === "door") {
+    // The TV way out: it is inside the home now, not on the doorstep, so it leaves the way the browser
+    // does — under the black, back onto the stoop — and only then walks out to the block.
     flying = true;
+    await fade(1);
+    house.visible = false; houseAmb.intensity = 0;
+    enterInside(false);
+    setPose(DOOR);
+    await fade(0);
     await tween(STREET, 600);
     await tween(OVERVIEW, 1500);
     mode = "city"; flying = false; cityHud.forEach((e) => e.classList.remove("hide"));
@@ -1516,8 +1546,8 @@ function frame(now) {
   bikeFrames.forEach((b, k) => { if (b.pop) { b.pop = Math.max(0, b.pop - dt * 1.6); placeBike(k, b); } });
   bikeM.instanceMatrix.needsUpdate = seatM.instanceMatrix.needsUpdate = wheelM.instanceMatrix.needsUpdate = true;
   // the selected lamp pulses in the dollhouse
-  for (const l of LAMPS) l.ring.material.opacity = l.focus && mode === "home" ? 0.55 + Math.sin(now / 180) * 0.35 : 0;
-  if (mode === "home" && !flying) {
+  for (const l of LAMPS) l.ring.material.opacity = l.focus && isInside() ? 0.55 + Math.sin(now / 180) * 0.35 : 0;
+  if (isInside() && !flying) {
     cam.pos.copy(IN_AT).add(IN_OFF.clone().applyAxisAngle(UP, Math.sin(now / 5200) * 0.18));
     cam.target.copy(IN_AT);
   }
