@@ -985,8 +985,9 @@ function updateHomeWindows() {
 // about that anchor: θ'' = -(g/L)·sinθ - 2(L'/L)·θ', with L reeled in as he comes round. Reeling in is
 // what makes him speed up at the bottom and what pulls him onto the ledge instead of past it.
 const SPIDEY = {
-  away: 62,           // seconds off-screen between passes
-  thwip: 260,          // metres a second the thread travels, so a long shot visibly takes longer
+  away: 62,          // seconds off-screen between passes
+  thwip: 150,          // metres a second the thread travels, so a long shot visibly takes longer
+  clasp: 0.22,         // the beat after it bites, before he leans out and goes
   // The block's distances are squeezed (see the map), so a true 9.81 against a hundred-metre rope gives
   // a twenty-second period and he just sinks. Gravity is scaled to put the swing back on the clock the
   // geometry implies; the equation of motion, and so the shape of the arc, is unchanged.
@@ -1024,95 +1025,172 @@ const SPIDEY = {
 };
 
 // Two poses, each one merged vertex-coloured mesh (one draw call), built facing +x with +y up.
-const SUIT_RED = "#cf2027", SUIT_BLUE = "#1b3f9c", SUIT_EYE = "#e9eef8";
-// A limb that can only be an axis-aligned box is a limb that can only be vertical or horizontal, and
-// a figure assembled from those reads as a stack of bricks whatever the proportions. Each part may
-// therefore carry a tilt — degrees about +z (pitch, the one that bends a knee or leans a back) and
-// about +x (splay, which opens the knees and the elbows) — turned about a pivot of its own, which is
-// the joint it hangs from. That one addition is the difference between a crate and a body.
-function figure(boxes) {
-  const pos = [], nor = [], col = [], c = new THREE.Color();
-  const m = new THREE.Matrix4(), t = new THREE.Matrix4(), nm = new THREE.Matrix3();
-  const vv = new THREE.Vector3(), nv = new THREE.Vector3();
-  for (const [x0, x1, y0, y1, z0, z1, hex, tilt] of boxes) {
-    c.set(hex);
-    m.identity();
-    if (tilt) {
-      const [dz, dx, px, py, pz] = tilt;
-      m.makeTranslation(px, py, pz)
-        .multiply(t.makeRotationZ(dz * Math.PI / 180))
-        .multiply(t.makeRotationX(dx * Math.PI / 180))
-        .multiply(t.makeTranslation(-px, -py, -pz));
-    }
-    nm.getNormalMatrix(m);
-    const quad = (a, b, d, e, n) => {
-      nv.set(n[0], n[1], n[2]).applyMatrix3(nm).normalize();
-      for (const v of [a, b, d, a, d, e]) {
-        vv.set(v[0], v[1], v[2]).applyMatrix4(m);
-        pos.push(vv.x, vv.y, vv.z); nor.push(nv.x, nv.y, nv.z); col.push(c.r, c.g, c.b);
+const SUIT_RED = "#c9272e", SUIT_BLUE = "#1d3f9e", SUIT_EYE = "#eef2fb", SUIT_LINE = "#140d18";
+// Boxes make a Minecraft man. An axis-aligned brick can only be vertical or horizontal, so every
+// joint becomes a corner and every limb a plank, and no amount of extra bricks fixes it. This is
+// built the other way round: a skeleton of joints, a tapered tube drawn between each pair, a ball
+// dropped at each joint. A limb can then point anywhere with no pivot bookkeeping, it is thicker at
+// the shoulder than at the wrist the way an arm is, and the normals go round the limb instead of
+// facing six ways — which is what makes it catch the light as a body rather than as a crate.
+const rgA = new THREE.Vector3(), rgB = new THREE.Vector3(), rgD = new THREE.Vector3();
+const rgU = new THREE.Vector3(), rgV = new THREE.Vector3(), rgT = new THREE.Vector3(), rgN = new THREE.Vector3();
+function rig() {
+  const pos = [], nor = [], col = [], cA = new THREE.Color(), cB = new THREE.Color();
+  const put = (x, y, z, nx, ny, nz, c) => { pos.push(x, y, z); nor.push(nx, ny, nz); col.push(c.r, c.g, c.b); };
+  const api = {
+    // A tapered tube between two joints. `w` and `d` squash the cross-section across the body and
+    // front-to-back, so the same call makes a round arm and an oval rib-cage. `side` paints the
+    // flanks: a red chest with blue sides is both the suit and the only thing that stops a red arm
+    // from vanishing into a red chest at nine pixels wide.
+    tube(a, b, ra, rb, hex, o = {}) {
+      cA.set(hex); cB.set(o.side || hex);
+      const w = o.w ?? 1, d = o.d ?? 1, cut = o.sideAt ?? 0.62, seg = o.seg ?? 8;
+      rgA.fromArray(a); rgB.fromArray(b);
+      rgD.subVectors(rgB, rgA);
+      rgD.divideScalar(rgD.length() || 1e-4);
+      // Any frame perpendicular to the limb will do; this one picks the across-the-body axis first,
+      // so for an upright limb `w` is always width and `d` is always depth.
+      rgT.set(0, 1, 0); if (Math.abs(rgD.y) > 0.9) rgT.set(1, 0, 0);
+      rgU.crossVectors(rgT, rgD).normalize();
+      rgV.crossVectors(rgD, rgU);
+      const R = [];
+      for (let i = 0; i <= seg; i++) {
+        const th = i / seg * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
+        rgN.set(0, 0, 0).addScaledVector(rgU, cs / w).addScaledVector(rgV, sn / d).normalize();
+        const ox = rgU.x * cs * w + rgV.x * sn * d, oy = rgU.y * cs * w + rgV.y * sn * d, oz = rgU.z * cs * w + rgV.z * sn * d;
+        R.push({ ax: rgA.x + ox * ra, ay: rgA.y + oy * ra, az: rgA.z + oz * ra,
+                 bx: rgB.x + ox * rb, by: rgB.y + oy * rb, bz: rgB.z + oz * rb,
+                 nx: rgN.x, ny: rgN.y, nz: rgN.z, c: Math.abs(cs) > cut ? cB : cA });
       }
-    };
-    quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
-    quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1]);
-    quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0]);
-    quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0]);
-    quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0]);
-    quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0]);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  return g;
+      for (let i = 0; i < seg; i++) {
+        const p = R[i], q = R[i + 1];
+        put(p.ax, p.ay, p.az, p.nx, p.ny, p.nz, p.c); put(q.ax, q.ay, q.az, q.nx, q.ny, q.nz, q.c); put(q.bx, q.by, q.bz, q.nx, q.ny, q.nz, q.c);
+        put(p.ax, p.ay, p.az, p.nx, p.ny, p.nz, p.c); put(q.bx, q.by, q.bz, q.nx, q.ny, q.nz, q.c); put(p.bx, p.by, p.bz, p.nx, p.ny, p.nz, p.c);
+      }
+      return api;
+    },
+    // A joint, and anything else that is a lump rather than a limb: the skull, a fist, the white of
+    // an eye. `sx/sy/sz` stretch it; `roll` spins it about the facing axis, which is how an eye
+    // slants without needing a frame of its own.
+    ball(at, r, hex, o = {}) {
+      cA.set(hex);
+      const sx = (o.sx ?? 1) * r, sy = (o.sy ?? 1) * r, sz = (o.sz ?? 1) * r;
+      const lat = o.lat ?? 5, lon = o.lon ?? 8, rl = (o.roll ?? 0) * Math.PI / 180;
+      const cr = Math.cos(rl), sr = Math.sin(rl), G = [];
+      for (let j = 0; j <= lat; j++) {
+        const ph = -Math.PI / 2 + j / lat * Math.PI, cp = Math.cos(ph), sp = Math.sin(ph), row = [];
+        for (let i = 0; i <= lon; i++) {
+          const th = i / lon * Math.PI * 2, ct = Math.cos(th), st = Math.sin(th);
+          const x = sx * cp * ct, y = sy * sp, z = sz * cp * st;
+          // The normal of an ellipsoid is the gradient, not the radius: divide by the squashing.
+          const nx = cp * ct / sx, ny = sp / sy, nz = cp * st / sz;
+          const ny2 = ny * cr - nz * sr, nz2 = ny * sr + nz * cr;
+          const nl = Math.hypot(nx, ny2, nz2) || 1;
+          row.push({ x: at[0] + x, y: at[1] + y * cr - z * sr, z: at[2] + y * sr + z * cr,
+                     nx: nx / nl, ny: ny2 / nl, nz: nz2 / nl });
+        }
+        G.push(row);
+      }
+      for (let j = 0; j < lat; j++) for (let i = 0; i < lon; i++) {
+        const A = G[j][i], B = G[j][i + 1], C = G[j + 1][i + 1], D = G[j + 1][i];
+        put(A.x, A.y, A.z, A.nx, A.ny, A.nz, cA); put(D.x, D.y, D.z, D.nx, D.ny, D.nz, cA); put(C.x, C.y, C.z, C.nx, C.ny, C.nz, cA);
+        put(A.x, A.y, A.z, A.nx, A.ny, A.nz, cA); put(C.x, C.y, C.z, C.nx, C.ny, C.nz, cA); put(B.x, B.y, B.z, B.nx, B.ny, B.nz, cA);
+      }
+      return api;
+    },
+    geo() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      return g;
+    },
+  };
+  return api;
 }
-// Crouched on a ledge: feet planted, knees up and apart, back curled, head out over the knees, arms
-// down outside them. What makes a shape read as a person from across a block is not detail but the
-// gaps — between the legs, between the arms and the ribs, between the head and the shoulders. Every
-// limb here is therefore slim and clear of its neighbour, and nothing is wider than the shoulders.
-const LEAN = [-12, 0, -0.01, 0.84, 0];   // the forward pitch of the whole upper body, about the hips
-const PERCH_G = figure([
-  [0.08, 0.30, 0.00, 0.07, -0.16, -0.06, SUIT_BLUE], [0.08, 0.30, 0.00, 0.07, 0.06, 0.16, SUIT_BLUE],
-  [0.09, 0.20, 0.05, 0.50, -0.15, -0.05, SUIT_BLUE, [-14, -4, 0.15, 0.06, -0.10]],
-  [0.09, 0.20, 0.05, 0.50, 0.05, 0.15, SUIT_BLUE, [-14, 4, 0.15, 0.06, 0.10]],
-  [-0.06, 0.28, 0.44, 0.56, -0.15, -0.05, SUIT_BLUE, [-42, -5, 0.26, 0.50, -0.10]],
-  [-0.06, 0.28, 0.44, 0.56, 0.05, 0.15, SUIT_BLUE, [-42, 5, 0.26, 0.50, 0.10]],
-  [-0.10, 0.08, 0.64, 0.84, -0.13, 0.13, SUIT_BLUE],
-  [-0.10, 0.08, 0.82, 1.22, -0.110, -0.065, SUIT_BLUE, LEAN],
-  [-0.10, 0.08, 0.82, 1.22, -0.065, 0.065, SUIT_RED, LEAN],
-  [-0.10, 0.08, 0.82, 1.22, 0.065, 0.110, SUIT_BLUE, LEAN],
-  [-0.09, 0.07, 1.16, 1.30, -0.17, 0.17, SUIT_RED, LEAN],
-  [-0.02, 0.08, 1.27, 1.36, -0.05, 0.05, SUIT_RED, LEAN],
-  [-0.03, 0.23, 1.34, 1.58, -0.095, 0.095, SUIT_RED, LEAN],
-  [0.225, 0.245, 1.42, 1.50, -0.09, -0.02, SUIT_EYE, LEAN],
-  [0.225, 0.245, 1.42, 1.50, 0.02, 0.09, SUIT_EYE, LEAN],
-  [0.04, 0.13, 0.86, 1.26, -0.27, -0.19, SUIT_RED, [-5, -7, 0.09, 1.26, -0.23]],
-  [0.04, 0.13, 0.86, 1.26, 0.19, 0.27, SUIT_RED, [-5, 7, 0.09, 1.26, 0.23]],
-  [0.05, 0.14, 0.48, 0.90, -0.265, -0.185, SUIT_RED, [-26, -4, 0.10, 0.90, -0.225]],
-  [0.05, 0.14, 0.48, 0.90, 0.185, 0.265, SUIT_RED, [-26, 4, 0.10, 0.90, 0.225]],
-]);
+const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+// One body, two sets of joints. Everything that makes him recognisable lives here and not in the
+// poses: red boots and gloves against blue legs, a red chest with blue flanks, and above all the two
+// big white eyes with a dark rim, which are the single feature that survives being small.
+function body(J) {
+  const r = rig(), hr = J.headR;
+  for (const s of ["L", "R"]) {
+    const hip = J["hip" + s], knee = J["knee" + s], ank = J["ank" + s], toe = J["toe" + s];
+    const sho = J["sho" + s], elb = J["elb" + s], wri = J["wri" + s], fist = J["fist" + s];
+    r.tube(hip, knee, 0.072, 0.055, SUIT_BLUE)
+     .ball(knee, 0.056, SUIT_BLUE, { sy: 0.9 })
+     // The boot comes up the shin: a red foot stuck on a blue leg reads as a sock, a red shin reads
+     // as a boot, and that is the whole difference.
+     .tube(knee, lerp3(knee, ank, 0.55), 0.052, 0.046, SUIT_BLUE)
+     .tube(lerp3(knee, ank, 0.55), ank, 0.047, 0.044, SUIT_RED)
+     .ball(ank, 0.046, SUIT_RED)
+     .tube(lerp3(toe, ank, 1.3), toe, 0.048, 0.034, SUIT_RED, { w: 0.85, d: 0.7 })
+     .ball(hip, 0.075, SUIT_BLUE, { sy: 0.85 })
+     .ball(sho, 0.068, SUIT_RED, { sy: 0.92 })
+     .tube(sho, elb, 0.056, 0.044, SUIT_RED)
+     .ball(elb, 0.046, SUIT_RED)
+     .tube(elb, wri, 0.044, 0.036, SUIT_RED)
+     .tube(wri, fist, 0.036, 0.046, SUIT_RED)
+     .ball(fist, 0.05, SUIT_RED, { sx: 1.15, lat: 4, lon: 7 });
+  }
+  // The torso is deliberately narrower than the shoulders and much narrower than the arms hang: the
+  // thing that reads as a person at this size is the daylight between an arm and a rib, and a barrel
+  // chest closes it. Everything above measures against that.
+  r.tube(J.hipL, J.hipR, 0.078, 0.078, SUIT_BLUE, { d: 0.85 })
+   .tube(J.pelvis, J.chest, 0.092, 0.115, SUIT_RED, { w: 0.95, d: 0.78, side: SUIT_BLUE, sideAt: 0.45 })
+   .ball(J.chest, 0.105, SUIT_RED, { sx: 0.85, sy: 0.85, sz: 1.05 })
+   .tube(J.shoL, J.shoR, 0.07, 0.07, SUIT_RED, { d: 0.9 })
+   .tube(J.chest, J.neck, 0.068, 0.05, SUIT_RED)
+   .ball(J.head, hr, SUIT_RED, { sx: 1.02, sy: 1.12, sz: 0.9, lat: 7, lon: 10 })
+   .ball([J.chest[0] + 0.09, J.chest[1] + 0.01, J.chest[2]], 0.058, SUIT_LINE, { sx: 0.3, sy: 1, sz: 0.85, lat: 4, lon: 7 });
+  for (const zs of [-1, 1]) {
+    const e = [J.head[0] + hr * 0.70, J.head[1] + hr * 0.12, J.head[2] + zs * hr * 0.44];
+    // Rim first, a shade larger and set back, so the white has an edge instead of melting into red.
+    r.ball([e[0] - 0.014, e[1], e[2]], hr * 0.56, SUIT_LINE, { sx: 0.32, sy: 0.72, sz: 1.1, roll: -zs * 16, lat: 4, lon: 7 })
+     .ball(e, hr * 0.48, SUIT_EYE, { sx: 0.32, sy: 0.7, sz: 1.04, roll: -zs * 16, lat: 4, lon: 7 });
+  }
+  return r.geo();
+}
+// Crouched on a ledge with the shooting arm already out: feet planted, knees up and apart, back
+// curled forward over them, left hand hanging past the knee. What makes a shape read as a person
+// from across a block is not detail but the gaps — between the legs, between the arms and the ribs,
+// between the head and the shoulders — so every limb stays slim and clear of its neighbour.
+const PERCH_G = body({
+  headR: 0.125,
+  pelvis: [-0.05, 0.67, 0], chest: [0.07, 1.06, 0], neck: [0.13, 1.24, 0], head: [0.19, 1.38, 0],
+  // The knee is forward of both the hip and the ankle, and level with the hip rather than below it:
+  // a thigh that is nearly horizontal is the whole of what makes a crouch read as a crouch instead
+  // of as standing with soft knees.
+  hipL: [-0.04, 0.64, -0.085], hipR: [-0.04, 0.64, 0.085],
+  kneeL: [0.36, 0.60, -0.15], kneeR: [0.36, 0.60, 0.15],
+  ankL: [0.15, 0.09, -0.115], ankR: [0.15, 0.09, 0.115],
+  toeL: [0.33, 0.045, -0.115], toeR: [0.33, 0.045, 0.115],
+  shoL: [0.06, 1.12, -0.145], shoR: [0.06, 1.12, 0.145],
+  elbL: [0.10, 0.82, -0.215], wriL: [0.21, 0.54, -0.215], fistL: [0.25, 0.45, -0.215],
+  // The right arm is out and pointing, because this is also the pose the web is fired from: the line
+  // has to leave a fist, and a fist at his hip means a line that appears to come out of his ribs. It
+  // is held at chest height, below the chin — raised any higher it crosses the face from this angle,
+  // and the face is the one part of him worth seeing.
+  elbR: [0.28, 1.05, 0.205], wriR: [0.50, 0.99, 0.19], fistR: [0.59, 0.96, 0.185],
+});
 // On the web: one arm straight up the line, the other trailing, back arched, legs streaming behind
-// and bent at the knee. The fist is at y = HAND on the figure's own axis, which is where the web is
-// tied — orienting +y along the rope therefore puts the line in his hand with no extra maths.
-const ARCH = [-10, 0, 0, 1.16, 0];       // the hips swung back behind the shoulders, the way a body hangs
-const SWING_G = figure([
-  [-0.06, 0.06, 1.60, 2.02, -0.07, 0.05, SUIT_RED],
-  [-0.07, 0.05, 1.22, 1.64, -0.13, -0.01, SUIT_RED, [0, 9, -0.01, 1.62, -0.07]],
-  [-0.09, 0.07, 1.12, 1.26, -0.17, 0.17, SUIT_RED],
-  [0.00, 0.26, 1.16, 1.40, -0.095, 0.095, SUIT_RED],
-  [0.255, 0.275, 1.24, 1.32, -0.08, -0.02, SUIT_EYE], [0.255, 0.275, 1.24, 1.32, 0.02, 0.08, SUIT_EYE],
-  [-0.12, 0.06, 0.72, 1.16, -0.110, -0.065, SUIT_BLUE, ARCH],
-  [-0.12, 0.06, 0.72, 1.16, -0.065, 0.065, SUIT_RED, ARCH],
-  [-0.12, 0.06, 0.72, 1.16, 0.065, 0.110, SUIT_BLUE, ARCH],
-  [-0.40, -0.02, 0.92, 1.02, -0.26, -0.18, SUIT_RED, [16, -8, -0.04, 1.00, -0.22]],
-  [-0.74, -0.36, 0.84, 0.94, -0.25, -0.17, SUIT_RED, [26, -6, -0.38, 0.90, -0.21]],
-  [-0.22, 0.00, 0.56, 0.78, -0.13, 0.13, SUIT_BLUE, ARCH],
-  [-0.56, -0.12, 0.56, 0.66, -0.15, -0.05, SUIT_BLUE, [8, -4, -0.12, 0.62, -0.10]],
-  [-0.56, -0.12, 0.56, 0.66, 0.05, 0.15, SUIT_BLUE, [8, 4, -0.12, 0.62, 0.10]],
-  [-0.98, -0.52, 0.52, 0.62, -0.15, -0.05, SUIT_BLUE, [28, -4, -0.54, 0.58, -0.10]],
-  [-0.98, -0.52, 0.52, 0.62, 0.05, 0.15, SUIT_BLUE, [28, 4, -0.54, 0.58, 0.10]],
-  [-1.12, -0.92, 0.48, 0.58, -0.15, -0.05, SUIT_BLUE, [40, -4, -0.96, 0.54, -0.10]],
-  [-1.12, -0.92, 0.48, 0.58, 0.05, 0.15, SUIT_BLUE, [40, 4, -0.96, 0.54, 0.10]],
-]);
+// and bent at the knee, and the two legs bent differently because a body in the air is never
+// symmetrical. The fist is at y = HAND on the figure's own axis, which is where the web is tied —
+// orienting +y along the rope therefore puts the line in his hand with no extra maths.
+const SWING_G = body({
+  headR: 0.135,
+  pelvis: [-0.15, 0.76, 0], chest: [0.02, 1.13, 0], neck: [0.07, 1.24, 0], head: [0.15, 1.33, 0],
+  hipL: [-0.17, 0.72, -0.095], hipR: [-0.17, 0.72, 0.095],
+  kneeL: [-0.52, 0.78, -0.135], kneeR: [-0.57, 0.67, 0.115],
+  ankL: [-0.92, 0.58, -0.17], ankR: [-1.00, 0.50, 0.135],
+  toeL: [-1.09, 0.50, -0.19], toeR: [-1.17, 0.41, 0.145],
+  shoL: [0.00, 1.21, -0.145], shoR: [0.01, 1.22, 0.145],
+  elbL: [-0.40, 1.02, -0.225], wriL: [-0.74, 0.90, -0.215], fistL: [-0.85, 0.86, -0.21],
+  elbR: [-0.03, 1.62, 0.095], wriR: [-0.02, 1.93, 0.04], fistR: [-0.01, 2.00, 0.02],
+});
+// Where the web leaves him, in his own units: the right fist of the perch pose, not a point on his
+// chest. Used to start the thread so it comes out of the hand that is pointing at the corner.
+const FIST = [0.59, 0.96];
 const HAND = 2.0;   // where the web sits in his fist, measured up from his feet
 const REACH = 3.2;  // how short the rope is reeled before he catches the ledge by hand
 // Knowingly out of scale: a real person across this block is nine pixels of red, which is a smudge.
@@ -1290,7 +1368,7 @@ function startHop() {
   // A thread that crosses a block takes longer to get there than one that crosses a street. At a
   // fixed duration every shot was the same quarter-second flicker whatever the distance, which is
   // what made the web read as appearing rather than being fired.
-  spid.shoot = clamp(spid.pos.distanceTo(h.A) / SPIDEY.thwip, 0.22, 0.55);
+  spid.shoot = clamp(spid.pos.distanceTo(h.A) / SPIDEY.thwip, 0.38, 0.9);
   spid.phase = "shoot"; spid.t = 0;
 }
 function updateSpidey(dt) {
@@ -1303,20 +1381,27 @@ function updateSpidey(dt) {
     if (spid.t >= SPIDEY.away) { spid.hop = 0; startHop(); }
     return;
   }
-  if (spid.phase === "shoot") {
-    // The thread leaves his fist and flies: fastest as it goes, slowing as it reaches, so there is a
-    // moment where a short line is hanging in the air pointing at nothing yet. That moment is the
-    // whole difference between a web being shot and a web being switched on.
-    const k = clamp(spid.t / spid.shoot, 0, 1);
-    spidey.position.lerpVectors(spid.stand, spid.pos, Math.min(1, k * 1.7));
-    hand.copy(spidey.position).addScaledVector(spid.face, 0.34 * SCALE);
-    hand.y += HAND * SCALE * 0.55;
+  if (spid.phase === "shoot" || spid.phase === "clasp") {
+    // Three beats, because that is how the thing reads as an action rather than a state change.
+    // First the reach: the thread grows out of his fist along the line he is pointing, slowly enough
+    // that you watch it travel, with a short stretch hanging in the air attached to nothing yet.
+    // Then the clasp: it is on the corner, he is still on his roof, and for a fifth of a second
+    // nothing moves but the rope going taut. Only then does he lean off the lip and fall into it.
+    const shooting = spid.phase === "shoot";
+    const k = clamp(spid.t / (shooting ? spid.shoot : SPIDEY.clasp), 0, 1);
+    // He holds his ground while the line is out and only leans once it has bitten.
+    spidey.position.copy(spid.stand);
+    if (!shooting) spidey.position.lerp(spid.pos, k * k * (3 - 2 * k));
+    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE);
+    hand.y += FIST[1] * SCALE;
     aim(UPV, spid.face);
     perchMesh.visible = true; swingMesh.visible = false; spidey.visible = true;
     web.visible = true;
-    const out = 1 - (1 - k) * (1 - k) * (1 - k);
+    // Barely eased: a cubic ease-out spends most of the shot already arrived, which looks like the
+    // web snapping on. Nearly constant speed with a little settle at the end is a thread flying.
+    const out = shooting ? 1 - Math.pow(1 - k, 1.6) : 1;
     setWeb(hand, tip.copy(hand).lerp(h.A, out));
-    if (k >= 1) { spid.phase = "swing"; spid.t = 0; }
+    if (k >= 1) { spid.phase = shooting ? "clasp" : "swing"; spid.t = 0; }
     return;
   }
   if (spid.phase === "swing") {
