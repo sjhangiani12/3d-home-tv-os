@@ -1198,7 +1198,7 @@ const TH_LET = 0.52, LAND_T = 0.6;
 const SETTLE = 1.2;
 // The exit, counted back from the moment the thread leaves his hand. Four beats, one at a time:
 //
-//   STAND_T  he comes up out of the sit and takes the last stride out onto the lip
+//   STAND_T  he comes up out of the sit onto his feet, in place, on the lip he was sitting on
 //   TURN     he turns on the spot to face the next anchor
 //   ARM_T    the arm comes up and points at it
 //   RISE     two frames of the point held, and the web goes
@@ -1404,7 +1404,7 @@ function buildHops() {
   }
 }
 
-const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
+const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
 const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3(), upV = new THREE.Vector3();
 // Which way is up for a man on a rope. Along the rope once the anchor is above him; upright with a
@@ -1422,7 +1422,7 @@ function hangAxis(out, ropeV, face) {
   out.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
   return out.addScaledVector(face, (1 - hang) * 0.85).normalize();
 }
-const atV = new THREE.Vector3(), sitV = new THREE.Vector3(), depV = new THREE.Vector3();
+const atV = new THREE.Vector3(), sitV = new THREE.Vector3();
 function aim(up, fwd) {
   by.copy(up).normalize();
   bx.copy(fwd).addScaledVector(by, -fwd.dot(by));
@@ -1442,17 +1442,20 @@ function setWeb(from, to) {
 function startHop() {
   const h = HOPS[spid.hop];
   spid.th = h.th0; spid.w = 0;
-  // The swing begins off the lip of the roof. He is already standing there: the dwell walked him out
-  // to this exact point while he was getting up, so nothing moves between the point and the drop.
-  // It used to slide him out here in the fifth of a second after the web bit, and a man holding a
-  // pose while the roof travels under him is the one thing in this whole sequence that looked fake.
+  // Two different places, and conflating them is what put him in the air. `spid.stand` is where his
+  // feet are: on the deck, at the lip, where the dwell left him. `spid.pos` is where the *swing*
+  // starts, and that is necessarily a stride further out over the street — a pendulum begun inside
+  // the footprint spends its opening metres inside his own building. The step between the two is the
+  // clasp, and only the clasp: standing out there for the turn and the point is a man hovering
+  // beside a facade.
+  spid.stand.copy(spid.pos);
   const q = h.at(h.th0, h.pow);
   spid.pos.set(q.x, q.y, q.z);
-  spid.face.subVectors(h.A, spid.pos).setY(0).normalize();
+  spid.face.subVectors(h.A, spid.stand).setY(0).normalize();
   // A thread that crosses a block takes longer to get there than one that crosses a street. At a
   // fixed duration every shot was the same quarter-second flicker whatever the distance, which is
   // what made the web read as appearing rather than being fired.
-  spid.shoot = clamp(spid.pos.distanceTo(h.A) / SPIDEY.thwip, 0.38, 0.9);
+  spid.shoot = clamp(spid.stand.distanceTo(h.A) / SPIDEY.thwip, 0.38, 0.9);
   spid.phase = "shoot"; spid.t = 0;
 }
 function updateSpidey(dt) {
@@ -1470,21 +1473,19 @@ function updateSpidey(dt) {
     // Two beats, because that is how the thing reads as an action rather than a state change.
     // First the reach: the thread grows out of his fist along the line he is pointing, slowly enough
     // that you watch it travel, with a short stretch hanging in the air attached to nothing yet.
-    // Then the clasp: it is on the corner, and for a fifth of a second nothing moves at all but the
-    // rope going taut. He does not travel in either beat — he is planted on the lip from the moment
-    // he points until the moment he falls off it.
+    // Then the clasp: it is on the corner, and he comes off the roof — out over the lip and down
+    // onto the line, both at once, in a fifth of a second.
     const shooting = spid.phase === "shoot";
     const k = clamp(spid.t / (shooting ? spid.shoot : SPIDEY.clasp), 0, 1);
-    // Through the shot his feet are on `spid.pos` and nothing about him moves. Through the clasp his
-    // weight comes off the roof and onto the line. The pendulum's first point is that same spot —
-    // the rope starts where he was standing — so hanging from it leaves him a body length lower, and
-    // that used to happen in the single frame the swing began: he dropped his own height instantly.
-    // Now it is the clasp. He is still not travelling anywhere; the only thing changing is how much
-    // of him is still on the roof. Squared, because what takes his weight is gravity.
+    // Through the shot nothing about him moves at all: he is standing on the deck with his arm out.
+    // Through the clasp his weight leaves the roof. Two things happen together and they are the same
+    // thing — he steps out to where the pendulum begins, and he drops the body length that hanging
+    // from a rope costs. Both used to be instant on the frame the swing started, which is a man
+    // teleporting off a building. Squared, because what takes his weight is gravity.
     const tipk = shooting ? 0 : k * k;
     hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
     upV.copy(UPV).lerp(tmp, tipk).normalize();
-    spidey.position.copy(spid.pos).addScaledVector(tmp, -HANG * tipk);
+    spidey.position.lerpVectors(spid.stand, spid.pos, tipk).addScaledVector(tmp, -HANG * tipk);
     // His fist sits at FIST[1] = HAND along his own up axis, which is why the thread leaves his hand
     // whatever that axis is — and why at the end of the tip the hand is back on `spid.pos`, exactly
     // where the swing expects to find the rope end.
@@ -1581,26 +1582,25 @@ function updateSpidey(dt) {
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
   const rise = p.dwell - EXIT;
-  // One direction, the whole dwell: in off the ledge, out to the lip, off the lip. `at` is set by
-  // where the crouch's planted fist lands, a stride inside the parapet; `sit` is a metre from it,
-  // because a sit is only a sit if the legs are over the drop; and the departure point is one more
-  // stride out, over nothing. He used to walk back in to `at` to stand up and then be slid out past
-  // `sit` again after the web bit — a pace forward, a pace back, a pace forward, which is pacing,
-  // not leaving. Now standing up and stepping off are the same stride.
+  // He moves once, at the start, and then his feet stay put for the rest of the dwell. `at` is where
+  // the landing crouch puts him — set by where the planted fist lands, so a stride inside the
+  // parapet — and `sit` is a metre further out, because a sit is only a sit if the legs are over the
+  // drop. Standing up again does not move him: you push up off a ledge and your feet land where you
+  // were sitting. He used to walk back in to stand and then be slid out past the lip entirely, which
+  // is a pace forward, a pace back, and then a man standing on thin air for the two and a half
+  // seconds it takes to turn, point and fire. The step off the lip belongs to the clasp — see
+  // `startHop` — because that is the moment he is actually falling.
   // The shuffle to the lip is ease-OUT only: it opens at the speed the landing arc hands it (see
   // `m1` above) and dies into the sit, so touching down and sitting are one movement.
   const ks = clamp(spid.t / SETTLE, 0, 1);
   spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), 1 - (1 - ks) * (1 - ks));
-  // `edge` is the departure point exactly: the pendulum at its start angle is at the point the hop
-  // was solved *from*, and `buildHops` solves every hop from this perch's `edge`.
-  if (spid.t >= rise) spid.pos.lerp(depV.fromArray(p.edge), smooth(clamp((spid.t - rise) / STAND_T, 0, 1)));
   spidey.position.copy(spid.pos);
   // He arrived already looking out along `look` — the twist happened in the air — and only turns to
   // the next anchor once he is on his feet. This is not decoration: the anchors sit nearly dead away
   // from this camera, and a seated figure seen from behind is a shapeless lump. `look` is the one
   // angle at which the hang of the legs and the arm on the knee survive at forty pixels, which is
   // why it is authored per corner and not derived. The turn is measured from where he is standing
-  // at that moment, which is out on the lip, not from the ledge he came down on.
+  // at that moment, which is the lip he sat on, not the ledge he came down on.
   if (spid.t >= rise + STAND_T) tmp.subVectors(next.A, spid.pos);
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
@@ -1636,17 +1636,22 @@ function shown(tr, now) { const s = tr.next - now; return s >= -DWELL ? s : tr.q
 function routeOf(tr, now) { return (tr.next - now >= -DWELL ? tr.route : tr.queuedRoute) || "6"; }
 // The line in its circle, so a route number never reads as minutes.
 const bullet = (r, sm) => `<span class="bullet${sm ? " sm" : ""}">${String(r || "6").replace("X", "")}</span>`;
+// Writing `innerHTML` costs a parse, a style recalc and a layout of the whole overlay even when the
+// new markup is identical to the old. The signs are rebuilt four times a second but they say the
+// same thing until a minute ticks over or a feed lands — so on the TV that was four full layouts a
+// second buying nothing, landing as a periodic hitch in the frame. Compare first.
+function setHTML(el, html) { if (el.__h !== html) { el.__h = html; el.innerHTML = html; } }
 function renderSigns(now) {
   const d = shown(trains.down, now), u = shown(trains.up, now);
   const row = (label, tr, s) => `<div class="row" style="justify-content:space-between;gap:18px;margin-top:6px"><span class="s">${label}</span>${s < -DWELL || s > 5400 ? `<span class="t">–</span>` : `<span class="row" style="gap:8px">${bullet(routeOf(tr, now), true)}<span class="t">${mins(Math.max(0, s))}</span></span>`}</div>`;
-  trainSign.el.innerHTML = `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`;
+  setHTML(trainSign.el, `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`);
   DOCKS.forEach((dk, i) => {
-    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
+    setHTML(dockSigns[i].el, `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
       <div class="row" style="gap:14px;margin-top:4px"><span class="big"><span class="bolt">⚡</span>${dk.ebikes}</span><span class="big" style="color:${BIKE_BLUE}">${dk.classic}</span></div>
-      <div class="s" style="font-size:15px">e-bikes · classic</div>`;
+      <div class="s" style="font-size:15px">e-bikes · classic</div>`);
   });
   const on = LAMPS.filter((l) => l.on).length;
-  homeSign.el.innerHTML = `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`;
+  setHTML(homeSign.el, `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`);
   renderMusic();
   renderChip();
   if (poi) renderDetail(now);
@@ -1856,7 +1861,7 @@ function renderDrawer() {
 function renderChip() {
   const on = LAMPS.filter((l) => l.on).length;
   document.getElementById("chiptxt").textContent = on ? `Lights · ${on} on` : "Lights · all off";
-  document.getElementById("chipdots").innerHTML = ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${r.name}"></span>`).join("");
+  setHTML(document.getElementById("chipdots"), ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${r.name}"></span>`).join(""));
 }
 const lampById = (id) => LAMPS.find((l) => String(l.id) === String(id));
 roomsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-lamp]"); if (!b) return; const l = lampById(b.dataset.lamp); l.on = !l.on; l.tone = null; updateLamps(); });
@@ -2055,19 +2060,17 @@ async function zoomOut() {
   cityHud.forEach((e) => e.classList.remove("hide"));
   toNative({ type: "poi", on: false });
 }
-let detailHtml = "";
 function renderDetail(now) {
   if (!poi) return;
-  if (poi.id !== "music") detailHtml = "";
   if (poi.id === "train") {
     const rows = (label, tr) => {
       const list = (tr.list && tr.list.length ? tr.list : [{ route: tr.route || "6", at: tr.next }]).filter((a) => a.at - now > -DWELL).slice(0, 3);
       return `<div class="drow"><span class="dlabel">${label}</span>${list.length ? list.map((a) => `<span class="dtrain">${bullet(a.route, true)}<b>${mins(Math.max(0, a.at - now))}</b></span>`).join("") : "<b>–</b>"}</div>`;
     };
-    detailHost.innerHTML = `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`;
+    setHTML(detailHost, `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`);
   } else if (poi.id === "music") {
     const np = nowPlaying();
-    if (!np) { detailHost.innerHTML = `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`; return; }
+    if (!np) { setHTML(detailHost, `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`); return; }
     const m = np.state.media;
     const rooms = [...SPEAKERS.values()].sort((a, b) => (b.state.volume ?? -1) - (a.state.volume ?? -1));
     musicRooms = rooms;
@@ -2081,12 +2084,12 @@ function renderDetail(now) {
         return `<div class="spkrow${here && dm.state === "playing" ? " on" : ""}${musicSel === i + 1 ? " sel" : ""}" data-room="${i + 1}"><span class="nm">${esc(d.name)}</span><span class="vol"><i style="width:${d.state.volume ?? 0}%"></i></span><span class="st">${!d.state.reachable ? "offline" : here ? (dm.state === "playing" ? `♪ ${d.state.volume ?? ""}` : "paused") : dm.state === "playing" ? esc(dm.title || "other") : "idle"}</span></div>`; }).join("")}</div>
       <div class="dhint">${musicSel === 0 ? "OK play / pause · ← → skip" : "← → volume"} · ↑ ↓ choose · Back to the block</div>`;
     // Unchanged panel: keep its nodes (a click in progress keeps its target).
-    if (html !== detailHtml) { detailHtml = html; detailHost.innerHTML = html; }
+    setHTML(detailHost, html);
   } else {
     const d = poi.dock;
-    detailHost.innerHTML = `<div class="dhead"><span class="t">${d.name}</span><span class="s">${d.side}</span></div>
+    setHTML(detailHost, `<div class="dhead"><span class="t">${d.name}</span><span class="s">${d.side}</span></div>
       <div class="drow big"><span><span class="bolt">⚡</span>${d.ebikes}<small>e-bikes</small></span><span style="color:${BIKE_BLUE}">${d.classic}<small>classic</small></span>${d.free != null ? `<span>${d.free}<small>free docks</small></span>` : ""}</div>
-      <div class="dhint">Live from Citi Bike · Back to the block</div>`;
+      <div class="dhint">Live from Citi Bike · Back to the block</div>`);
   }
 }
 // Commands from the TV app (focus in/out of the block, Back, Home)
@@ -2283,8 +2286,56 @@ const UP = new THREE.Vector3(0, 1, 0);
 }
 applyLook(); updateLamps(); applyCam();
 setInterval(tickClock, 1000); tickClock();
+// ---------- frame pacing
+// The TV panel is 60 Hz and one block frame costs a hair over two vsyncs, so the compositor shows
+// it after 2, then 3, then 4: measured on the TV, 43% of frames arrived 33 ms apart, 44% 50 ms
+// apart and 9% 67 ms apart. The average of that is a respectable 22 fps, and the average is a lie —
+// what the eye gets is 30, then 20, then 15 fps inside the same second. Nothing on this block is
+// slow enough to notice at a steady 20; it is the *beat* that reads as lag, and a beat only shows
+// up on something crossing the frame fast, which here is one man on a rope.
+//
+// So: pick a whole number of vsyncs and hold it. Draw on our vsync, skip the rest. Start at one, so
+// a laptop that can do 60 keeps doing 60, and step out to two or three when the panel says we are
+// not making it — a steady 20 looks better than a ragged 22. Judge over a window rather than on a
+// single late frame: on the TV the miss rate at two vsyncs is around half, so waiting for a run of
+// consecutive misses would take a second to notice something that is obvious in thirty frames.
+// Stepping back in costs a brief stumble, so it wants a long clean stretch — half a minute or so —
+// which is slow enough not to matter and quick enough to pick up the easier light after dusk.
+// The slack is half a vsync either side: tighter and ordinary jitter in the rAF clock makes us skip
+// the frame we meant to draw.
+//
+// The refresh rate is not ours to assume — the TV is 60 Hz and the laptop this is drawn on is 120,
+// and hard-coding either one halves the other. rAF hands us a vsync, so the shortest gap the
+// browser has ever given us is the panel's period; keep the running minimum, and take it on every
+// callback, including the ones we skip.
+const WIN = 30;
+let vs = 1, vsync = 0, rawLast = 0, drawn = 0, winN = 0, winMiss = 0, winClean = 0;
+function pace(now) {
+  const raw = now - rawLast;
+  rawLast = now;
+  if (raw > 4 && (!vsync || raw < vsync)) vsync = raw;
+  if (!vsync) return false;
+  if (!drawn) { drawn = now; return true; }
+  const period = vsync * vs, slack = vsync / 2;
+  if (now - drawn < period - slack) return false;
+  const gap = now - drawn;
+  drawn = now;
+  if (gap > period + slack) winMiss++;
+  if (++winN >= WIN) {
+    if (winMiss > WIN / 4 && vs < 3) { vs++; winClean = 0; }
+    else if (winMiss) winClean = 0;
+    else if (vs > 1 && ++winClean >= WIN) { vs--; winClean = 0; }
+    winN = winMiss = 0;
+  }
+  return true;
+}
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; clockS += dt;
+  requestAnimationFrame(frame);
+  if (!pace(now)) return;
+  // The old clamp was 0.05, which sat *below* the interval the TV actually runs at, so every
+  // three-vsync frame had its time clipped and the whole block ran a little slow. The clamp is only
+  // there to stop a page that has been backgrounded from teleporting everything; a tenth does that.
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; clockS += dt;
   updateTraffic(dt, clockS, wx === "snow" ? 0.6 : wx === "rain" ? 0.85 : 1);
   updatePeople(dt, clockS, wx);
   updateWeather(dt, clockS, wx);
@@ -2312,9 +2363,8 @@ function frame(now) {
   renderer.render(scene, camera);
   if (!readySent) { readySent = true; toNative({ type: "ready" }); }
   frames++;
-  if (now - statT > 10_000) { console.log(`[appart3d-stats] block fps=${(frames * 1000 / (now - statT)).toFixed(1)} pix=${PIX} shadows=${SHADOWS}`); frames = 0; statT = now; }
+  if (now - statT > 10_000) { console.log(`[appart3d-stats] block fps=${(frames * 1000 / (now - statT)).toFixed(1)} pix=${PIX} shadows=${SHADOWS} vsync=${vs}`); frames = 0; statT = now; }
   if (now - lastSigns > 250) { renderSigns(clockS); lastSigns = now; }
   projectSigns();
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
