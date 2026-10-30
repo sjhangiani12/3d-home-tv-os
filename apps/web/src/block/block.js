@@ -2299,10 +2299,12 @@ setInterval(tickClock, 1000); tickClock();
 // not making it — a steady 20 looks better than a ragged 22. Judge over a window rather than on a
 // single late frame: on the TV the miss rate at two vsyncs is around half, so waiting for a run of
 // consecutive misses would take a second to notice something that is obvious in thirty frames.
-// Stepping back in costs a brief stumble, so it wants a long clean stretch — half a minute or so —
-// which is slow enough not to matter and quick enough to pick up the easier light after dusk.
-// The slack is half a vsync either side: tighter and ordinary jitter in the rAF clock makes us skip
-// the frame we meant to draw.
+// Stepping back in costs about a second of ragged frames before the panel disagrees, so it wants a
+// long clean stretch first. Measured: on the TV a retry every forty seconds put a stumble inside
+// roughly every pass he makes across the block, which is the thing this is here to stop. Three
+// minutes is rare enough to disappear and still picks up the easier light within a few minutes of
+// dusk. The slack is half a vsync either side: tighter and ordinary jitter in the rAF clock makes
+// us skip the frame we meant to draw.
 //
 // The refresh rate is not ours to assume — the TV is 60 Hz and the laptop this is drawn on is 120,
 // and hard-coding either one halves the other. rAF hands us a vsync, so the shortest gap the
@@ -2324,7 +2326,7 @@ function pace(now) {
   if (++winN >= WIN) {
     if (winMiss > WIN / 4 && vs < 3) { vs++; winClean = 0; }
     else if (winMiss) winClean = 0;
-    else if (vs > 1 && ++winClean >= WIN) { vs--; winClean = 0; }
+    else if (vs > 1 && ++winClean >= WIN * 4) { vs--; winClean = 0; }
     winN = winMiss = 0;
   }
   return true;
