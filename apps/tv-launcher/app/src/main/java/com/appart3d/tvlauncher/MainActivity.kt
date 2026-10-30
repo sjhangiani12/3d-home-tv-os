@@ -545,14 +545,11 @@ class MainActivity : Activity() {
     private fun buildHomePanel(): FrameLayout {
         val column = LinearLayout(this).also { homeColumn = it }.apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(24), dp(12), dp(14))
-            addView(TextView(context).apply {
-                text = getString(R.string.home_title)
-                setTextColor(INK)
-                textSize = 22f
-                typeface = bold
-            })
-            addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) })
+            setPadding(dp(16), dp(20), dp(12), dp(14))
+            // No "Home" over the top: it sat on "Lights" saying the same thing twice, and the 40dp it
+            // took were the 40dp the third room needed. The panel is reached from the home; the two
+            // headings it has left name what it actually holds, the lamps and what is playing.
+            addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(buildNowPlaying(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(TextView(context).apply {
                 text = getString(R.string.home_hint)

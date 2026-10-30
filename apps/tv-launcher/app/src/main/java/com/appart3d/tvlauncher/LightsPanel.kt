@@ -85,7 +85,7 @@ class LightsPanel(
         })
         pills.orientation = HORIZONTAL
         pills.clipChildren = false
-        pills.setPadding(dp(6), 0, dp(6), dp(6))
+        pills.setPadding(dp(6), 0, dp(6), dp(4))
         addView(pills)
         setScenes(emptyList())
         list.orientation = VERTICAL
@@ -230,14 +230,16 @@ class LightsPanel(
             for (lamp in g.lamps) {
                 val row = LampRow(lamp)
                 lampRows[lamp.id] = row
-                kids.addView(row.view, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(4) })
+                kids.addView(row.view, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(2) })
             }
             list.addView(LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 clipChildren = false
                 addView(View(context).apply { setBackgroundColor(0x473B3328) }, LayoutParams(dp(1.5f), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = dp(10) })
                 addView(kids, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(12); rightMargin = dp(14) })
-            }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4); bottomMargin = dp(10) })
+            // The gaps are what gives when three rooms have to fit above the music: the rows keep their
+            // 36 and 30 dp -- a row you can hit from the sofa is the point -- and the air between them pays.
+            }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2); bottomMargin = dp(8) })
         }
         focusedLamp?.let { lampRows[it]?.view?.requestFocus() } ?: focusedRoom?.let { roomRows[it]?.view?.requestFocus() }
     }

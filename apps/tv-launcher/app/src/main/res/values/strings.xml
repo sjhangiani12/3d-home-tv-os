@@ -79,8 +79,8 @@
     <string name="good_evening">Good evening</string>
     <string name="chip_on">Lights · %d on</string>
     <string name="chip_all_off">Lights · all off</string>
-    <string name="home_title">Home</string>
-    <string name="home_hint">OK turns a room or a lamp on or off · ← → dims it · Back returns to the block</string>
+    <!-- One line, and it must stay one: a second line costs the third room its lamps. -->
+    <string name="home_hint">OK switches · ← → dims · Back returns</string>
     <string name="np_rooms">%1$s · %2$d rooms</string>
     <string name="np_nothing">Nothing playing</string>
     <string name="speaker_lead">%s · from here</string>
