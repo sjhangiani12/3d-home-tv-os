@@ -25,7 +25,25 @@ const SUIT_WEB = "#4a0d13";
 // facing six ways — which is what makes it catch the light as a body rather than as a crate.
 const rgA = new THREE.Vector3(), rgB = new THREE.Vector3(), rgD = new THREE.Vector3();
 const rgU = new THREE.Vector3(), rgV = new THREE.Vector3(), rgT = new THREE.Vector3(), rgN = new THREE.Vector3();
-function rig() {
+// How many web cells run along a sleeve. Left to itself each tube would pick its own count from its
+// own length, which is right for one body and fatal for four: two poses would then disagree on how
+// many vertices a forearm is made of, and nothing could be blended between them. So the first body
+// built records the count of every webbed tube in order, and the rest replay that list. `body()`
+// issues exactly the same sequence of calls whatever joints it is given, so the n-th webbed tube is
+// the same sleeve in every pose — a forearm keeps its cells when the arm straightens, which is also
+// what cloth does.
+function ringPlan() {
+  const n = []; let i = 0;
+  return {
+    reset() { i = 0; },
+    at(len, step) {
+      if (i < n.length) return n[i++];
+      i++; n.push(Math.max(1, Math.round(len / step)));
+      return n[n.length - 1];
+    },
+  };
+}
+function rig(plan) {
   const pos = [], nor = [], col = [], cA = new THREE.Color(), cB = new THREE.Color(), cW = new THREE.Color();
   const put = (x, y, z, nx, ny, nz, c) => { pos.push(x, y, z); nor.push(nx, ny, nz); col.push(c.r, c.g, c.b); };
   const quad = (p, q, s, t) => {
@@ -87,7 +105,8 @@ function rig() {
       // A web is thread on cloth: the line has to be much thinner than the cell it bounds. At a
       // tenth of a cell it reads as webbing; at a sixth it reads as a waffle, and at a quarter the
       // suit has gone and he is wearing a net.
-      const g = o.gap ?? 0.1, rings = Math.max(1, Math.round(len / (o.ring ?? 0.075)));
+      const g = o.gap ?? 0.1, step = o.ring ?? 0.075;
+      const rings = plan ? plan.at(len, step) : Math.max(1, Math.round(len / step));
       for (let i = 0; i < seg; i++) for (let j = 0; j < rings; j++) {
         const t0 = (i + g) / seg * TAU, t1 = (i + 1 - g) / seg * TAU;
         const u0 = (j + g * 0.9) / rings, u1 = (j + 1 - g * 0.9) / rings;
@@ -145,8 +164,10 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 // One body, two sets of joints. Everything that makes him recognisable lives here and not in the
 // poses: red boots and gloves against blue legs, a red chest with blue flanks, and above all the two
 // big white eyes with a dark rim, which are the single feature that survives being small.
+const PLAN = ringPlan();
 function body(J) {
-  const r = rig(), hr = J.headR;
+  PLAN.reset();
+  const r = rig(PLAN), hr = J.headR;
   // The spider goes on the sternum, not on the chest joint — the joint is up at the collarbone, and
   // a spider there reads as a bow tie.
   const sternum = lerp3(J.pelvis, J.chest, 0.78);
@@ -323,4 +344,35 @@ const SWING_G = body({
 // chest. Used to start the thread so it comes out of the hand that is pointing at the corner.
 const FIST = [0.59, 0.96];
 
-export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST };
+// One mesh that can be anywhere between the four poses, instead of four meshes and a visibility
+// switch. Swapping `visible` is a cut: he lands on the parapet and is *already* sitting, in nothing,
+// and a silhouette that jumps a metre in one frame reads as a glitch rather than as a man. Because
+// every pose is now vertex-for-vertex the same body, the difference between two of them is just a
+// list of offsets — which is exactly a morph target, blended on the GPU for free.
+// The perch is the base and the other three are relative deltas, so all-influences-zero is the
+// perch. Normals are morphed too; leave them out and a limb keeps the shading of the pose it came
+// from while it moves, which looks like the light is lagging behind him.
+const POSE_IX = { perch: -1, crouch: 0, sit: 1, swing: 2 };
+const POSE_G = (() => {
+  const g = new THREE.BufferGeometry();
+  for (const name of ["position", "normal", "color"]) g.setAttribute(name, PERCH_G.getAttribute(name));
+  g.morphTargetsRelative = true;
+  const delta = (to, name) => {
+    const a = PERCH_G.getAttribute(name).array, b = to.getAttribute(name).array, d = new Float32Array(a.length);
+    for (let i = 0; i < a.length; i++) d[i] = b[i] - a[i];
+    return new THREE.BufferAttribute(d, 3);
+  };
+  const order = [CROUCH_G, SIT_G, SWING_G];
+  g.morphAttributes.position = order.map((p) => delta(p, "position"));
+  g.morphAttributes.normal = order.map((p) => delta(p, "normal"));
+  // Frustum culling reads the bounding sphere, and a sphere computed from the base alone does not
+  // know about the swing's trailing legs or the sit's hanging ones. He would be culled by his own
+  // elbow at the edge of the screen. One sphere big enough for every pose, set once.
+  const box = new THREE.Box3();
+  for (const p of [PERCH_G, ...order]) { p.computeBoundingBox(); box.union(p.boundingBox); }
+  g.boundingBox = box;
+  g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+  return g;
+})();
+
+export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, SIT_G, CROUCH_G, PERCH_G, SWING_G, POSE_G, POSE_IX, FIST };
