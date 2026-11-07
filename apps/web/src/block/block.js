@@ -20,7 +20,7 @@ import {
   mediaLoaded, mediaRooms, moodAdjusted, moodStatus, nowPlaying, roomGroups, roomPosition,
 } from "@appart3d/home";
 import * as P from "./paint.js";
-import { SIT_G, CROUCH_G, PERCH_G, SWING_G, FIST } from "./figure.js";
+import { POSE_G, POSE_IX, FIST } from "./figure.js";
 
 // Colors and lights as in the mock (three r128 look): no color management, linear output, π-scaled lights.
 THREE.ColorManagement.enabled = false;
@@ -1224,19 +1224,38 @@ const REACH = 4.6;  // how short the rope is reeled before he catches the ledge 
 // hangs HAND * SCALE below the end of the rope, so SPIDEY.clear has to cover that or the arc solver
 // will happily route his feet through a roof it thinks the rope clears.
 const SCALE = 5.4;
+const HANG = HAND * SCALE;  // how far his feet sit below the end of the rope
 // He lets go near the bottom of the arc rather than riding the rope all the way in. Integrating a
 // reeling pendulum down to θ = 0 is what produced the whip: the rope is shortest exactly where he is
 // fastest, so the last fifth of the arc arrived in two frames and read as a teleport. Letting go at
 // TH_LET and sailing the rest is both calmer to watch and what he actually does.
 const TH_LET = 0.52, LAND_T = 0.6;
-// Seconds at the end of a dwell spent in the raised-arm pose before the thread leaves his hand.
-const RISE = 0.35;
-// Seconds before that at which he stops looking out over the ledge and starts turning to face where
-// he is going. A full turn at TURN_RATE takes about a second, so the turn is finished and settled
-// before the arm comes up: body first, then the arm, then the thread. All three at once is a twitch.
-const TURN = 1.5, TURN_RATE = 2.6;   // radians per second
 // Seconds at the start of a dwell spent coming out of the landing crouch and shuffling to the lip.
 const SETTLE = 1.2;
+// The exit, counted back from the moment the thread leaves his hand. Four beats, one at a time:
+//
+//   STAND_T  he comes up out of the sit onto his feet, in place, on the lip he was sitting on
+//   TURN     he turns on the spot to face the next anchor
+//   ARM_T    the arm comes up and points at it
+//   RISE     two frames of the point held, and the web goes
+//
+// They were overlapping before, and that was the thing that looked wrong. He stood up out of the
+// sit over half a second while a slide back from the lip took three times as long, so for most of
+// standing up his feet were planted on thin air out past the parapet. And he began turning on the
+// frame he began standing, which is a seated man starting to rotate.
+//
+// The point is the trigger, so ARM_T ends where the thwip starts. RISE is only a cushion: at 24 fps
+// a raise that lands on the same frame as the shot can land one frame late, and the thread would
+// then leave a fist that is still on its way up.
+const STAND_T = 0.75, TURN = 1.2, ARM_T = 0.45, RISE = 0.12;
+const EXIT = STAND_T + TURN + ARM_T + RISE;
+const TURN_RATE = 2.6;   // radians per second; TURN at this rate covers half a circle
+// How long each change of pose takes to cross over. Sitting is the slow one — it is his whole body
+// folding down over a parapet, and it is timed to *end* where the shuffle to the lip ends, so the
+// walk out and the sit down are one move instead of a walk and then a swap. The reach at the end of
+// a toss is the quick one: it is the half-second before he hits a parapet, and there is no time in
+// it to be gentle.
+const SIT_T = 0.7, REACH_T = 0.28;
 const smooth = (k) => k * k * (3 - 2 * k);
 // Rotate a flat facing vector toward `want` by at most `max` radians. A plain lerp between two
 // directions slows to nothing as it arrives and shortens the vector on the way; this keeps a constant
@@ -1254,16 +1273,38 @@ function turnTo(face, want, max) {
 // daylight one.
 const suitMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.18 });
 const spidey = new THREE.Group();
-const sitMesh = new THREE.Mesh(SIT_G, suitMat), crouchMesh = new THREE.Mesh(CROUCH_G, suitMat), perchMesh = new THREE.Mesh(PERCH_G, suitMat), swingMesh = new THREE.Mesh(SWING_G, suitMat);
+const suit = new THREE.Mesh(POSE_G, suitMat);
 // He casts. A figure on a roof with no shadow floats, and on a corner — where the roof behind him is
 // edge-on and the thing behind *that* is a facade a block away — the shadow is the only cue left
 // that says which surface he is on. One more caster in the shadow pass, and he is sitting down.
-for (const m of [sitMesh, crouchMesh, perchMesh, swingMesh]) m.castShadow = true;
-spidey.add(sitMesh, crouchMesh, perchMesh, swingMesh);
-// Four poses, one of them at a time. Setting them one by one at each site is how a pose gets left
-// on and two of him are drawn inside each other.
-const POSES = { sit: sitMesh, crouch: crouchMesh, perch: perchMesh, swing: swingMesh };
-function pose(which) { for (const k in POSES) POSES[k].visible = k === which; }
+suit.castShadow = true;
+spidey.add(suit);
+// Four poses, and any mixture of two of them. Each call site still just names the pose it wants;
+// what changed is that arriving at one takes POSE_T seconds instead of a frame. Standing up out of
+// a landing crouch is half a metre of hip travel, and done as a cut it reads as the model being
+// swapped rather than as him moving — which is exactly what it was.
+//
+// The blend is held here rather than in the poses themselves because the dwell asks for the same
+// pose on most frames: `pose(x)` on an unchanged `x` has to be free, or every frame restarts the
+// fade and nothing ever arrives.
+const POSE_T = 0.42;
+const blend = { from: suit.morphTargetInfluences.slice(), to: "perch", k: 1, dur: POSE_T };
+function pose(which, dur = POSE_T) {
+  if (which === blend.to) return;
+  // The pose he is leaving is wherever he actually is, which during an interrupted fade is between
+  // two of them. Snapping back to a pure pose here is what would make a quick change jump.
+  blend.from = suit.morphTargetInfluences.slice();
+  blend.to = which;
+  blend.k = 0;
+  blend.dur = dur;
+}
+function stepPose(dt) {
+  if (blend.k >= 1) return;
+  blend.k = clamp(blend.k + dt / blend.dur, 0, 1);
+  const w = suit.morphTargetInfluences, e = smooth(blend.k), b = POSE_IX[blend.to];
+  for (let i = 0; i < w.length; i++) w[i] = blend.from[i] * (1 - e);
+  if (b >= 0) w[b] += e;
+}
 spidey.scale.setScalar(SCALE);
 spidey.visible = false;
 scene.add(spidey);
@@ -1273,7 +1314,11 @@ scene.add(spidey);
 const webGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
 webGeo.translate(0, 0.5, 0);   // base at the origin, so the tube runs 0..1 up +y and scales by length
 const WEB_R = 0.15;            // metres of radius: a thread with a width, not a cable slung off a crane
-const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.85 }));
+// Thread, not cable. At 0.85 it was a white rod laid over the city; the facade behind it has to come
+// through, or the one thing on screen that is supposed to be gossamer is the most solid thing in the
+// frame. This is about as far as it goes — it still has to hold together across a room, and the roofs
+// it crosses are pale.
+const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.46 }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
 
@@ -1395,9 +1440,24 @@ function buildHops() {
   }
 }
 
-const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
+const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
-const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3();
+const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3(), upV = new THREE.Vector3();
+// Which way is up for a man on a rope. Along the rope once the anchor is above him; upright with a
+// forward pitch while it is still below, because the second hop leaves a ninety-six-metre tower for
+// a fifty-metre roof and for the first third of that arc the anchor is *under* him — orienting along
+// the rope there turns him upside down on the way out of the perch, which is the thing that looked
+// broken. Over that stretch he is not swinging, he is diving with the line already out, and bolt
+// upright in mid-air is a man in a lift, so he leads with the head and trails the legs.
+// The blend finishes once the anchor is about fifteen degrees above him, around the bottom of the arc.
+// Shared by the clasp and the swing: the tip off the lip has to end on exactly the axis the first
+// swung frame begins on, or he snaps into the hang.
+function hangAxis(out, ropeV, face) {
+  out.copy(ropeV).normalize();
+  const hang = clamp(out.y * 4, 0, 1);
+  out.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
+  return out.addScaledVector(face, (1 - hang) * 0.85).normalize();
+}
 const atV = new THREE.Vector3(), sitV = new THREE.Vector3();
 function aim(up, fwd) {
   by.copy(up).normalize();
@@ -1418,22 +1478,27 @@ function setWeb(from, to) {
 function startHop() {
   const h = HOPS[spid.hop];
   spid.th = h.th0; spid.w = 0;
+  // Two different places, and conflating them is what put him in the air. `spid.stand` is where his
+  // feet are: on the deck, at the lip, where the dwell left him. `spid.pos` is where the *swing*
+  // starts, and that is necessarily a stride further out over the street — a pendulum begun inside
+  // the footprint spends its opening metres inside his own building. The step between the two is the
+  // clasp, and only the clasp: standing out there for the turn and the point is a man hovering
+  // beside a facade.
+  spid.stand.copy(spid.pos);
   const q = h.at(h.th0, h.pow);
-  // The swing begins off the lip of the roof, a stride outside where he was standing: he leans out
-  // over it while the line is in the air. On the entrance there is nowhere to lean from.
-  if (spid.hop > 0) spid.stand.copy(spid.pos); else spid.stand.set(q.x, q.y, q.z);
   spid.pos.set(q.x, q.y, q.z);
-  spid.face.subVectors(h.A, spid.pos).setY(0).normalize();
+  spid.face.subVectors(h.A, spid.stand).setY(0).normalize();
   // A thread that crosses a block takes longer to get there than one that crosses a street. At a
   // fixed duration every shot was the same quarter-second flicker whatever the distance, which is
   // what made the web read as appearing rather than being fired.
-  spid.shoot = clamp(spid.pos.distanceTo(h.A) / SPIDEY.thwip, 0.38, 0.9);
+  spid.shoot = clamp(spid.stand.distanceTo(h.A) / SPIDEY.thwip, 0.38, 0.9);
   spid.phase = "shoot"; spid.t = 0;
 }
 function updateSpidey(dt) {
   if (mode === "home") { spidey.visible = web.visible = false; return; }
   if (!HOPS) buildHops();
   spid.t += dt;
+  stepPose(dt);
   const h = HOPS[spid.hop];
   if (spid.phase === "away") {
     spidey.visible = web.visible = false;
@@ -1441,20 +1506,28 @@ function updateSpidey(dt) {
     return;
   }
   if (spid.phase === "shoot" || spid.phase === "clasp") {
-    // Three beats, because that is how the thing reads as an action rather than a state change.
+    // Two beats, because that is how the thing reads as an action rather than a state change.
     // First the reach: the thread grows out of his fist along the line he is pointing, slowly enough
     // that you watch it travel, with a short stretch hanging in the air attached to nothing yet.
-    // Then the clasp: it is on the corner, he is still on his roof, and for a fifth of a second
-    // nothing moves but the rope going taut. Only then does he lean off the lip and fall into it.
+    // Then the clasp: it is on the corner, and he comes off the roof — out over the lip and down
+    // onto the line, both at once, in a fifth of a second.
     const shooting = spid.phase === "shoot";
     const k = clamp(spid.t / (shooting ? spid.shoot : SPIDEY.clasp), 0, 1);
-    // He holds his ground while the line is out and only leans once it has bitten.
-    spidey.position.copy(spid.stand);
-    if (!shooting) spidey.position.lerp(spid.pos, k * k * (3 - 2 * k));
-    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE);
-    hand.y += FIST[1] * SCALE;
-    aim(UPV, spid.face);
-    pose("perch"); spidey.visible = true;
+    // Through the shot nothing about him moves at all: he is standing on the deck with his arm out.
+    // Through the clasp his weight leaves the roof. Two things happen together and they are the same
+    // thing — he steps out to where the pendulum begins, and he drops the body length that hanging
+    // from a rope costs. Both used to be instant on the frame the swing started, which is a man
+    // teleporting off a building. Squared, because what takes his weight is gravity.
+    const tipk = shooting ? 0 : k * k;
+    hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
+    upV.copy(UPV).lerp(tmp, tipk).normalize();
+    spidey.position.lerpVectors(spid.stand, spid.pos, tipk).addScaledVector(tmp, -HANG * tipk);
+    // His fist sits at FIST[1] = HAND along his own up axis, which is why the thread leaves his hand
+    // whatever that axis is — and why at the end of the tip the hand is back on `spid.pos`, exactly
+    // where the swing expects to find the rope end.
+    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE).addScaledVector(upV, FIST[1] * SCALE);
+    aim(upV, spid.face);
+    pose(shooting ? "perch" : "swing", SPIDEY.clasp); spidey.visible = true;
     web.visible = true;
     // Barely eased: a cubic ease-out spends most of the shot already arrived, which looks like the
     // web snapping on. Nearly constant speed with a little settle at the end is a thread flying.
@@ -1478,24 +1551,10 @@ function updateSpidey(dt) {
     const q = h.at(spid.th, h.pow);
     spid.pos.set(q.x, q.y, q.z);
     pose("swing"); spidey.visible = true;
-    rope.subVectors(h.A, spid.pos);
-    // Hanging from the line only makes sense while the line goes *up*. The second hop leaves a
-    // ninety-six-metre tower for a fifty-metre roof, so for the first third of that arc the anchor is
-    // below him — and orienting his body along the rope then turns him upside down on the way out of
-    // the perch, which is the thing that looked broken. Over that stretch he is not swinging, he is
-    // dropping with the line already out, so he stays upright and the thread trails down out of his
-    // fist to the corner it has bitten. The blend finishes by the time the anchor is fifteen degrees
-    // above him, which is around the bottom of the arc, where hanging is what it reads as.
-    // `tmp` ends up as his up axis, and the fist sits on that axis at y = HAND, so whatever this
+    // `tmp` is his up axis, and the fist sits on that axis at y = HAND, so whatever `hangAxis`
     // chooses the hand stays exactly on the rope end and the thread still leaves his hand.
-    tmp.copy(rope).normalize();
-    const hang = clamp(tmp.y * 4, 0, 1);
-    tmp.multiplyScalar(hang).addScaledVector(UPV, 1 - hang);
-    // And while he is dropping he pitches into it. Bolt upright in mid-air is a man in a lift; the
-    // dive out of a tall roof in the game leads with the head and trails the legs, and that lean is
-    // most of what separates falling with purpose from falling.
-    tmp.addScaledVector(spid.face, (1 - hang) * 0.85).normalize();
-    spidey.position.copy(spid.pos).addScaledVector(tmp, -HAND * SCALE);
+    hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
+    spidey.position.copy(spid.pos).addScaledVector(tmp, -HANG);
     aim(tmp, spid.face);
     web.visible = true;
     setWeb(spid.pos, h.A);
@@ -1506,6 +1565,16 @@ function updateSpidey(dt) {
       spid.from.copy(spid.pos);
       spid.m0.set(q0.x - q1.x, q0.y - q1.y, q0.z - q1.z).normalize()
         .multiplyScalar(spid.from.distanceTo(h.LAND) * 0.6);
+      // And where the curve is going once it is over the parapet. He does not stop on the ledge: the
+      // shuffle out to the lip is the end of the same movement, so the toss has to arrive carrying
+      // exactly the speed that shuffle leaves with, or he halts on the deck and then starts again,
+      // which is the little dead beat that made the landing read as teleport-then-slide. Matching
+      // them is arithmetic: the shuffle covers (sit − at) over SETTLE with an ease-out that opens at
+      // twice its average speed, and a Hermite end tangent is a displacement per LAND_T, so they
+      // agree at m1 = (sit − at)·2·LAND_T/SETTLE.
+      const np = SPIDEY.perches[spid.hop];
+      if (np) spid.m1.fromArray(np.sit).sub(atV.fromArray(np.at)).multiplyScalar(2 * LAND_T / SETTLE);
+      else spid.m1.set(0, 0, 0);
       spid.phase = "land"; spid.t = 0;
     }
     return;
@@ -1516,15 +1585,22 @@ function updateSpidey(dt) {
     const k = clamp(spid.t / LAND_T, 0, 1), k2 = k * k, k3 = k2 * k;
     spid.pos.copy(spid.from).multiplyScalar(2 * k3 - 3 * k2 + 1)
       .addScaledVector(spid.m0, k3 - 2 * k2 + k)
-      .addScaledVector(h.LAND, -2 * k3 + 3 * k2);
+      .addScaledVector(h.LAND, -2 * k3 + 3 * k2)
+      .addScaledVector(spid.m1, k3 - k2);
     spidey.position.copy(spid.pos);
+    // He turns in the air, not on the deck. Landing facing the way he came and then rotating on the
+    // spot to face the view is a turret traversing; twisting on the way over the parapet and putting
+    // the feet down already looking out over it is a man landing. Twice the ground rate, because it
+    // has to be finished by the time he is down and because a twist in mid-air costs him nothing.
+    const np = SPIDEY.perches[spid.hop];
+    if (np) turnTo(spid.face, tmp.set(np.look[0], 0, np.look[2]).normalize(), TURN_RATE * 2 * dt);
     aim(UPV, spid.face);
     // He lets go and *sails* before he reaches. Switching to the reaching crouch on the frame the
     // rope drops spends the whole half-second between buildings in a landing pose, which is the one
     // thing the swing never looks like in the game: there the release is the part where he is longest
     // and fastest, arms and legs trailing, and the tuck only happens at the ledge. So the swing pose
     // holds for the first half of the toss and the reach is the second.
-    pose(k < 0.52 ? "swing" : "perch"); spidey.visible = true;
+    pose(k < 0.52 ? "swing" : "perch", REACH_T); spidey.visible = true;
     web.visible = k < 0.25;
     if (web.visible) setWeb(spid.pos, h.A);
     if (k >= 1) {
@@ -1535,38 +1611,47 @@ function updateSpidey(dt) {
     }
     return;
   }
-  // The dwell, in four beats: he comes out of the landing crouch, shuffles to the lip and sits with
-  // his legs over it; he sits there for nearly all of it; he gets up and steps back off the edge
-  // while turning to the next anchor; the arm goes up. Nothing bobs — he is on a roof, and a figure
-  // that drifts up and down on a rooftop is a figure that is not on one.
+  // The dwell, in four beats: he carries the landing out to the lip and sits with his legs over it;
+  // he sits there for nearly all of it; he gets up and steps out onto the lip while turning to the
+  // next anchor; the arm goes up. Nothing bobs — he is on a roof, and a figure that drifts up and
+  // down on a rooftop is a figure that is not on one.
   const p = SPIDEY.perches[spid.hop - 1];
   const next = HOPS[spid.hop];
-  const rise = p.dwell - RISE - TURN;
-  // He sits looking out along `look` and only turns to the next anchor when he stands. This is not
-  // decoration: the anchors sit nearly dead away from this camera, and a seated figure seen from
-  // behind is a shapeless lump. `look` is the one angle at which the hang of the legs and the arm on
-  // the knee survive at forty pixels, which is why it is authored per corner and not derived.
-  if (spid.t >= rise) tmp.subVectors(next.A, atV.fromArray(p.at));
+  const rise = p.dwell - EXIT;
+  // He moves once, at the start, and then his feet stay put for the rest of the dwell. `at` is where
+  // the landing crouch puts him — set by where the planted fist lands, so a stride inside the
+  // parapet — and `sit` is a metre further out, because a sit is only a sit if the legs are over the
+  // drop. Standing up again does not move him: you push up off a ledge and your feet land where you
+  // were sitting. He used to walk back in to stand and then be slid out past the lip entirely, which
+  // is a pace forward, a pace back, and then a man standing on thin air for the two and a half
+  // seconds it takes to turn, point and fire. The step off the lip belongs to the clasp — see
+  // `startHop` — because that is the moment he is actually falling.
+  // The shuffle to the lip is ease-OUT only: it opens at the speed the landing arc hands it (see
+  // `m1` above) and dies into the sit, so touching down and sitting are one movement.
+  const ks = clamp(spid.t / SETTLE, 0, 1);
+  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), 1 - (1 - ks) * (1 - ks));
+  spidey.position.copy(spid.pos);
+  // He arrived already looking out along `look` — the twist happened in the air — and only turns to
+  // the next anchor once he is on his feet. This is not decoration: the anchors sit nearly dead away
+  // from this camera, and a seated figure seen from behind is a shapeless lump. `look` is the one
+  // angle at which the hang of the legs and the arm on the knee survive at forty pixels, which is
+  // why it is authored per corner and not derived. The turn is measured from where he is standing
+  // at that moment, which is the lip he sat on, not the ledge he came down on.
+  if (spid.t >= rise + STAND_T) tmp.subVectors(next.A, spid.pos);
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
-  // Out to the lip and back again. `at` is set by where the crouch's planted fist lands, a stride
-  // inside the parapet; `sit` is a metre from it, because a sit is only a sit if the legs are over
-  // the drop. Sliding between them is what makes the sit something he does rather than somewhere he
-  // appears.
-  const k = spid.t < SETTLE ? smooth(spid.t / SETTLE) : 1 - smooth(clamp((spid.t - rise) / TURN, 0, 1));
-  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), k);
-  spidey.position.copy(spid.pos);
   aim(UPV, spid.face);
-  // The arm comes up before the thread does, so the shot has a wind-up instead of being a pose
-  // change and a thwip on the same frame. The crouch is only the hinge between standing and sitting
-  // at either end; the long middle of the dwell is the sit.
-  if (spid.t >= p.dwell - RISE) pose("perch");
-  else if (spid.t < SETTLE * 0.45 || spid.t >= rise) pose("crouch");
-  else pose("sit");
+  // The crouch is only the hinge between standing and sitting at either end; the long middle of the
+  // dwell is the sit. Each of these is asked for early enough that it *arrives* on its beat rather
+  // than starting there — the sit a whole SIT_T before the shuffle to the lip is over, the arm a
+  // whole ARM_T before the thread goes, which is what makes the point and the thwip one action.
+  if (spid.t >= p.dwell - RISE - ARM_T) pose("perch", ARM_T);
+  else if (spid.t >= rise) pose("crouch", STAND_T);
+  else if (spid.t >= SETTLE - SIT_T) pose("sit", SIT_T);
+  else pose("crouch", STAND_T);
   spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }
-
 // ---------- signs and street names (HTML over the canvas)
 const labels = document.getElementById("labels");
 const signs = [];
@@ -1587,17 +1672,22 @@ function shown(tr, now) { const s = tr.next - now; return s >= -DWELL ? s : tr.q
 function routeOf(tr, now) { return (tr.next - now >= -DWELL ? tr.route : tr.queuedRoute) || "6"; }
 // The line in its circle, so a route number never reads as minutes.
 const bullet = (r, sm) => `<span class="bullet${sm ? " sm" : ""}">${String(r || "6").replace("X", "")}</span>`;
+// Writing `innerHTML` costs a parse, a style recalc and a layout of the whole overlay even when the
+// new markup is identical to the old. The signs are rebuilt four times a second but they say the
+// same thing until a minute ticks over or a feed lands — so on the TV that was four full layouts a
+// second buying nothing, landing as a periodic hitch in the frame. Compare first.
+function setHTML(el, html) { if (el.__h !== html) { el.__h = html; el.innerHTML = html; } }
 function renderSigns(now) {
   const d = shown(trains.down, now), u = shown(trains.up, now);
   const row = (label, tr, s) => `<div class="row" style="justify-content:space-between;gap:18px;margin-top:6px"><span class="s">${label}</span>${s < -DWELL || s > 5400 ? `<span class="t">–</span>` : `<span class="row" style="gap:8px">${bullet(routeOf(tr, now), true)}<span class="t">${mins(Math.max(0, s))}</span></span>`}</div>`;
-  trainSign.el.innerHTML = `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`;
+  setHTML(trainSign.el, `<div class="row"><span class="t">${NAMES.station.name}</span><span class="s" style="font-size:15px">${NAMES.station.line.split(" · ").pop()}</span></div>${row("Downtown", trains.down, d)}${row("Uptown", trains.up, u)}`);
   DOCKS.forEach((dk, i) => {
-    dockSigns[i].el.innerHTML = `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
+    setHTML(dockSigns[i].el, `<div class="s" style="font-size:16px;letter-spacing:.08em">${dk.name} · ${dk.side}</div>
       <div class="row" style="gap:14px;margin-top:4px"><span class="big"><span class="bolt">⚡</span>${dk.ebikes}</span><span class="big" style="color:${BIKE_BLUE}">${dk.classic}</span></div>
-      <div class="s" style="font-size:15px">e-bikes · classic</div>`;
+      <div class="s" style="font-size:15px">e-bikes · classic</div>`);
   });
   const on = homeLamps().filter(isOn).length;
-  homeSign.el.innerHTML = `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`;
+  setHTML(homeSign.el, `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`);
   renderMusic();
   renderChip();
   if (poi) renderDetail(now);
@@ -1923,7 +2013,7 @@ function dressFocus() {
 function renderChip() {
   const on = homeLamps().filter(isOn).length;
   document.getElementById("chiptxt").textContent = on ? `Lights · ${on} on` : "Lights · all off";
-  document.getElementById("chipdots").innerHTML = ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${esc(r.name)}"></span>`).join("");
+  setHTML(document.getElementById("chipdots"), ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${esc(r.name)}"></span>`).join(""));
 }
 
 /**
@@ -2213,19 +2303,17 @@ async function zoomOut() {
   cityHud.forEach((e) => e.classList.remove("hide"));
   toNative({ type: "poi", on: false });
 }
-let detailHtml = "";
 function renderDetail(now) {
   if (!poi) return;
-  if (poi.id !== "music") detailHtml = "";
   if (poi.id === "train") {
     const rows = (label, tr) => {
       const list = (tr.list && tr.list.length ? tr.list : [{ route: tr.route || "6", at: tr.next }]).filter((a) => a.at - now > -DWELL).slice(0, 3);
       return `<div class="drow"><span class="dlabel">${label}</span>${list.length ? list.map((a) => `<span class="dtrain">${bullet(a.route, true)}<b>${mins(Math.max(0, a.at - now))}</b></span>`).join("") : "<b>–</b>"}</div>`;
     };
-    detailHost.innerHTML = `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`;
+    setHTML(detailHost, `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`);
   } else if (poi.id === "music") {
     const np = loadedNow();
-    if (!np) { detailHost.innerHTML = `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`; return; }
+    if (!np) { setHTML(detailHost, `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`); return; }
     const m = np.state.media;
     const rooms = [...SPEAKERS.values()].sort((a, b) => (b.state.volume ?? -1) - (a.state.volume ?? -1));
     musicRooms = rooms;
@@ -2239,12 +2327,12 @@ function renderDetail(now) {
         return `<div class="spkrow${here && dm.state === "playing" ? " on" : ""}${musicSel === i + 1 ? " sel" : ""}" data-room="${i + 1}"><span class="nm">${esc(d.name)}</span><span class="vol"><i style="width:${d.state.volume ?? 0}%"></i></span><span class="st">${!d.state.reachable ? "offline" : here ? (dm.state === "playing" ? `♪ ${d.state.volume ?? ""}` : "paused") : dm.state === "playing" ? esc(dm.title || "other") : "idle"}</span></div>`; }).join("")}</div>
       <div class="dhint">${musicSel === 0 ? "OK play / pause · ← → skip" : "← → volume"} · ↑ ↓ choose · Back to the block</div>`;
     // Unchanged panel: keep its nodes (a click in progress keeps its target).
-    if (html !== detailHtml) { detailHtml = html; detailHost.innerHTML = html; }
+    setHTML(detailHost, html);
   } else {
     const d = poi.dock;
-    detailHost.innerHTML = `<div class="dhead"><span class="t">${d.name}</span><span class="s">${d.side}</span></div>
+    setHTML(detailHost, `<div class="dhead"><span class="t">${d.name}</span><span class="s">${d.side}</span></div>
       <div class="drow big"><span><span class="bolt">⚡</span>${d.ebikes}<small>e-bikes</small></span><span style="color:${BIKE_BLUE}">${d.classic}<small>classic</small></span>${d.free != null ? `<span>${d.free}<small>free docks</small></span>` : ""}</div>
-      <div class="dhint">Live from Citi Bike · Back to the block</div>`;
+      <div class="dhint">Live from Citi Bike · Back to the block</div>`);
   }
 }
 // Commands from the TV app (focus in/out of the block, Back, Home)
@@ -2459,8 +2547,58 @@ const UP = new THREE.Vector3(0, 1, 0);
 }
 applyLook(); updateLamps(); applyCam();
 setInterval(tickClock, 1000); tickClock();
+// ---------- frame pacing
+// The TV panel is 60 Hz and one block frame costs a hair over two vsyncs, so the compositor shows
+// it after 2, then 3, then 4: measured on the TV, 43% of frames arrived 33 ms apart, 44% 50 ms
+// apart and 9% 67 ms apart. The average of that is a respectable 22 fps, and the average is a lie —
+// what the eye gets is 30, then 20, then 15 fps inside the same second. Nothing on this block is
+// slow enough to notice at a steady 20; it is the *beat* that reads as lag, and a beat only shows
+// up on something crossing the frame fast, which here is one man on a rope.
+//
+// So: pick a whole number of vsyncs and hold it. Draw on our vsync, skip the rest. Start at one, so
+// a laptop that can do 60 keeps doing 60, and step out to two or three when the panel says we are
+// not making it — a steady 20 looks better than a ragged 22. Judge over a window rather than on a
+// single late frame: on the TV the miss rate at two vsyncs is around half, so waiting for a run of
+// consecutive misses would take a second to notice something that is obvious in thirty frames.
+// Stepping back in costs about a second of ragged frames before the panel disagrees, so it wants a
+// long clean stretch first. Measured: on the TV a retry every forty seconds put a stumble inside
+// roughly every pass he makes across the block, which is the thing this is here to stop. Three
+// minutes is rare enough to disappear and still picks up the easier light within a few minutes of
+// dusk. The slack is half a vsync either side: tighter and ordinary jitter in the rAF clock makes
+// us skip the frame we meant to draw.
+//
+// The refresh rate is not ours to assume — the TV is 60 Hz and the laptop this is drawn on is 120,
+// and hard-coding either one halves the other. rAF hands us a vsync, so the shortest gap the
+// browser has ever given us is the panel's period; keep the running minimum, and take it on every
+// callback, including the ones we skip.
+const WIN = 30;
+let vs = 1, vsync = 0, rawLast = 0, drawn = 0, winN = 0, winMiss = 0, winClean = 0;
+function pace(now) {
+  const raw = now - rawLast;
+  rawLast = now;
+  if (raw > 4 && (!vsync || raw < vsync)) vsync = raw;
+  if (!vsync) return false;
+  if (!drawn) { drawn = now; return true; }
+  const period = vsync * vs, slack = vsync / 2;
+  if (now - drawn < period - slack) return false;
+  const gap = now - drawn;
+  drawn = now;
+  if (gap > period + slack) winMiss++;
+  if (++winN >= WIN) {
+    if (winMiss > WIN / 4 && vs < 3) { vs++; winClean = 0; }
+    else if (winMiss) winClean = 0;
+    else if (vs > 1 && ++winClean >= WIN * 4) { vs--; winClean = 0; }
+    winN = winMiss = 0;
+  }
+  return true;
+}
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; clockS += dt;
+  requestAnimationFrame(frame);
+  if (!pace(now)) return;
+  // The old clamp was 0.05, which sat *below* the interval the TV actually runs at, so every
+  // three-vsync frame had its time clipped and the whole block ran a little slow. The clamp is only
+  // there to stop a page that has been backgrounded from teleporting everything; a tenth does that.
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; clockS += dt;
   updateTraffic(dt, clockS, wx === "snow" ? 0.6 : wx === "rain" ? 0.85 : 1);
   updatePeople(dt, clockS, wx);
   updateWeather(dt, clockS, wx);
@@ -2488,9 +2626,8 @@ function frame(now) {
   renderer.render(scene, camera);
   if (!readySent) { readySent = true; toNative({ type: "ready" }); }
   frames++;
-  if (now - statT > 10_000) { console.log(`[appart3d-stats] block fps=${(frames * 1000 / (now - statT)).toFixed(1)} pix=${PIX} shadows=${SHADOWS}`); frames = 0; statT = now; }
+  if (now - statT > 10_000) { console.log(`[appart3d-stats] block fps=${(frames * 1000 / (now - statT)).toFixed(1)} pix=${PIX} shadows=${SHADOWS} vsync=${vs}`); frames = 0; statT = now; }
   if (now - lastSigns > 250) { renderSigns(clockS); lastSigns = now; }
   projectSigns();
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
