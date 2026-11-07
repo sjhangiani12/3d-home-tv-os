@@ -1156,13 +1156,13 @@ const SPIDEY = {
     // The far corner of the tall tower, not the near one: from the near corner every swing he makes
     // leaves him behind ninety-six metres of his own building for a third of the arc. Here the outward
     // diagonal happens to be the flat one — it projects to almost exactly screen-left.
-    { grip: [18.5, 95.7, 120.7], sit: [19.1, 95.7, 121.3], at: [21.3, 95.7, 123.5], edge: [17.0, 95.7, 119.2], look: [-1, 0, -1], dwell: 15 },
+    { grip: [18.5, 95.7, 120.7], sit: [19.1, 95.7, 121.3], at: [20.2, 95.7, 122.4], edge: [17.0, 95.7, 119.2], look: [-1, 0, -1], dwell: 15 },
     // On these two the outward diagonal runs down the screen, which is straight at the camera, so he
     // looks out along -x instead: the same lip, read from the side. Sitting, that also means sitting
     // along the x face a couple of metres back from the corner rather than astride it — on the corner
     // itself half of him hangs off the other edge as well.
-    { grip: [18.5, 46.2, 24.6], sit: [19.1, 46.2, 22.6], at: [22.0, 46.2, 21.8], edge: [17.0, 46.2, 26.1], look: [-1, 0, 0], dwell: 8.5 },
-    { grip: [18.5, 49.5, -41.5], sit: [19.1, 49.5, -43.5], at: [22.0, 49.5, -44.3], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
+    { grip: [18.5, 46.2, 24.6], sit: [19.1, 46.2, 22.6], at: [20.5, 46.2, 22.2], edge: [17.0, 46.2, 26.1], look: [-1, 0, 0], dwell: 8.5 },
+    { grip: [18.5, 49.5, -41.5], sit: [19.1, 49.5, -43.5], at: [20.5, 49.5, -43.9], edge: [17.0, 49.5, -40.0], look: [-1, 0, 0], dwell: 10 },
   ],
   // Low and well in front of the block, far enough toward the camera to start about a hundred and
   // twenty pixels below the bottom edge: the first web bites the corner of the tall tower and goes up
@@ -1194,8 +1194,15 @@ const HANG = HAND * SCALE;  // how far his feet sit below the end of the rope
 // fastest, so the last fifth of the arc arrived in two frames and read as a teleport. Letting go at
 // TH_LET and sailing the rest is both calmer to watch and what he actually does.
 const TH_LET = 0.52, LAND_T = 0.6;
-// Seconds at the start of a dwell spent coming out of the landing crouch and shuffling to the lip.
-const SETTLE = 1.2;
+// Seconds at the start of a dwell spent landing. Two beats, and the first one is the point: for
+// PLANT he is **down and not moving**, in the crouch, his weight going onto the planted fist. Then
+// the rest of SETTLE is the shuffle out to the lip, with the fold into the sit timed to end with it.
+//
+// He used to have no first beat at all. The shuffle began on the frame he touched down and ran the
+// whole SETTLE, so the landing crouch, the fist going to the deck and the slide out to the lip all
+// happened at once and none of them could be read — he arrived already leaving. Stillness is the
+// only thing that says a roof is solid.
+const PLANT = 0.5, SETTLE = 1.8;
 // The exit, counted back from the moment the thread leaves his hand. Four beats, one at a time:
 //
 //   STAND_T  he comes up out of the sit onto his feet, in place, on the lip he was sitting on
@@ -1563,16 +1570,14 @@ function updateSpidey(dt) {
       spid.cut.copy(spid.pos);
       spid.m0.set(q0.x - q1.x, q0.y - q1.y, q0.z - q1.z).normalize()
         .multiplyScalar(spid.from.distanceTo(h.LAND) * 0.6);
-      // And where the curve is going once it is over the parapet. He does not stop on the ledge: the
-      // shuffle out to the lip is the end of the same movement, so the toss has to arrive carrying
-      // exactly the speed that shuffle leaves with, or he halts on the deck and then starts again,
-      // which is the little dead beat that made the landing read as teleport-then-slide. Matching
-      // them is arithmetic: the shuffle covers (sit − at) over SETTLE with an ease-out that opens at
-      // twice its average speed, and a Hermite end tangent is a displacement per LAND_T, so they
-      // agree at m1 = (sit − at)·2·LAND_T/SETTLE.
-      const np = SPIDEY.perches[spid.hop];
-      if (np) spid.m1.fromArray(np.sit).sub(atV.fromArray(np.at)).multiplyScalar(2 * LAND_T / SETTLE);
-      else spid.m1.set(0, 0, 0);
+      // And it arrives at rest. This used to carry the speed of the shuffle out to the lip, so that
+      // the toss and the shuffle were one unbroken movement with no "dead beat" between them — but
+      // that was written around the teleport above. A curve that threw him a body-length upward on
+      // its first frame had to be rescued by never letting him stop, because stopping is what makes
+      // a teleport visible. The teleport is gone, and what is left is a man who slides onto a roof
+      // without ever standing on it. Landing *is* the dead beat: the thing that says a surface is
+      // solid is that it stops you.
+      spid.m1.set(0, 0, 0);
       spid.phase = "land"; spid.t = 0;
     }
     return;
@@ -1622,17 +1627,25 @@ function updateSpidey(dt) {
   const next = HOPS[spid.hop];
   const rise = p.dwell - EXIT;
   // He moves once, at the start, and then his feet stay put for the rest of the dwell. `at` is where
-  // the landing crouch puts him — set by where the planted fist lands, so a stride inside the
-  // parapet — and `sit` is a metre further out, because a sit is only a sit if the legs are over the
-  // drop. Standing up again does not move him: you push up off a ledge and your feet land where you
-  // were sitting. He used to walk back in to stand and then be slid out past the lip entirely, which
-  // is a pace forward, a pace back, and then a man standing on thin air for the two and a half
-  // seconds it takes to turn, point and fire. The step off the lip belongs to the clasp — see
-  // `startHop` — because that is the moment he is actually falling.
-  // The shuffle to the lip is ease-OUT only: it opens at the speed the landing arc hands it (see
-  // `m1` above) and dies into the sit, so touching down and sitting are one movement.
-  const ks = clamp(spid.t / SETTLE, 0, 1);
-  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), 1 - (1 - ks) * (1 - ks));
+  // the landing crouch puts him — a stride and a half inside the parapet, which is as close to the
+  // lip as the toss can put him down — and `sit` is a metre and a half further out, because a sit is
+  // only a sit if the legs are over the drop. That gap used to be **three metres**, drifted there by
+  // a re-pick of the perches, and three metres is not a shuffle: with no leg animation under him a
+  // crouched figure crossing that much deck is a skate, however long it is given. The honest fix is
+  // to land nearer the edge, not to slow the slide down.
+  //
+  // Standing up again does not move him: you push up off a ledge and your feet land where you were
+  // sitting. He used to walk back in to stand and then be slid out past the lip entirely, which is
+  // a pace forward, a pace back, and then a man standing on thin air for the two and a half seconds
+  // it takes to turn, point and fire. The step off the lip belongs to the clasp — see `startHop` —
+  // because that is the moment he is actually falling.
+  //
+  // And none of it happens for the first PLANT. The arc stops him dead (`m1` above), he holds still
+  // while the hand comes down and takes his weight, and only then does he go out to the lip. Ease
+  // in and out, because the move now starts from rest at both ends instead of catching a speed off
+  // the landing.
+  const ks = clamp((spid.t - PLANT) / (SETTLE - PLANT), 0, 1);
+  spid.pos.copy(atV.fromArray(p.at)).lerp(sitV.fromArray(p.sit), smooth(ks));
   spidey.position.copy(spid.pos);
   // He arrived already looking out along `look` — the twist happened in the air — and only turns to
   // the next anchor once he is on his feet. This is not decoration: the anchors sit nearly dead away
@@ -1648,11 +1661,12 @@ function updateSpidey(dt) {
   // there — the sit a whole SIT_T before the shuffle to the lip is over, the arm a whole ARM_T
   // before the thread goes, which is what makes the point and the thwip one action.
   //
-  // Coming in, the crouch is the touchdown: he is still in the reach he came over the parapet with,
-  // and the fist goes down on the deck. It is asked for at REACH_T, not at STAND_T, because it has
-  // half a second before the sit starts and a fade that cannot finish in the time it is given is a
-  // limb that turns round in mid-air — the right arm was diving for the deck and then changing its
-  // mind on the way, which is what made the landing look like it stuttered.
+  // Coming in, the crouch is the touchdown: he arrives in the reach he came over the parapet with,
+  // the arm still out, and over REACH_T the fist comes down onto the deck and takes his weight.
+  // REACH_T and not STAND_T, because the whole plant is only PLANT long, and a fade that cannot
+  // finish in the time it is given is a limb that turns round in mid-air — the right arm used to
+  // dive for the deck and then change its mind, which is what made the landing stutter. It arrives
+  // with most of PLANT still to run, and that remainder, with him motionless, is the landing.
   //
   // Going out, he stands *up*. The perch and the crouch are both crouches, so getting up out of the
   // sit into either of them was rising into another squat and then firing from it.
