@@ -1203,6 +1203,12 @@ const SETTLE = 1.2;
 //   ARM_T    the arm comes up and points at it
 //   RISE     two frames of the point held, and the web goes
 //
+// He stands all the way up for it — see STAND_G in figure.js. Both of the poses he used to get up
+// into are crouches, so the whole exit used to happen from a squat: he rose out of the sit into
+// another one, turned in it, and fired from it. A man standing up is the clearest silhouette change
+// in the loop and it was being thrown away. STAND_T covers nearly twice the hip travel it did when
+// the target was the crouch, so it is nearly twice as long; the rest of the beats are unchanged.
+//
 // They were overlapping before, and that was the thing that looked wrong. He stood up out of the
 // sit over half a second while a slide back from the lip took three times as long, so for most of
 // standing up his feet were planted on thin air out past the parapet. And he began turning on the
@@ -1211,7 +1217,7 @@ const SETTLE = 1.2;
 // The point is the trigger, so ARM_T ends where the thwip starts. RISE is only a cushion: at 24 fps
 // a raise that lands on the same frame as the shot can land one frame late, and the thread would
 // then leave a fist that is still on its way up.
-const STAND_T = 0.75, TURN = 1.2, ARM_T = 0.45, RISE = 0.12;
+const STAND_T = 1.3, TURN = 1.2, ARM_T = 0.45, RISE = 0.12;
 const EXIT = STAND_T + TURN + ARM_T + RISE;
 const TURN_RATE = 2.6;   // radians per second; TURN at this rate covers half a circle
 // How long each change of pose takes to cross over. Sitting is the slow one — it is his whole body
@@ -1252,12 +1258,18 @@ spidey.add(suit);
 // pose on most frames: `pose(x)` on an unchanged `x` has to be free, or every frame restarts the
 // fade and nothing ever arrives.
 const POSE_T = 0.42;
-const blend = { from: suit.morphTargetInfluences.slice(), to: "perch", k: 1, dur: POSE_T };
+const blend = { from: suit.morphTargetInfluences.slice(), to: "perch", k: 1, dur: POSE_T, cut: false };
 function pose(which, dur = POSE_T) {
   if (which === blend.to) return;
   // The pose he is leaving is wherever he actually is, which during an interrupted fade is between
   // two of them. Snapping back to a pure pose here is what would make a quick change jump.
   blend.from = suit.morphTargetInfluences.slice();
+  // And if the fade he is leaving had not arrived, he is not only between two poses, he is *moving*
+  // between them. A smoothstep opens at zero speed, so retargeting mid-fade stops the body dead for
+  // a frame and starts it again — the little hitch at every beat of the dwell, and the reason a
+  // chain of four changes read as four separate events rather than as one movement. Interrupted, the
+  // new fade opens at speed instead and only eases out.
+  blend.cut = blend.k < 1;
   blend.to = which;
   blend.k = 0;
   blend.dur = dur;
@@ -1265,7 +1277,8 @@ function pose(which, dur = POSE_T) {
 function stepPose(dt) {
   if (blend.k >= 1) return;
   blend.k = clamp(blend.k + dt / blend.dur, 0, 1);
-  const w = suit.morphTargetInfluences, e = smooth(blend.k), b = POSE_IX[blend.to];
+  const w = suit.morphTargetInfluences, b = POSE_IX[blend.to];
+  const e = blend.cut ? 1 - (1 - blend.k) * (1 - blend.k) : smooth(blend.k);
   for (let i = 0; i < w.length; i++) w[i] = blend.from[i] * (1 - e);
   if (b >= 0) w[b] += e;
 }
@@ -1282,7 +1295,8 @@ const WEB_R = 0.15;            // metres of radius: a thread with a width, not a
 // through, or the one thing on screen that is supposed to be gossamer is the most solid thing in the
 // frame. This is about as far as it goes — it still has to hold together across a room, and the roofs
 // it crosses are pale.
-const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: 0.46 }));
+const WEB_OP = 0.46;
+const web = new THREE.Mesh(webGeo, new THREE.MeshBasicMaterial({ color: "#f4f6fb", transparent: true, opacity: WEB_OP }));
 web.frustumCulled = false; web.visible = false;
 scene.add(web);
 
@@ -1404,7 +1418,7 @@ function buildHops() {
   }
 }
 
-const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
+const spid = { phase: "away", t: SPIDEY.away * 0.35, hop: 0, th: 0, w: 0, shoot: 0.3, pos: new THREE.Vector3(), stand: new THREE.Vector3(), from: new THREE.Vector3(), cut: new THREE.Vector3(), m0: new THREE.Vector3(), m1: new THREE.Vector3(), face: new THREE.Vector3(1, 0, 0) };
 const mx = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
 const UPV = new THREE.Vector3(0, 1, 0), rope = new THREE.Vector3(), hand = new THREE.Vector3(), tip = new THREE.Vector3(), tmp = new THREE.Vector3(), upV = new THREE.Vector3();
 // Which way is up for a man on a rope. Along the rope once the anchor is above him; upright with a
@@ -1493,13 +1507,19 @@ function updateSpidey(dt) {
     hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
     upV.copy(UPV).lerp(tmp, tipk).normalize();
     spidey.position.lerpVectors(spid.stand, spid.pos, tipk).addScaledVector(tmp, -HANG * tipk);
-    // His fist sits at FIST[1] = HAND along his own up axis, which is why the thread leaves his hand
-    // whatever that axis is — and why at the end of the tip the hand is back on `spid.pos`, exactly
-    // where the swing expects to find the rope end.
-    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * SCALE).addScaledVector(upV, FIST[1] * SCALE);
+    pose(shooting ? "point" : "swing", SPIDEY.clasp); spidey.visible = true;
+    // Where his fist is *now*. Through the shot it is the pointing fist, FIST. Through the clasp the
+    // body is morphing into the hang, and the hang's fist is at HAND straight up his own axis, so
+    // the hand walks between the two by however much of that morph has happened. It has to: the
+    // thread is drawn from this point, and holding it at FIST for the whole clasp left the thread
+    // rooted at his chest and then jumping a body length to the rope end on the first swung frame.
+    // At the end of the tip it is `spid.pos` exactly — the end of the rope — because the figure
+    // itself hangs HANG = HAND * SCALE below that point.
+    const sw = suit.morphTargetInfluences[POSE_IX.swing];
+    hand.copy(spidey.position).addScaledVector(spid.face, FIST[0] * (1 - sw) * SCALE)
+      .addScaledVector(upV, (FIST[1] + (HAND - FIST[1]) * sw) * SCALE);
     aim(upV, spid.face);
-    pose(shooting ? "perch" : "swing", SPIDEY.clasp); spidey.visible = true;
-    web.visible = true;
+    web.visible = true; web.material.opacity = WEB_OP;
     // Barely eased: a cubic ease-out spends most of the shot already arrived, which looks like the
     // web snapping on. Nearly constant speed with a little settle at the end is a thread flying.
     const out = shooting ? 1 - Math.pow(1 - k, 1.6) : 1;
@@ -1527,13 +1547,20 @@ function updateSpidey(dt) {
     hangAxis(tmp, rope.subVectors(h.A, spid.pos), spid.face);
     spidey.position.copy(spid.pos).addScaledVector(tmp, -HANG);
     aim(tmp, spid.face);
-    web.visible = true;
+    web.visible = true; web.material.opacity = WEB_OP;
     setWeb(spid.pos, h.A);
     if (spid.th <= TH_LET + 0.005) {
       // Let go. The direction he is travelling becomes the start tangent of the toss, so the release
       // is continuous: he keeps dipping for a moment, then the curve carries him up onto the ledge.
       const q0 = h.at(spid.th, h.pow), q1 = h.at(Math.min(h.th0, spid.th + 0.02), h.pow);
-      spid.from.copy(spid.pos);
+      // The toss carries his *body*, and on the rope his body hangs a body-length below the end of
+      // it. Starting the curve at `spid.pos` — the rope end — threw him HANG = 10.8 m straight up on
+      // the frame he let go, two thirds of the height of the roof he is about to land on, in one
+      // frame. It is the same mistake the clasp used to make on the way out, in the other direction.
+      spid.from.copy(spidey.position);
+      // Where the thread was cut. He is not holding it any more, so it stops following him: it hangs
+      // from the corner it bit, at the point he left it, and fades out over the next fifth of a second.
+      spid.cut.copy(spid.pos);
       spid.m0.set(q0.x - q1.x, q0.y - q1.y, q0.z - q1.z).normalize()
         .multiplyScalar(spid.from.distanceTo(h.LAND) * 0.6);
       // And where the curve is going once it is over the parapet. He does not stop on the ledge: the
@@ -1572,8 +1599,13 @@ function updateSpidey(dt) {
     // and fastest, arms and legs trailing, and the tuck only happens at the ledge. So the swing pose
     // holds for the first half of the toss and the reach is the second.
     pose(k < 0.52 ? "swing" : "perch", REACH_T); spidey.visible = true;
-    web.visible = k < 0.25;
-    if (web.visible) setWeb(spid.pos, h.A);
+    // The thread goes out rather than off. He let go of it half a second ago and it is trailing from
+    // a corner behind him with nothing on the end; switching it off on one frame, in the middle of
+    // the air, is the one hard cut left in the whole pass.
+    const wk = clamp((0.32 - k) / 0.2, 0, 1);
+    web.visible = wk > 0;
+    web.material.opacity = WEB_OP * wk;
+    if (web.visible) setWeb(spid.cut, h.A);
     if (k >= 1) {
       spid.hop++;
       spid.pos.copy(h.LAND);
@@ -1612,14 +1644,22 @@ function updateSpidey(dt) {
   else tmp.set(p.look[0], 0, p.look[2]);
   turnTo(spid.face, tmp.setY(0).normalize(), TURN_RATE * dt);
   aim(UPV, spid.face);
-  // The crouch is only the hinge between standing and sitting at either end; the long middle of the
-  // dwell is the sit. Each of these is asked for early enough that it *arrives* on its beat rather
-  // than starting there — the sit a whole SIT_T before the shuffle to the lip is over, the arm a
-  // whole ARM_T before the thread goes, which is what makes the point and the thwip one action.
-  if (spid.t >= p.dwell - RISE - ARM_T) pose("perch", ARM_T);
-  else if (spid.t >= rise) pose("crouch", STAND_T);
+  // Each of these is asked for early enough that it *arrives* on its beat rather than starting
+  // there — the sit a whole SIT_T before the shuffle to the lip is over, the arm a whole ARM_T
+  // before the thread goes, which is what makes the point and the thwip one action.
+  //
+  // Coming in, the crouch is the touchdown: he is still in the reach he came over the parapet with,
+  // and the fist goes down on the deck. It is asked for at REACH_T, not at STAND_T, because it has
+  // half a second before the sit starts and a fade that cannot finish in the time it is given is a
+  // limb that turns round in mid-air — the right arm was diving for the deck and then changing its
+  // mind on the way, which is what made the landing look like it stuttered.
+  //
+  // Going out, he stands *up*. The perch and the crouch are both crouches, so getting up out of the
+  // sit into either of them was rising into another squat and then firing from it.
+  if (spid.t >= p.dwell - RISE - ARM_T) pose("point", ARM_T);
+  else if (spid.t >= rise) pose("stand", STAND_T);
   else if (spid.t >= SETTLE - SIT_T) pose("sit", SIT_T);
-  else pose("crouch", STAND_T);
+  else pose("crouch", REACH_T);
   spidey.visible = true; web.visible = false;
   if (spid.t >= p.dwell) startHop();
 }

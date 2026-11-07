@@ -323,6 +323,40 @@ const SIT_G = body({
   // that ends at the knee reads as an arm that is missing a hand at this size.
   elbR: [0.14, 0.40, 0.225], wriR: [0.36, 0.19, 0.215], fistR: [0.44, 0.13, 0.210],
 });
+// On his feet. Nothing else here is: the perch and the crouch are both crouches — hips above the
+// knees, back curled over them — and going from the sit straight into one of those is a man getting
+// up into another squat, which is what made the exit read as a shuffle rather than as standing up.
+// So: legs under him, trunk vertical, head over the hips, arms hanging. The only thing left of the
+// ledge is a soft knee and the head carried a little forward, because he is standing on a parapet
+// looking out over a street, not on a parade ground.
+const STAND_G = body({
+  headR: 0.125,
+  pelvis: [-0.01, 1.04, 0], chest: [0.05, 1.43, 0], neck: [0.08, 1.56, 0], head: [0.12, 1.68, 0],
+  hipL: [0.00, 1.01, -0.085], hipR: [0.00, 1.01, 0.085],
+  // Knees just forward of the ankles and not quite locked, and the two legs a hair apart: a pair of
+  // perfectly straight parallel legs is a figure standing to attention, which he never is.
+  kneeL: [0.10, 0.62, -0.10], kneeR: [0.09, 0.63, 0.10],
+  ankL: [0.08, 0.09, -0.105], ankR: [0.07, 0.09, 0.108],
+  toeL: [0.26, 0.045, -0.105], toeR: [0.25, 0.045, 0.108],
+  shoL: [0.03, 1.50, -0.168], shoR: [0.03, 1.50, 0.168],
+  elbL: [0.07, 1.19, -0.218], wriL: [0.14, 0.90, -0.216], fistL: [0.17, 0.81, -0.213],
+  elbR: [0.05, 1.19, 0.220], wriR: [0.11, 0.90, 0.212], fistR: [0.13, 0.81, 0.209],
+});
+// The same stand with the shooting arm out: this is the pose the thread is fired from, and the last
+// thing he does on the roof. It is the perch's right arm — held out at chest height, below the chin,
+// because raised any higher it crosses the face from this camera — carried up onto a standing body.
+// The left arm swings back a little against it, the way an arm does when the other one points.
+const POINT_G = body({
+  headR: 0.125,
+  pelvis: [-0.01, 1.04, 0], chest: [0.05, 1.43, 0], neck: [0.08, 1.56, 0], head: [0.13, 1.68, 0],
+  hipL: [0.00, 1.01, -0.085], hipR: [0.00, 1.01, 0.085],
+  kneeL: [0.10, 0.62, -0.10], kneeR: [0.09, 0.63, 0.10],
+  ankL: [0.08, 0.09, -0.105], ankR: [0.07, 0.09, 0.108],
+  toeL: [0.26, 0.045, -0.105], toeR: [0.25, 0.045, 0.108],
+  shoL: [0.03, 1.50, -0.168], shoR: [0.04, 1.50, 0.168],
+  elbL: [0.02, 1.19, -0.222], wriL: [0.02, 0.90, -0.220], fistL: [0.03, 0.81, -0.217],
+  elbR: [0.28, 1.42, 0.225], wriR: [0.50, 1.36, 0.205], fistR: [0.59, 1.33, 0.20],
+});
 // On the web: one arm straight up the line, the other trailing, back arched, legs streaming behind
 // and bent at the knee, and the two legs bent differently because a body in the air is never
 // symmetrical. The fist is at y = HAND on the figure's own axis, which is where the web is tied —
@@ -340,19 +374,21 @@ const SWING_G = body({
   // axis, so moving it would put the web in mid-air beside his hand.
   elbR: [-0.03, 1.62, 0.105], wriR: [-0.02, 1.93, 0.045], fistR: [-0.01, 2.00, 0.02],
 });
-// Where the web leaves him, in his own units: the right fist of the perch pose, not a point on his
-// chest. Used to start the thread so it comes out of the hand that is pointing at the corner.
-const FIST = [0.59, 0.96];
+// Where the web leaves him, in his own units: the right fist of the *pointing* pose, not a point on
+// his chest. Used to start the thread so it comes out of the hand that is aimed at the corner. It
+// has to track whichever pose he is actually in when the thread is out — see the clasp in block.js,
+// where the hand walks from here to HAND as the point turns into the hang.
+const FIST = [0.59, 1.33];
 
-// One mesh that can be anywhere between the four poses, instead of four meshes and a visibility
+// One mesh that can be anywhere between the poses, instead of one mesh each and a visibility
 // switch. Swapping `visible` is a cut: he lands on the parapet and is *already* sitting, in nothing,
 // and a silhouette that jumps a metre in one frame reads as a glitch rather than as a man. Because
 // every pose is now vertex-for-vertex the same body, the difference between two of them is just a
 // list of offsets — which is exactly a morph target, blended on the GPU for free.
-// The perch is the base and the other three are relative deltas, so all-influences-zero is the
-// perch. Normals are morphed too; leave them out and a limb keeps the shading of the pose it came
-// from while it moves, which looks like the light is lagging behind him.
-const POSE_IX = { perch: -1, crouch: 0, sit: 1, swing: 2 };
+// The perch is the base and the rest are relative deltas, so all-influences-zero is the perch.
+// Normals are morphed too; leave them out and a limb keeps the shading of the pose it came from
+// while it moves, which looks like the light is lagging behind him.
+const POSE_IX = { perch: -1, crouch: 0, sit: 1, stand: 2, point: 3, swing: 4 };
 const POSE_G = (() => {
   const g = new THREE.BufferGeometry();
   for (const name of ["position", "normal", "color"]) g.setAttribute(name, PERCH_G.getAttribute(name));
@@ -362,7 +398,7 @@ const POSE_G = (() => {
     for (let i = 0; i < a.length; i++) d[i] = b[i] - a[i];
     return new THREE.BufferAttribute(d, 3);
   };
-  const order = [CROUCH_G, SIT_G, SWING_G];
+  const order = [CROUCH_G, SIT_G, STAND_G, POINT_G, SWING_G];
   g.morphAttributes.position = order.map((p) => delta(p, "position"));
   g.morphAttributes.normal = order.map((p) => delta(p, "normal"));
   // Frustum culling reads the bounding sphere, and a sphere computed from the base alone does not
@@ -375,4 +411,4 @@ const POSE_G = (() => {
   return g;
 })();
 
-export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, SIT_G, CROUCH_G, PERCH_G, SWING_G, POSE_G, POSE_IX, FIST };
+export { SUIT_RED, SUIT_BLUE, SUIT_EYE, SUIT_LINE, rig, body, SIT_G, CROUCH_G, PERCH_G, STAND_G, POINT_G, SWING_G, POSE_G, POSE_IX, FIST };
