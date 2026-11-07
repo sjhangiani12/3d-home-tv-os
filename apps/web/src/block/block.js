@@ -1448,8 +1448,15 @@ function startHop() {
   // the footprint spends its opening metres inside his own building. The step between the two is the
   // clasp, and only the clasp: standing out there for the turn and the point is a man hovering
   // beside a facade.
-  spid.stand.copy(spid.pos);
   const q = h.at(h.th0, h.pow);
+  // Except on the way in, where there is no deck he was standing on: the arc starts below the
+  // bottom edge and the shot is fired from out there. Carrying the last loop's resting place over
+  // puts him on the roof he *left* — off the left edge of the frame — for the whole of the shot, so
+  // the thread comes in sideways from the wrong side of the picture and the clasp then drops him
+  // across the block to the entry point in a fifth of a second. The entry hop has stand === pos, and
+  // the beat still works: nothing moves through the shot either way.
+  if (spid.hop === 0) spid.pos.set(q.x, q.y, q.z);
+  spid.stand.copy(spid.pos);
   spid.pos.set(q.x, q.y, q.z);
   spid.face.subVectors(h.A, spid.stand).setY(0).normalize();
   // A thread that crosses a block takes longer to get there than one that crosses a street. At a
