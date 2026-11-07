@@ -14,7 +14,11 @@
  * Plain JS on purpose: a port of the approved mock, kept close to it while the design settles.
  */
 import * as THREE from "three";
-import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction } from "../shared/feeds.js";
+import { loadHomeConfig, resolveLocation, fetchTrains, fetchBikes, fetchWeather, connectDevices, deviceAction, runScene } from "../shared/feeds.js";
+import {
+  canMedia, HUE_RECIPES, inMood, isLightLike, isMoodScene, isOn, isReachable, lampLevel, lightColor,
+  mediaLoaded, mediaRooms, moodAdjusted, moodStatus, nowPlaying, roomGroups, roomPosition,
+} from "@appart3d/home";
 import * as P from "./paint.js";
 import { POSE_G, POSE_IX, FIST } from "./figure.js";
 
@@ -27,7 +31,6 @@ const CFG = await loadHomeConfig();
 const LOC = resolveLocation(CFG, Q);
 const NAMES = {
   place: CFG.place || "YOUR BLOCK",
-  address: CFG.address || "Home",
   homeLabel: CFG.homeLabel || "Home",
   station: Object.assign({ name: "Station", line: "", stop: null }, CFG.station || {}),
   // Each dock says what it is and which avenue it stands on; the near one is a block over, the far one
@@ -39,7 +42,7 @@ const PI = Math.PI;
 if (TV) document.body.classList.add("tv");
 document.title = CFG.title || document.title;
 document.querySelector("#clock .place").textContent = NAMES.place;
-document.querySelector("#drawer .addr").textContent = NAMES.address;
+document.querySelector("#drawer h2").textContent = NAMES.homeLabel;
 if (!MOCK) document.getElementById("mock").hidden = true;
 const stage = document.getElementById("stage");
 /**
@@ -1075,7 +1078,8 @@ ROOMS.forEach((r, i) => {
   if (c.name) r.name = c.name;
   (c.lamps || []).forEach((l, j) => { if (r.lamps[j]) Object.assign(r.lamps[j], { id: l.id, name: l.name || r.lamps[j].name }); });
 });
-const LAMPS = ROOMS.flatMap((r) => r.lamps.map((l) => Object.assign(l, { room: r.id })));
+const LAMPS = ROOMS.flatMap((r) => r.lamps.map((l) => Object.assign(l, { room: r.id, did: `hue:light:${l.id}` })));
+const LAMP_BY_DEV = new Map(LAMPS.map((l) => [l.did, l]));
 for (const l of LAMPS) {
   const [x, y, z] = l.at;
   if (l.pendant) hb(HM.dark, x - 0.02, x + 0.02, y, 2.9, z - 0.02, z + 0.02);
@@ -1087,12 +1091,40 @@ for (const l of LAMPS) {
   l.ring.position.set(x, 0.05, z); house.add(l.ring);
 }
 const houseAmb = new THREE.AmbientLight("#8e8aa6", 0); scene.add(houseAmb);
-function lampColor(l) { return l.tone === "read" ? "#ffe2b5" : l.tone === "relax" ? "#ffb468" : "#ffcf8a"; }
+
+/**
+ * Every lamp in the drawer is a bridge device, and the drawer's presses are bridge actions: the block is
+ * one more client of the home, not a picture of it. It used to flip a local flag and look convincing,
+ * which meant the panel you reach from the city and the panel the TV draws did different things.
+ *
+ * With no bridge — the demo block, a preview — the devices below are made up and this page drives them
+ * itself, by the same rules (`@appart3d/home`) the bridge plans with. One shape of lamp, not two.
+ */
+const DEVICES = new Map();
+const ROOM_NAME = new Map(ROOMS.map((r) => [r.id, r.name]));
+const ROOM_ORDER = ROOMS.map((r) => r.name);
+for (const l of LAMPS)
+  DEVICES.set(l.did, {
+    id: l.did, name: l.name, kind: "light", source: "hue", room: ROOM_NAME.get(l.room),
+    state: { on: l.on, reachable: true, brightness: l.b, kelvin: 2700 },
+    capabilities: { brightness: true, kelvin: true },
+  });
+/** The mood the house is in (`relax` / `read`), as the bridge reports it. Null until it says otherwise. */
+let MOOD = null;
+/** True once the bridge has spoken: until then the presses below move the made-up devices instead. */
+let LIVE = false;
+const homeLamps = () => [...DEVICES.values()].filter(isLightLike);
+
 function updateLamps() {
   for (const l of LAMPS) {
-    l.light.intensity = l.on ? (0.6 + l.b / 60) * PI * 3 : 0;
-    l.light.color.set(lampColor(l));
-    l.bulb.material.color.set(l.on ? lampColor(l) : "#6b6670");
+    const d = DEVICES.get(l.did);
+    const on = !!d && isOn(d);
+    // The colour is the lamp's own — its kelvin, or the colour it reports. A mood is not a tint this page
+    // invents; it is a temperature the bulb is actually sitting at, and it arrives with the device.
+    const c = on ? lightColor(d) : "#6b6670";
+    l.light.intensity = on ? (0.6 + lampLevel(d) / 60) * PI * 3 : 0;
+    l.light.color.set(on ? c : "#ffcf8a");
+    l.bulb.material.color.set(c);
   }
   updateHomeWindows(); renderDrawer(); renderChip(); renderRoomSigns();
 }
@@ -1100,7 +1132,11 @@ function updateLamps() {
 function renderRoomSigns() {
   ROOMS.forEach((r, i) => { roomSigns[i].el.innerHTML = `<span class="dot ${roomOn(r.id) ? "" : "off"}"></span>${esc(r.name)}`; });
 }
-function roomOn(id) { const ls = LAMPS.filter((l) => l.room === id && l.on); return ls.length ? ls.reduce((a, l) => a + l.b, 0) / ls.length : 0; }
+/** Average level of the lit lamps of one modelled room, for its windows and its sign. */
+function roomOn(id) {
+  const ls = LAMPS.map((l) => (l.room === id ? DEVICES.get(l.did) : null)).filter((d) => d && isOn(d));
+  return ls.length ? ls.reduce((a, d) => a + lampLevel(d), 0) / ls.length : 0;
+}
 function updateHomeWindows() {
   if (!look) return;
   const glass = new THREE.Color("#3b4553");
@@ -1650,7 +1686,7 @@ function renderSigns(now) {
       <div class="row" style="gap:14px;margin-top:4px"><span class="big"><span class="bolt">⚡</span>${dk.ebikes}</span><span class="big" style="color:${BIKE_BLUE}">${dk.classic}</span></div>
       <div class="s" style="font-size:15px">e-bikes · classic</div>`);
   });
-  const on = LAMPS.filter((l) => l.on).length;
+  const on = homeLamps().filter(isOn).length;
   setHTML(homeSign.el, `<div class="row"><span class="dot ${on ? "" : "off"}"></span><span class="t">${NAMES.homeLabel}</span></div>`);
   renderMusic();
   renderChip();
@@ -1812,7 +1848,9 @@ async function openHome() {
   await fade(0);
   await settle;
   flying = false; goingIn = false;
-  focusDrawer(0);
+  // On the first room, never on a pill: a TV home screen is shared, and the press that puts the whole
+  // flat out should not be the one already under the cursor when the panel arrives.
+  focusFirstRoom();
   if (wantClose) { wantClose = false; closeHome(); }
 }
 async function closeHome() {
@@ -1851,36 +1889,233 @@ async function closeHome() {
 
 // ---------- drawer and remote control
 const drawer = document.getElementById("drawer"), roomsEl = document.getElementById("rooms"), chip = document.getElementById("chip");
+const statusEl = document.getElementById("status"), hintEl = document.getElementById("hint");
+const npEl = document.getElementById("np");
+
+const MOOD_NAME = { relax: "Relax", read: "Read" };
+/** A lamp at 1% must not read as off, so the fill has a floor the eye can still see. */
+const fill = (d) => (isOn(d) ? Math.max(14, lampLevel(d)) : 0);
+/**
+ * One cell per lamp, in the order of the rows directly beneath — so the bar on a room row is a legend
+ * for its children rather than one number standing in for all of them. A lamp that stopped answering
+ * keeps an empty outlined cell: its place in the room is a fact even when its level is not.
+ */
+const segbar = (ds) => `<span class="segbar">${ds.map((d) => {
+  if (!isReachable(d)) return `<span class="cell away"></span>`;
+  const sc = inMood(d, MOOD);
+  const tick = moodAdjusted(d, MOOD) ? `<b style="left:${HUE_RECIPES[MOOD].brightness}%"></b>` : "";
+  return `<span class="cell"><i class="${sc ? "sc" : ""}" style="width:${fill(d)}%"></i>${tick}</span>`;
+}).join("")}</span>`;
+const pips = (ds) => `<span class="dots">${ds.map((d) =>
+  `<span class="pip${isOn(d) ? " on" : ""}${inMood(d, MOOD) ? " sc" : ""}${isReachable(d) ? "" : " away"}"></span>`).join("")}</span>`;
+
+/** "2 of 3 on", never a percentage: one number for several brightnesses would be a lie. */
+function roomCount(g) {
+  const away = g.devices.length - g.reachable;
+  return (g.on ? `${g.on} of ${g.devices.length} on` : "Off") + (away ? ` · ${away} away` : "");
+}
+function statusLine() {
+  const ls = homeLamps(), lit = ls.filter(isOn);
+  let s = `${ls.length} light${ls.length === 1 ? "" : "s"} · ${lit.length ? `${lit.length} on` : "everything is off"}`;
+  const st = moodStatus(ls, MOOD);
+  if (st) {
+    const name = MOOD_NAME[st.scene] || st.scene;
+    s += !st.inMood ? ` · <b>${name} is armed</b>`
+      : st.adjusted ? ` · <b>${name}</b> · ${st.adjusted} adjusted`
+      : st.inMood === st.lit ? ` · <b>${name}</b>`
+      : ` · <b>${name}</b> on ${st.inMood} of ${st.lit} lit`;
+  }
+  return s;
+}
+/** What OK would do to whatever is focused, said before it is pressed. */
+function hintLine() {
+  const el = document.activeElement, scene = el && el.dataset ? el.dataset.scene : null;
+  if (scene === "off") return "OK turns everything off";
+  if (scene) return scene === MOOD ? `OK stops ${MOOD_NAME[scene]}. No light changes.` : `OK puts the lights that are on into ${MOOD_NAME[scene]}`;
+  if (el && el.classList.contains("roomrow")) return "OK turns the room on or off · ← → dims the room";
+  if (el && el.classList.contains("lamprow")) return "OK turns the lamp on or off · ← → dims it";
+  if (el && el.classList.contains("npkey")) return "OK drives the music · ← → chooses a key";
+  return "↑ ↓ chooses · OK switches · ← → dims";
+}
+
+/** The rooms as last drawn, so a focus move can re-dress a row without rebuilding the list. */
+const GROUP_BY_ROOM = new Map();
+
 function renderDrawer() {
-  const focusedId = document.activeElement && document.activeElement.dataset.lamp;
-  roomsEl.innerHTML = ROOMS.map((r) => `<div class="roomgrp"><h3>${r.name}</h3>${r.lamps.map((l) =>
-    `<button type="button" class="lamp${l.on ? " on" : ""}" data-lamp="${l.id}" aria-pressed="${l.on}"><span>${l.name}</span><span class="sw" aria-hidden="true"></span><span class="bar"><i style="width:${l.on ? l.b : 0}%"></i></span></button>`).join("")}</div>`).join("");
-  roomsEl.style.display = "flex"; roomsEl.style.flexDirection = "column"; roomsEl.style.gap = "18px";
-  if (focusedId) { const el = roomsEl.querySelector(`[data-lamp="${focusedId}"]`); if (el) el.focus(); }
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.id : null;
+  const groups = roomGroups(homeLamps(), ROOM_ORDER);
+  GROUP_BY_ROOM.clear();
+  for (const g of groups) GROUP_BY_ROOM.set(g.room, g);
+  // A room at rest is its name, what it is doing, and one dot per lamp. Focused, the count leaves and
+  // the knob and the per-lamp bar take that space: focus changes the parts, not only the colour.
+  roomsEl.innerHTML = groups.map((g) => `<div class="roomgrp">
+    <button type="button" class="roomrow" data-kind="room" data-id="${esc(g.room)}" aria-label="${esc(g.label)}" aria-pressed="${g.on > 0}">
+      <span class="nm">${esc(g.label)}</span><span class="cnt">${esc(roomCount(g))}</span>
+      <span class="knob ${roomPosition(g)}" hidden></span><span class="bars" hidden></span>${pips(g.devices)}
+    </button>
+    <div class="under"><div class="rail"></div><div class="kids">${g.devices.map((d) => `
+      <button type="button" class="lamprow${isReachable(d) ? "" : " away"}" data-kind="lamp" data-id="${esc(d.id)}" aria-pressed="${isOn(d)}">
+        <span class="nm">${esc(d.name)}</span><span class="sw${isOn(d) ? " on" : ""}"></span><span class="bars">${segbar([d])}</span>
+      </button>`).join("")}</div></div>
+  </div>`).join("");
+  for (const b of document.querySelectorAll("#scenes [data-scene]")) {
+    const armed = b.dataset.scene === MOOD;
+    b.classList.toggle("latched", armed);
+    b.classList.toggle("live", armed && homeLamps().some((d) => inMood(d, MOOD)));
+    b.setAttribute("aria-pressed", String(armed));
+  }
+  statusEl.innerHTML = statusLine();
+  renderNowPlaying();
+  if (focused) { const el = roomsEl.querySelector(`[data-id="${CSS.escape(focused)}"]`); if (el) el.focus(); }
+  dressFocus();
+}
+
+/**
+ * The footer: what the home is playing and the keys that drive it. The card stays when the house is
+ * silent, naming a room that can be started, so ▶ always has somewhere to go — and the keys a source
+ * does not offer are left out rather than drawn dead: a radio station cannot be skipped, and a stream
+ * from the TV cannot be paused from here at all.
+ */
+function renderNowPlaying() {
+  const d = playingNow();
+  npEl.hidden = !d;
+  if (!d) return;
+  const m = d.state.media, loaded = mediaLoaded(d), playing = m.state === "playing";
+  const rooms = mediaRooms(d);
+  const where = rooms.length > 1 ? `${rooms[0]} · ${rooms.length} rooms` : rooms[0];
+  npEl.querySelector(".t").textContent = loaded ? `${playing ? "♪" : "❚❚"} ${m.title || "Playing"}` : "Nothing playing";
+  npEl.querySelector(".s").textContent = [loaded ? m.artist : "", where, loaded ? m.app : ""].filter(Boolean).join(" · ");
+  for (const b of npEl.querySelectorAll(".npkey")) {
+    const cmd = b.dataset.np;
+    b.hidden = cmd === "playPause" ? !canMedia(d, "playPause") : !loaded || !canMedia(d, cmd);
+    if (cmd === "playPause") b.textContent = playing ? "❚❚" : "▶";
+  }
+}
+
+/**
+ * The swap a focused room row makes, done after the HTML rather than in it: the count and the dots are
+ * what a room says at rest, the knob and the bar are what it says under the cursor, and only one set is
+ * ever in the row. Re-running it on every focus move costs nothing and keeps the two in one place.
+ */
+function dressFocus() {
+  for (const row of roomsEl.querySelectorAll(".roomrow")) {
+    const g = GROUP_BY_ROOM.get(row.dataset.id);
+    const foc = row === document.activeElement;
+    row.querySelector(".cnt").hidden = foc;
+    row.querySelector(".dots").hidden = foc;
+    row.querySelector(".knob").hidden = !foc;
+    const bars = row.querySelector(".bars");
+    bars.hidden = !foc;
+    if (foc && g) bars.innerHTML = segbar(g.devices);
+  }
+  hintEl.innerHTML = `${hintLine()}<br>Back returns to the block`;
 }
 function renderChip() {
-  const on = LAMPS.filter((l) => l.on).length;
+  const on = homeLamps().filter(isOn).length;
   document.getElementById("chiptxt").textContent = on ? `Lights · ${on} on` : "Lights · all off";
-  setHTML(document.getElementById("chipdots"), ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${r.name}"></span>`).join(""));
+  setHTML(document.getElementById("chipdots"), ROOMS.map((r) => `<span class="dot ${roomOn(r.id) ? "" : "off"}" title="${esc(r.name)}"></span>`).join(""));
 }
-const lampById = (id) => LAMPS.find((l) => String(l.id) === String(id));
-roomsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-lamp]"); if (!b) return; const l = lampById(b.dataset.lamp); l.on = !l.on; l.tone = null; updateLamps(); });
-roomsEl.addEventListener("focusin", (e) => { const b = e.target.closest("[data-lamp]"); LAMPS.forEach((l) => { l.focus = b && String(l.id) === b.dataset.lamp; }); });
+
+/**
+ * Send an action, and show it at once rather than waiting a round trip — the bridge's echo and then its
+ * event both land on the same device and correct anything we guessed wrong.
+ */
+async function lampAct(d, action, optimistic) {
+  const wasOn = isOn(d);
+  Object.assign(d.state, optimistic);
+  // A lamp switched on while a mood is armed comes up in it. The bridge does that for every client at
+  // once; with no bridge behind the block, this page has to do it itself.
+  if (!LIVE && MOOD && !wasOn && isOn(d)) Object.assign(d.state, { brightness: HUE_RECIPES[MOOD].brightness, kelvin: HUE_RECIPES[MOOD].kelvin });
+  updateLamps();
+  if (!LIVE) return;
+  const echo = await deviceAction(d.id, action);
+  if (echo) { applyDevice(echo); updateLamps(); }
+}
+const lampToggle = (d) => lampAct(d, { type: "power", on: !isOn(d) }, { on: !isOn(d) });
+const lampDim = (d, step) => {
+  const b = clamp(lampLevel(d) + step, 1, 100);
+  return lampAct(d, { type: "brightness", value: b }, { on: true, brightness: b });
+};
+const lampById = (id) => DEVICES.get(id);
+
+/**
+ * A room press is its lamps pressed together: lit ones go off, otherwise every lamp that answers comes
+ * on. There is no room device on the bridge — a room is a name several lamps share — so this is one
+ * action each, and the mood follow-up happens per lamp exactly as it would from a single press.
+ */
+const roomDevices = (room) => { const g = GROUP_BY_ROOM.get(room); return g ? g.devices.filter(isReachable) : []; };
+function roomToggle(room) {
+  const ds = roomDevices(room), on = ds.some(isOn);
+  return Promise.all(ds.map((d) => (isOn(d) === !on ? null : lampAct(d, { type: "power", on: !on }, { on: !on }))));
+}
+/** Dimming a room moves the lamps that are lit. It is a level control, not a second way to switch on. */
+function roomDim(room, step) {
+  return Promise.all(roomDevices(room).filter(isOn).map((d) => lampDim(d, step)));
+}
+
+const rowAct = (el) => {
+  if (el.dataset.kind === "room") return roomToggle(el.dataset.id);
+  const d = lampById(el.dataset.id);
+  return d ? lampToggle(d) : null;
+};
+const rowDim = (el, step) => {
+  if (el.dataset.kind === "room") return roomDim(el.dataset.id, step);
+  const d = lampById(el.dataset.id);
+  return d ? lampDim(d, step) : null;
+};
+roomsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) rowAct(b); });
+// The model answers the panel: whatever is focused pulses a ring on the floor under it, and a room
+// under the cursor rings every lamp in it at once.
+drawer.addEventListener("focusin", (e) => {
+  const b = e.target.closest("[data-kind]"), room = b && b.dataset.kind === "room" ? b.dataset.id : null;
+  LAMPS.forEach((l) => { l.focus = !!b && (room ? ROOM_NAME.get(l.room) === room : l.did === b.dataset.id); });
+  dressFocus();
+});
 document.getElementById("scenes").addEventListener("click", (e) => {
   const b = e.target.closest("[data-scene]"); if (!b) return;
-  const sc = b.dataset.scene;
-  if (sc === "off") LAMPS.forEach((l) => { l.on = false; });
-  else {
-    const lit = LAMPS.filter((l) => l.on); const targets = lit.length ? lit : LAMPS.filter((l) => l.room === "living");
-    targets.forEach((l) => { l.on = true; l.b = sc === "read" ? 100 : 57; l.tone = sc; });
-  }
-  updateLamps();
+  pressScene(b.dataset.scene);
 });
+npEl.addEventListener("click", (e) => { const b = e.target.closest("[data-np]"); if (b) musicCmd(b.dataset.np); });
+
+/**
+ * A scene press goes to the bridge, which owns what a scene means and which mood is armed — so a press
+ * here and a press on the phone cannot leave the house in two states. Relax and Read never switch a lamp
+ * on: they re-tone what is lit and stay armed, so a lamp turned on afterwards comes up in them.
+ */
+async function pressScene(id) {
+  if (LIVE) {
+    const snap = await runScene(id);
+    if (snap) { MOOD = snap.activeScene ?? null; (snap.devices || []).forEach(applyDevice); updateLamps(); }
+    return;
+  }
+  simulateScene(id);
+  updateLamps();
+}
+
+/** The same rules, run here, for a block with no bridge behind it. */
+function simulateScene(id) {
+  if (id === "off") { homeLamps().forEach((d) => { d.state.on = false; }); MOOD = null; return; }
+  if (!isMoodScene(id)) return;
+  if (MOOD === id) { MOOD = null; return; }
+  MOOD = id;
+  const recipe = HUE_RECIPES[id];
+  homeLamps().filter(isOn).forEach((d) => { d.state.brightness = recipe.brightness; d.state.kelvin = recipe.kelvin; });
+}
 chip.addEventListener("click", openHome);
 document.getElementById("back").addEventListener("click", closeHome);
 const apps = [...document.querySelectorAll(".app")];
-function focusDrawer(i) { const items = drawerItems(); (items[i] || items[0]).focus(); }
-const drawerItems = () => [...drawer.querySelectorAll(".pill, .lamp")];
+function focusDrawer(i) { const items = drawerItems(); if (items.length) (items[i] || items[0]).focus(); }
+function focusFirstRoom() { const el = roomsEl.querySelector(".roomrow") || drawerItems()[0]; if (el) el.focus(); }
+// One column: the pills, then each room followed by its own lamps, then the transport keys under them.
+// ↑↓ walks it; there is no second level and nothing to drill into. A key that is not offered is hidden,
+// and `:not([hidden])` keeps the walk off it — the row shortens rather than holding a dead stop.
+const drawerItems = () => [...drawer.querySelectorAll(".pill, .roomrow, .lamprow, .npkey:not([hidden])")];
+/** Buttons that sit side by side, where ←→ walks the row instead of dimming: the pills and the keys. */
+const rowmates = (el) => {
+  if (!el) return [];
+  const cls = el.classList.contains("pill") ? ".pill" : el.classList.contains("npkey") ? ".npkey:not([hidden])" : null;
+  return cls ? drawerItems().filter((x) => x.matches(cls)) : [];
+};
 addEventListener("keydown", (e) => {
   const k = e.key;
   if (mode === "poi" && poi && poi.id === "music" && !flying && musicKey(k)) { e.preventDefault(); return; }
@@ -1900,14 +2135,22 @@ addEventListener("keydown", (e) => {
     const items = drawerItems(), i = items.indexOf(document.activeElement);
     if (k === "ArrowDown" || k === "ArrowUp") {
       e.preventDefault();
-      const pills = items.filter((x) => x.classList.contains("pill"));
-      let j = i;
-      if (k === "ArrowDown") j = i < pills.length ? pills.length : i + 1; else j = i <= pills.length ? 0 : i - 1;
-      focusDrawer(clamp(j, 0, items.length - 1));
+      // The pills and the keys are rows, not stops: ↓ off the last lamp lands on one key, not three.
+      const edge = (el, end) => { const m = rowmates(el); return m.length ? items.indexOf(m[end ? m.length - 1 : 0]) : items.indexOf(el); };
+      let j = clamp(k === "ArrowDown" ? edge(items[i], true) + 1 : edge(items[i], false) - 1, 0, items.length - 1);
+      // Arriving in a row lands on its first key, never on the far end — "All off" is not where you want
+      // to be standing after one press of ↑.
+      j = edge(items[j], false);
+      focusDrawer(j);
     } else if (k === "ArrowLeft" || k === "ArrowRight") {
-      const el = document.activeElement;
-      if (el && el.classList.contains("lamp")) { e.preventDefault(); const l = lampById(el.dataset.lamp); l.on = true; l.b = clamp(l.b + (k === "ArrowRight" ? 10 : -10), 1, 100); updateLamps(); }
-      else if (el && el.classList.contains("pill")) { e.preventDefault(); const pills = items.filter((x) => x.classList.contains("pill")); focusDrawer(clamp(i + (k === "ArrowRight" ? 1 : -1), 0, pills.length - 1)); }
+      const el = document.activeElement, step = k === "ArrowRight" ? 10 : -10;
+      // One rule down the whole column: ←→ dims whatever is focused, a room exactly as a lamp. On the
+      // pills and the transport keys, where there is no level, it is how you walk the row.
+      if (el && el.dataset && el.dataset.kind) { e.preventDefault(); rowDim(el, step); }
+      else {
+        const mates = rowmates(el);
+        if (mates.length) { e.preventDefault(); focusDrawer(clamp(i + (k === "ArrowRight" ? 1 : -1), items.indexOf(mates[0]), items.indexOf(mates[mates.length - 1]))); }
+      }
     }
     return;
   }
@@ -2069,7 +2312,7 @@ function renderDetail(now) {
     };
     setHTML(detailHost, `<div class="dhead"><span class="t">${NAMES.station.name}</span><span class="s">${NAMES.station.line}</span></div>${rows("Downtown", trains.down)}${rows("Uptown", trains.up)}<div class="dhint">Back to the block</div>`);
   } else if (poi.id === "music") {
-    const np = nowPlaying();
+    const np = loadedNow();
     if (!np) { setHTML(detailHost, `<div class="dhead"><span class="t">Music</span><span class="s">Nothing playing</span></div><div class="dhint">Back to the block</div>`); return; }
     const m = np.state.media;
     const rooms = [...SPEAKERS.values()].sort((a, b) => (b.state.volume ?? -1) - (a.state.volume ?? -1));
@@ -2174,15 +2417,19 @@ async function pollWeather() {
 // Remote control of the music panel: row 0 = the group's transport, rows 1… = a room's volume.
 let musicSel = 0, musicRooms = [];
 async function sonosAct(id, action) {
+  renderNowPlaying();
   const d = await deviceAction(id, action);
   if (d) SPEAKERS.set(d.id, d);
   lastSigns = 0;
+  renderNowPlaying();
 }
 function musicCmd(cmd) {
-  const np = nowPlaying(); if (!np) return;
-  const ctl = np.capabilities && np.capabilities.media || [];
-  if (cmd === "playPause" ? !ctl.includes("play") : !ctl.includes(cmd)) return;
-  if (cmd === "playPause") np.state.media.state = np.state.media.state === "playing" ? "paused" : "playing";
+  // Play reaches a silent room — that is the whole point of keeping its card — but skipping needs
+  // something loaded to skip through.
+  const np = cmd === "playPause" ? playingNow() : loadedNow();
+  if (!np || !canMedia(np, cmd)) return;
+  // A silent room has no "other" state to show early: wait for the bridge to say what it started.
+  if (cmd === "playPause" && mediaLoaded(np)) np.state.media.state = np.state.media.state === "playing" ? "paused" : "playing";
   sonosAct(np.id, { type: "media", command: cmd });
 }
 function musicVolume(i, delta) {
@@ -2209,12 +2456,10 @@ detailHost.addEventListener("click", (e) => {
 // The Sonos speakers (one device per room; a group's rooms share its media, media.group names them).
 const SPEAKERS = new Map();
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-/** The group to show: one playing (most rooms first), else one paused. */
-function nowPlaying() {
-  const ds = [...SPEAKERS.values()].filter((d) => d.state.reachable && d.state.media && d.state.media.state !== "idle");
-  const rank = (d) => (d.state.media.state === "playing" ? 100 : 0) + (d.state.media.group || [d.name]).length;
-  return ds.sort((a, b) => rank(b) - rank(a))[0] || null;
-}
+/** The group to show — the same rule the phone and the TV use, so the three cannot name different rooms. */
+const playingNow = () => nowPlaying([...SPEAKERS.values()]) || null;
+/** …and the one with a track in it, which is all the city's music sign and its card have to say. */
+const loadedNow = () => { const d = playingNow(); return d && mediaLoaded(d) ? d : null; };
 // Covers drawn as pixel art: shrunk to n×n, shown scaled up with hard pixels.
 const ART = new Map();
 function artImg(url, n, cls) {
@@ -2230,7 +2475,7 @@ function artImg(url, n, cls) {
   return data ? `<img class="art ${cls || ""}" src="${data}" alt="">` : `<span class="art ${cls || ""} none">♪</span>`;
 }
 function renderMusic() {
-  const np = nowPlaying();
+  const np = loadedNow();
   musicSign.off = !np; notesSign.off = !np || np.state.media.state !== "playing";
   if (!np) return;
   const m = np.state.media, rooms = m.group || [np.name];
@@ -2240,17 +2485,33 @@ function renderMusic() {
 }
 
 // The home's lamps: the bridge's event stream (a snapshot, then one event per change), cookie auth.
+/**
+ * One device off the bridge. Lamps are kept whole, as the bridge sent them — their colour, their white,
+ * their reachability — because that is what the drawer and the windows both read. A light the model has
+ * no bulb for still belongs in the panel: the drawer shows the home, not the diorama.
+ */
 function applyDevice(d) {
-  if (d && d.source === "sonos") { SPEAKERS.set(d.id, d); return; }
-  const m = /^hue:light:(\d+)$/.exec(d.id || "");
-  const l = m && LAMPS.find((x) => String(x.id) === m[1]);
-  if (!l || !d.state) return;
-  l.on = d.state.on === true;
-  if (typeof d.state.brightness === "number") l.b = d.state.brightness;
-  l.tone = null;
+  if (!d || !d.id || !d.state) return;
+  // By what a device *is*, not who makes it: a HomePod is `airplay` and the mock home's speaker is
+  // `mock`, and both were falling through the Sonos test into nothing.
+  if (d.kind === "speaker") { SPEAKERS.set(d.id, d); return; }
+  if (isLightLike(d)) DEVICES.set(d.id, d);
 }
 pollTrains(); pollBikes(); pollWeather();
-connectDevices((d) => { applyDevice(d); updateLamps(); });
+connectDevices(
+  (d) => { applyDevice(d); updateLamps(); },
+  (snap) => {
+    const all = snap.devices || [];
+    // The first real snapshot throws the made-up lamps away whole. The home's lights are whatever the
+    // bridge says they are — not the six this model happens to have been built with.
+    if (!LIVE && all.some(isLightLike)) { LIVE = true; DEVICES.clear(); }
+    // Everything, not only the lamps: `applyDevice` is what decides where a device belongs, and it files
+    // the speakers. Filtering here first left the music card empty until a speaker happened to change.
+    all.forEach(applyDevice);
+    MOOD = snap.activeScene ?? null;
+    updateLamps();
+  },
+);
 setInterval(pollTrains, 20_000); setInterval(pollBikes, 30_000); setInterval(pollWeather, 10 * 60_000);
 
 // The TV launcher drives the page: Lights opens the home (fly-in), Back closes it, the selected lamp glows.
@@ -2263,7 +2524,7 @@ window.appart3dEmbed = {
     if (cmd.type === "openHome") { setInsidePan(!TV || !!cmd.panel); openHome(); return true; }
     if (cmd.type === "closeHome") { closeHome(); return true; }
     if (cmd.type === "realHome") { realHome = !!cmd.on; showHouse(wantHouse); return true; }
-    if (cmd.type === "spotlightDevice") { LAMPS.forEach((l) => { l.focus = cmd.deviceId === `hue:light:${l.id}`; }); return true; }
+    if (cmd.type === "spotlightDevice") { LAMPS.forEach((l) => { l.focus = cmd.deviceId === l.did; }); return true; }
     if (command(cmd.type)) return true;
     return false;
   },

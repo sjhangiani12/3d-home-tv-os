@@ -1,5 +1,7 @@
 /** Bridge-side scenes, planned as a pure function over the current devices. */
-import type { Device, DeviceAction } from "@appart3d/home";
+import { HUE_RECIPES, type Device, type DeviceAction, type MoodScene } from "@appart3d/home";
+
+export { HUE_RECIPES, isMoodScene, MOOD_SCENES, type MoodScene } from "@appart3d/home";
 
 export interface ScenePlanItem {
   deviceId: string;
@@ -13,13 +15,19 @@ export const SCENE_COLORS = {
   movie: "#4b1fd1",
 } as const;
 
-/** Philips Hue's own Relax and Read recipes (ct 447 / 346 mired, bri 144 / 254). */
-export const HUE_RECIPES = {
-  relax: { kelvin: 2237, brightness: 57 },
-  read: { kelvin: 2890, brightness: 100 },
-} as const;
-
 const isLight = (d: Device) => d.kind === "light" || d.kind === "plug";
+
+/**
+ * What to send a lamp that has *just* been switched on so it joins the armed mood. Empty when nothing
+ * is armed, when the device is not a light, when it did not just come on, or when it cannot be dimmed
+ * (a plug takes the power and nothing else). A lamp that was already on is left alone: dimming a Relax
+ * lamp by hand keeps its colour, it only stops matching Relax's level.
+ */
+export function moodFollowUp(mood: MoodScene | null, device: Device, wasOn: boolean | null): DeviceAction[] {
+  if (!mood || wasOn === true || !isLight(device) || device.state.on !== true) return [];
+  const recipe = HUE_RECIPES[mood];
+  return lightOn(device, recipe.brightness, { kelvin: recipe.kelvin }).filter((a) => a.type !== "power");
+}
 
 function lightOn(d: Device, brightness: number, look: { kelvin?: number; hex?: string }): DeviceAction[] {
   const actions: DeviceAction[] = [{ type: "power", on: true }];
@@ -85,13 +93,19 @@ export function planScene(
       break;
     case "relax":
     case "read": {
-      // The lamps already on take the look; with everything off, the living room lights up.
+      // A mood is not a command. The lamps already on take the look; the ones that are off stay off,
+      // so no press in the panel can light a room you are not standing in. With everything off this
+      // plans nothing and the mood only arms itself (Hub.runScene).
       const recipe = HUE_RECIPES[sceneId];
-      const lit = lights.filter((d) => d.state.on === true);
-      const targets = lit.length ? lit : lights.filter((d) => d.room === living || /living|salon/i.test(d.room));
-      for (const d of targets) plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
+      for (const d of lights.filter((d) => d.state.on === true))
+        plan.push({ deviceId: d.id, actions: lightOn(d, recipe.brightness, { kelvin: recipe.kelvin }) });
       break;
     }
+    case "off":
+      // "All off" of the panels: the lamps, and only them — the TV keeps playing and the music keeps
+      // going, unlike « away ». Not a mood, so running it disarms the armed one (Hub.runScene).
+      for (const d of lights) plan.push(off(d));
+      break;
     case "movie":
       for (const d of lights) {
         if (d.id === strip?.id) plan.push({ deviceId: d.id, actions: lightOn(d, 25, { hex: SCENE_COLORS.movie }) });

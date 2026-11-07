@@ -3387,75 +3387,129 @@ body.ss-idle * {
   }
 }
 
-/* Room chips */
-.hp-rooms {
+/* An armed mood is a mode the panel is in: the tile stays lit until it is pressed again. */
+.hp-scene.is-latched {
+  background: var(--hp-fill-2);
+  border-color: rgba(255, 184, 119, 0.55);
+  color: var(--hp-ink);
+  box-shadow: inset 0 0 0 1px rgba(255, 184, 119, 0.28);
+}
+
+.hp-scene.is-latched .hp-scene-ic {
+  box-shadow: 0 0 0 2px rgba(255, 184, 119, 0.4);
+}
+
+/* Rooms: a heading that is also the room's switch, then the devices under it. */
+.hp-room + .hp-room {
+  margin-top: 14px;
+}
+
+.hp-room-row {
   display: flex;
-  gap: 6px;
-  padding: 0 14px 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 4px 8px;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: var(--hp-ink);
+  transition: color var(--t-fast);
+}
+
+.hp-room-name {
+  font-size: 15px;
+  font-weight: 780;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hp-room-count {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--hp-muted);
+  white-space: nowrap;
+}
+
+.hp-room-row:hover:not(:disabled) .hp-room-count,
+.hp-room-row:focus-visible .hp-room-count {
+  color: var(--hp-ink-2);
+}
+
+.hp-room-row:disabled {
+  opacity: 0.5;
+}
+
+/* One pip per lamp, in the order of the tiles under it: the row is a legend for its own children
+   rather than one number standing in for all of them. A lamp that is away keeps its place, empty. */
+.hp-room-pips {
+  display: flex;
+  gap: 4px;
   flex: none;
 }
 
-.hp-rooms::-webkit-scrollbar {
-  display: none;
+.hp-room-pips i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hp-fill-2);
+  box-shadow: inset 0 0 0 1px var(--hp-line);
 }
 
-.hp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 5px 0 11px;
-  border-radius: 999px;
-  border: 1px solid var(--hp-line);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--hp-ink-2);
-  white-space: nowrap;
-  transition:
-    background var(--t-fast),
-    color var(--t-fast);
+.hp-room-pips i.is-on {
+  background: var(--tint, var(--hp-accent));
+  box-shadow: 0 0 6px -1px var(--tint, var(--hp-accent));
 }
 
-.hp-chip:hover {
-  background: var(--hp-fill);
-  color: var(--hp-ink);
+.hp-room-pips i.is-away {
+  background: none;
 }
 
-.hp-chip.is-active {
-  background: var(--hp-ink);
-  border-color: var(--hp-ink);
-  color: #231d22;
-}
-
-.hp-chip-count {
-  display: grid;
-  place-items: center;
-  min-width: 21px;
-  height: 21px;
-  padding: 0 5px;
+/* Where the room stands, in the shape of a switch: out, half, all the way across. */
+.hp-room-knob {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  flex: none;
   border-radius: 999px;
   background: var(--hp-fill-2);
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--hp-muted);
+  box-shadow: inset 0 0 0 1px var(--hp-line);
+  transition:
+    background var(--t-med) var(--ease),
+    box-shadow var(--t-med) var(--ease);
 }
 
-.hp-chip-count.has-on {
-  background: rgba(255, 184, 119, 0.22);
-  color: var(--hp-accent);
+.hp-room-knob::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--hp-muted);
+  transition:
+    transform var(--t-med) var(--ease),
+    background var(--t-med);
 }
 
-.hp-chip.is-active .hp-chip-count {
-  background: rgba(35, 29, 34, 0.1);
-  color: rgba(35, 29, 34, 0.6);
+.hp-room-row.pos-mix .hp-room-knob::after {
+  transform: translateX(6px);
+  background: var(--hp-accent);
 }
 
-.hp-chip.is-active .hp-chip-count.has-on {
-  background: #f08a54;
-  color: #fff;
+.hp-room-row.pos-on .hp-room-knob {
+  background: rgba(255, 184, 119, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(255, 184, 119, 0.5);
+}
+
+.hp-room-row.pos-on .hp-room-knob::after {
+  transform: translateX(13px);
+  background: #ffcf8a;
 }
 
 /* Device tiles */

@@ -8,6 +8,10 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    // Workspace packages are consumed as TypeScript source (the bridge runs them under Node's type
+    // stripping, which wants full specifiers), so a relative import inside one may name its `.ts` —
+    // and every project that pulls that package in has to accept it, bundler or not.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,

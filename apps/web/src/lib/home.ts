@@ -1,35 +1,46 @@
-import type { Device, DeviceAction, HomeSnapshot, MediaInfo } from "@appart3d/home";
+import {
+  isLightLike,
+  isOn,
+  isReachable,
+  kelvinToHex,
+  lightColor,
+  mediaPosition,
+  roomGroups,
+  roomLabel,
+  WARM_WHITE,
+  type Device,
+  type DeviceAction,
+  type HomeSnapshot,
+  type MediaInfo,
+} from "@appart3d/home";
 import type { ItemCategory } from "@appart3d/scene";
 import { tvCardModel } from "./tvCard";
 
 /**
  * "Home" mode — pure logic shared by the panel, the 3D view and the tests:
  * labels, room counts, optimistic updates with rollback, device ↔ 3D item lookup.
+ *
+ * What a lamp *is* — on or off, its colour, its room — lives one level up in `@appart3d/home`, because
+ * the block's drawer and the TV read it too. Re-exported here so this stays the one import for the view.
  */
-
-export const ALL_ROOMS = "all";
-
-/** Default warm white shown for lights that report neither a color nor a temperature. */
-export const WARM_WHITE = "#ffc27a";
+export {
+  canMedia,
+  isLightLike,
+  isOn,
+  isReachable,
+  kelvinToHex,
+  lightColor,
+  mediaLoaded,
+  mediaPosition,
+  mediaRooms,
+  nowPlaying,
+  roomGroups,
+  roomLabel,
+  WARM_WHITE,
+  type RoomGroup,
+} from "@appart3d/home";
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-
-export function isReachable(d: Device): boolean {
-  return d.state.reachable && d.state.on !== null;
-}
-
-/** Counted in "N of M lights on": lights and plugs (plugs drive lamps). */
-export function isLightLike(d: Device): boolean {
-  return d.kind === "light" || d.kind === "plug";
-}
-
-/** Fans count as on when spinning or when their light is on; speakers while they play. */
-export function isOn(d: Device): boolean {
-  if (!isReachable(d)) return false;
-  if (d.kind === "speaker") return d.state.media ? d.state.media.state === "playing" : d.state.on === true;
-  if (d.kind === "fan") return (d.state.speed ?? 0) > 0 || !!d.state.lightOn || (d.state.on === true && d.state.speed === undefined);
-  return d.state.on === true;
-}
 
 /** Fan speed as a discrete step (0..steps) from the 0..100 state value. */
 export function fanStep(d: Device): number {
@@ -42,23 +53,6 @@ export function fanStep(d: Device): number {
 
 export function stepToSpeed(step: number, steps: number): number {
   return Math.round((clamp(step, 0, steps) / steps) * 100);
-}
-
-/** Approximate sRGB of a black-body white (Tanner Helland's fit), as #rrggbb. */
-export function kelvinToHex(kelvin: number): string {
-  const t = clamp(kelvin, 1000, 40000) / 100;
-  const r = t <= 66 ? 255 : 329.698727446 * Math.pow(t - 60, -0.1332047592);
-  const g = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * Math.pow(t - 60, -0.0755148492);
-  const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
-  const h = (v: number) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-
-/** Color a light shows right now (falls back to its white temperature, then warm white). */
-export function lightColor(d: Device): string {
-  if (d.state.color) return d.state.color;
-  if (d.state.kelvin) return kelvinToHex(d.state.kelvin);
-  return WARM_WHITE;
 }
 
 /** Tint of a tile / glow when the device is on. */
@@ -112,30 +106,6 @@ export function tileLabel(d: Device): string {
   return d.room ? `${stateWord(d)} · ${roomLabel(d.room)}` : stateWord(d);
 }
 
-/**
- * Bridge room names are configured in French ("Salon", "Cuisine", "Chambre"…): show them in English.
- * Display only — filters and the bridge keep the raw name. Unknown names pass through.
- */
-const ROOM_LABELS: Record<string, string> = {
-  salon: "Living room",
-  sejour: "Living room",
-  cuisine: "Kitchen",
-  chambre: "Bedroom",
-  bureau: "Office",
-  "salle de bain": "Bathroom",
-  "salle de bains": "Bathroom",
-  "salle a manger": "Dining room",
-  entree: "Hallway",
-  couloir: "Hallway",
-  wc: "Toilet",
-  autre: "Other",
-};
-const foldRoom = (r: string) => r.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-export function roomLabel(room: string): string {
-  return ROOM_LABELS[foldRoom(room)] ?? room;
-}
-
 export const UNREACHABLE_HINT = "Unreachable (switched off at the wall?)";
 
 /** "Alex's home" from the bridge's home name (kept as is when it already reads as a title). */
@@ -154,37 +124,6 @@ export function lightsSummary(devices: readonly Device[]): string {
   if (on === 0) return total === 1 ? "The light is off" : "All lights are off";
   if (on === total && total > 1) return "All lights are on";
   return `${on} of ${total} light${total > 1 ? "s" : ""} on`;
-}
-
-export interface RoomCount {
-  room: string;
-  total: number;
-  on: number;
-}
-
-// Bridge room names may be French or English: rank by the English label.
-const ROOM_ORDER = ["Living room", "Kitchen", "Bedroom", "Office", "Bathroom", "Hallway"];
-
-/** "All" first, then the rooms (usual order first, then alphabetical), with the number of devices on. */
-export function roomCounts(devices: readonly Device[]): RoomCount[] {
-  const map = new Map<string, RoomCount>();
-  for (const d of devices) {
-    const room = d.room || "Other";
-    const r = map.get(room) ?? { room, total: 0, on: 0 };
-    r.total++;
-    if (isOn(d)) r.on++;
-    map.set(room, r);
-  }
-  const rank = (r: string) => {
-    const i = ROOM_ORDER.indexOf(roomLabel(r));
-    return i < 0 ? ROOM_ORDER.length : i;
-  };
-  const rooms = [...map.values()].sort((a, b) => rank(a.room) - rank(b.room) || roomLabel(a.room).localeCompare(roomLabel(b.room), "en"));
-  return [{ room: ALL_ROOMS, total: devices.length, on: devices.filter(isOn).length }, ...rooms];
-}
-
-export function devicesInRoom(devices: readonly Device[], room: string): Device[] {
-  return room === ALL_ROOMS ? [...devices] : devices.filter((d) => (d.room || "Other") === room);
 }
 
 /** Devices linked to each 3D item (a TV item may carry the TV and the light strip behind it). */
@@ -243,23 +182,6 @@ export function sourceLabel(raw: string): string {
 
 /* ------------------------------------------------------------------ now playing */
 
-/** Speaker with something loaded (playing first, then paused). */
-export function nowPlaying(devices: readonly Device[]): Device | undefined {
-  const speakers = devices.filter((d) => d.kind === "speaker" && isReachable(d) && d.state.media && d.state.media.state !== "idle");
-  return speakers.find((d) => d.state.media!.state === "playing") ?? speakers[0];
-}
-
-/** Seconds into the track now: interpolated from `position` sampled at `updatedAt` while playing. */
-export function mediaPosition(m: MediaInfo | undefined, nowMs: number): number | undefined {
-  if (!m || typeof m.position !== "number") return undefined;
-  let pos = m.position;
-  if (m.state === "playing" && m.updatedAt) {
-    const at = Date.parse(m.updatedAt);
-    if (Number.isFinite(at)) pos += Math.max(0, (nowMs - at) / 1000);
-  }
-  return typeof m.duration === "number" && m.duration > 0 ? clamp(pos, 0, m.duration) : Math.max(0, pos);
-}
-
 /** "3:07", "1:02:09". */
 export function formatTime(seconds: number | undefined): string {
   if (seconds === undefined || !Number.isFinite(seconds)) return "–:––";
@@ -268,12 +190,6 @@ export function formatTime(seconds: number | undefined): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = String(s % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
-}
-
-/** Transport control offered right now (`playPause` = play or pause). */
-export function canMedia(d: Device, command: "play" | "pause" | "next" | "previous" | "playPause"): boolean {
-  const list = d.capabilities.media ?? [];
-  return command === "playPause" ? list.includes("play") || list.includes("pause") : list.includes(command);
 }
 
 /** Artwork URL usable by the browser (relative bridge URLs resolved against the bridge base). */

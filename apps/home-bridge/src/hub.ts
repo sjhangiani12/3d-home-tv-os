@@ -7,7 +7,7 @@ import { DEFAULT_SHARED_DIR, DEFAULT_WEB_DIST, type BridgeConfig } from "./confi
 import { ambilightServiceCall, type HaAdapter } from "./ha.ts";
 import { errMsg, logger } from "./log.ts";
 import type { RobotClient } from "./robot.ts";
-import { planScene } from "./scenes.ts";
+import { isMoodScene, moodFollowUp, planScene, type MoodScene } from "./scenes.ts";
 import { computeSun, HORIZON, shouldPushSun } from "./sun.ts";
 import { composeTv, planTvAction } from "./tv.ts";
 import { HttpError, type Adapter, type Artwork } from "./types.ts";
@@ -257,8 +257,11 @@ export class Hub {
     this.emit({ type: "snapshot", snapshot: this.snapshot(next) });
   }
 
+  /** The armed mood (Relax / Read), held here so every client agrees on what a lamp comes up as. */
+  private mood: MoodScene | null = null;
+
   snapshot(sun: SunInfo = this.sun()): BridgeSnapshot {
-    const snap: BridgeSnapshot = { home: this.cfg.homeName, devices: this.devices(), scenes: DEFAULT_SCENES, updatedAt: this.updatedAt, sun };
+    const snap: BridgeSnapshot = { home: this.cfg.homeName, devices: this.devices(), scenes: DEFAULT_SCENES, activeScene: this.mood, updatedAt: this.updatedAt, sun };
     const w = this.warnings();
     if (w.length) snap.warnings = w;
     return snap;
@@ -273,7 +276,12 @@ export class Hub {
   }
 
   async act(id: string, action: DeviceAction): Promise<Device> {
+    const wasOn = this.device(id).state.on;
     await this.actMany(id, [action]);
+    // A lamp switched on while a mood is armed comes up in it, wherever the press came from — this
+    // panel, the phone, the widget. That is why the mood lives here and not in a client.
+    const follow = moodFollowUp(this.mood, this.device(id), wasOn);
+    if (follow.length) await this.actMany(id, follow);
     return this.device(id);
   }
 
@@ -377,15 +385,28 @@ export class Hub {
   }
 
   async runScene(sceneId: string): Promise<BridgeSnapshot> {
+    // Running the armed mood again disarms it, and changes no light.
+    if (isMoodScene(sceneId) && this.mood === sceneId) {
+      this.mood = null;
+      log.info(`ambiance ${sceneId}: désarmée`);
+      const snap = this.snapshot();
+      this.emit({ type: "snapshot", snapshot: snap });
+      return snap;
+    }
     const plan = planScene(sceneId, this.devices(), { ambientStrip: this.cfg.roles.ambientStrip });
     if (!plan) throw new HttpError(404, `scène inconnue: ${sceneId}`);
-    log.info(`scène ${sceneId}: ${plan.length} appareil(s)`);
+    // Relax / Read stay armed; any other scene takes the house somewhere else, so it clears the mood.
+    const wasArmed = this.mood;
+    this.mood = isMoodScene(sceneId) ? sceneId : null;
+    log.info(`scène ${sceneId}: ${plan.length} appareil(s)${this.mood ? ", armée" : ""}`);
     const results = await Promise.allSettled(plan.map((p) => this.actMany(p.deviceId, p.actions)));
     const errors = results.flatMap((r, i) => (r.status === "rejected" ? [`${plan[i]!.deviceId}: ${errMsg(r.reason)}`] : []));
     for (const e of errors) log.warn(`scène ${sceneId}: ${e}`);
     if (plan.length && errors.length === plan.length) throw new HttpError(502, `scène ${sceneId} : échec (${errors.join("; ")})`);
     const snap = this.snapshot();
     if (errors.length) snap.warnings = [...(snap.warnings ?? []), ...errors];
+    // The device events say what the lamps did; only a snapshot carries the mood.
+    if (this.mood !== wasArmed) this.emit({ type: "snapshot", snapshot: this.snapshot() });
     return snap;
   }
 }

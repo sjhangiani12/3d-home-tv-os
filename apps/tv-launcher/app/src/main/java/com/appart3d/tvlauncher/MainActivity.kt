@@ -97,7 +97,9 @@ class MainActivity : Activity() {
     private var homeShowing = false
     private var atDoor = false
     private val preloadHome = Runnable { ensureHomeWeb() }
-    private val pixel: Typeface by lazy { runCatching { resources.getFont(R.font.pixelify_sans) }.getOrDefault(Typeface.DEFAULT_BOLD) }
+    /** The home panel's two voices: names in the TV's own sans, counts and hints a step quieter. */
+    private val bold: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
+    private val body: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
     private lateinit var drawer: FrameLayout
     private lateinit var drawerGrid: LinearLayout
     private var feed: HomeFeed? = null
@@ -294,6 +296,7 @@ class MainActivity : Activity() {
             onLamp = { lamp -> main.post { lights.update(lamp) } },
             onSun = { elevation -> main.post { setSun(elevation) } },
             onScenes = { scenes -> main.post { lights.setScenes(scenes) } },
+            onMood = { scene -> main.post { lights.setMood(scene) } },
             onPlaying = { list -> main.post { playing.clear(); list.forEach { playing[it.id] = it }; renderPlaying() } },
             onSpeaker = { id, p -> main.post { if (p == null) playing.remove(id) else playing[id] = p; renderPlaying() } },
         ).also { it.start() }
@@ -404,9 +407,19 @@ class MainActivity : Activity() {
         }
     }
 
-    /** "Tout éteindre": the lights only (the TV stays on, unlike the "Absent" scene). */
+    /**
+     * "All off": the lamps only — the TV stays on, unlike « Absent ». It goes to the bridge as a scene
+     * rather than a press per lamp, because putting the house out also disarms the armed mood, and only
+     * the bridge can say that to the phone and the block at the same time.
+     */
     private fun allOff() {
-        lights.lamps().filter { it.on == true && it.reachable }.forEach(::toggle)
+        val base = store.url ?: return
+        val token = store.token ?: return
+        lights.lamps().filter { it.on == true && it.reachable }.forEach { lights.update(it.copy(on = false)) }
+        io.execute {
+            val result = runCatching { HomeFeed.scene(base, token, "off") }
+            main.post { result.onFailure { toast(getString(R.string.scene_failed, getString(R.string.all_off))) } }
+        }
     }
 
     private fun unauthorized() {
@@ -532,20 +545,17 @@ class MainActivity : Activity() {
     private fun buildHomePanel(): FrameLayout {
         val column = LinearLayout(this).also { homeColumn = it }.apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(24), dp(12), dp(14))
-            addView(TextView(context).apply {
-                text = getString(R.string.home_title)
-                setTextColor(INK)
-                textSize = 22f
-                typeface = pixel
-            })
-            addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) })
+            setPadding(dp(16), dp(20), dp(12), dp(14))
+            // No "Home" over the top: it sat on "Lights" saying the same thing twice, and the 40dp it
+            // took were the 40dp the third room needed. The panel is reached from the home; the two
+            // headings it has left name what it actually holds, the lamps and what is playing.
+            addView(lights, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(buildNowPlaying(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(TextView(context).apply {
                 text = getString(R.string.home_hint)
                 setTextColor(0xFF6A6170.toInt())
                 textSize = 10f
-                typeface = pixel
+                typeface = body
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         }
         speakers = SpeakersPanel(this, ::setVolume)
@@ -578,7 +588,7 @@ class MainActivity : Activity() {
         npTitle = TextView(this).apply {
             setTextColor(INK)
             textSize = 13f
-            typeface = pixel
+            typeface = bold
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             isFocusable = true
@@ -589,7 +599,7 @@ class MainActivity : Activity() {
         npSub = TextView(this).apply {
             setTextColor(0xFF6A6170.toInt())
             textSize = 10f
-            typeface = pixel
+            typeface = body
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setPadding(dp(4), 0, dp(4), 0)
@@ -622,7 +632,7 @@ class MainActivity : Activity() {
         val key = TextView(this)
         key.text = glyph
         key.textSize = 13f
-        key.typeface = pixel
+        key.typeface = body
         key.gravity = Gravity.CENTER
         key.isFocusable = true
         key.setOnClickListener { onClick() }
